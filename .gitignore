@@ -12,10 +12,11 @@ dist/
 .ruff_cache/
 .venv/
 
-# Local environments and generated episode data.
+# Local environments, generated episode data, and dynamic hardware reports.
 .env
 .env.*
 episodes/
+reports/
 
 # OS and editor metadata.
 .DS_Store
