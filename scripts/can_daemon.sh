@@ -16,6 +16,7 @@ terminate() {
 trap cleanup EXIT
 trap terminate INT TERM
 
+"${script_dir}/ensure_usbfs_memory.sh"
 "${script_dir}/start_can.sh"
 
 while [[ -s ${state_file} ]]; do
