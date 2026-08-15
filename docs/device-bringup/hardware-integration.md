@@ -1,6 +1,6 @@
 # 真机接入与最小采集链路
 
-- Status: `in-progress`（部署官方 SDK 基线，等待三路 USB3 复测）
+- Status: `in-progress`（SDK 与三路相机基线已通过，继续机械臂频率与最小录制链路）
 - Target: `w3-arx5`
 - Runtime: Ubuntu 24.04、ROS 2 Jazzy、Privileged Docker、Host Network
 
@@ -95,6 +95,15 @@
 - 官方 `v2_collect` 已在 `can1/can3` 启动双臂 `remote_master`，左右状态 Topic 均可读取；测试结束时两路 CAN 均为 `ERROR-ACTIVE`，总线错误、丢包和 bus-off 均为 0，容器停止后 CAN 已回收。
 - 官方节点会高频输出“ARX方舟无限”；后续封装需处理日志噪声，但不得修改其重力补偿行为。
 - 三颗 D405 现均枚举为 USB 3.2。三台分别可完成 1280×720 RGB-D @ 30 Hz 短测；三机同时启动时只能稳定两路，最后启动的一路超时。
-- 三颗相机当前共享同一个 Intel xHCI 控制器，主机 `usbfs_memory_mb=16`。尚未获准调整该主机参数，因此三机并发 150 秒验收仍未通过。
+- 三颗相机共享同一个 Intel xHCI 控制器；该轮结束时主机 `usbfs_memory_mb=16`，因此三机并发 150 秒验收尚未通过。
 
-本计划继续保持 `in-progress`。下一步是在明确授权后临时提高 `usbfs_memory_mb` 并重复三机短测；若通过，再执行 150 秒频率与吞吐验收。
+该轮计划保持 `in-progress`，等待授权调整 `usbfs_memory_mb` 后复测。
+
+2026-08-15 已完成三相机并发正式验收：
+
+- 经授权临时将主机 `usbfs_memory_mb` 从 `16` 调整为 `256`；未写入持久配置，主机重启后恢复默认值。
+- 三路 1280×720 RGB-D @ 30 Hz 的 10 秒短测全部通过，实际频率为 30.03–30.05 Hz。
+- 三路 150 秒正式验收全部通过：每路捕获 4486 帧，实际频率为 30.002–30.004 Hz，最大帧间隔为 40.4–44.6 ms，无超时或缺失对齐帧。
+- `usbfs_memory_mb=256` 是当前三路 D405 并发的部署前提。后续应在容器启动前检查并设置该参数，是否持久化到主机配置需另行对齐。
+
+相机 SDK 与三路并发基线已通过；整体计划仍为 `in-progress`，剩余机械臂官方 Topic 频率、键盘 Episode、MCAP + JSON 提交和异常路径验收。
