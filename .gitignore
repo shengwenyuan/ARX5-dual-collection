@@ -1,0 +1,23 @@
+# Local planning notes; formal plans belong in docs/.
+plans/
+
+# Python build and runtime artifacts.
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+
+# Local environments and generated episode data.
+.env
+.env.*
+episodes/
+
+# OS and editor metadata.
+.DS_Store
+.idea/
+.vscode/

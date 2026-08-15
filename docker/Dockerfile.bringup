@@ -1,0 +1,11 @@
+FROM arx5-ros2-jazzy-mcap:021-w3-final
+
+USER root
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends can-utils udev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /workspace
+
+ENTRYPOINT ["/workspace/scripts/can_daemon.sh"]

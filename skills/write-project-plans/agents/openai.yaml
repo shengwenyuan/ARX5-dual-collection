@@ -1,0 +1,4 @@
+interface:
+  display_name: "Write Project Plans"
+  short_description: "Route, maintain, and close project plans"
+  default_prompt: "Use $write-project-plans to write an aligned implementation plan and maintain its delivery records."

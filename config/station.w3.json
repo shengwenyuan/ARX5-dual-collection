@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "sdk_type": 2,
+  "arms": [
+    {
+      "name": "left",
+      "usb_serial": "0045002B5330530320323656",
+      "can_interface": "can1"
+    },
+    {
+      "name": "right",
+      "usb_serial": "004E002E5330530320323656",
+      "can_interface": "can3"
+    }
+  ],
+  "cameras": {
+    "left": null,
+    "right": null,
+    "overview": null
+  }
+}
+

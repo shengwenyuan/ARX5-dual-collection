@@ -1,0 +1,16 @@
+{
+  "cameras": [],
+  "duration_s": 3.0,
+  "error": "RuntimeError: Couldn't resolve requests",
+  "serials": [
+    "261122270960",
+    "261022274824",
+    "261122270651"
+  ],
+  "settings": {
+    "fps": 30,
+    "height": 720,
+    "width": 1280
+  },
+  "status": "FAILED"
+}
