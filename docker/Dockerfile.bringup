@@ -1,10 +1,93 @@
-FROM arx5-ros2-jazzy-mcap:021-w3-final
+ARG ROS_DISTRO=jazzy
+FROM ros:${ROS_DISTRO}-ros-base-noble AS sdk-builder
 
-USER root
+ARG ROS_DISTRO
+ARG ARX_X5_REF=main
+ARG LIBREALSENSE_REF=v2.54.2
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+COPY docker/patches/librealsense-v2.54.2-gcc13-cstdint.patch /tmp/
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends can-utils udev \
+    && apt-get install -y --no-install-recommends \
+        build-essential \
+        ca-certificates \
+        cmake \
+        curl \
+        libssl-dev \
+        libudev-dev \
+        libusb-1.0-0-dev \
+        ninja-build \
+        patch \
+        pkg-config \
+        python3-colcon-common-extensions \
+        python3-dev \
+        python3-pip \
+        ros-${ROS_DISTRO}-ament-index-cpp \
+        ros-${ROS_DISTRO}-launch-ros \
     && rm -rf /var/lib/apt/lists/*
+
+RUN mkdir -p /opt/vendor/librealsense \
+    && curl --fail --location --retry 3 --retry-all-errors \
+        "https://github.com/realsenseai/librealsense/archive/refs/tags/${LIBREALSENSE_REF}.tar.gz" \
+        --output /tmp/librealsense.tar.gz \
+    && tar --extract --gzip --file /tmp/librealsense.tar.gz \
+        --directory /opt/vendor/librealsense --strip-components=1 \
+    && rm /tmp/librealsense.tar.gz \
+    && patch --directory /opt/vendor/librealsense --strip 1 \
+        < /tmp/librealsense-v2.54.2-gcc13-cstdint.patch \
+    && cmake -S /opt/vendor/librealsense -B /opt/vendor/librealsense/build -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DBUILD_EXAMPLES=OFF \
+        -DBUILD_GRAPHICAL_EXAMPLES=OFF \
+        -DBUILD_PYTHON_BINDINGS=ON \
+        -DBUILD_TOOLS=ON \
+        -DFORCE_RSUSB_BACKEND=ON \
+        -DPYTHON_EXECUTABLE=/usr/bin/python3 \
+    && cmake --build /opt/vendor/librealsense/build --parallel \
+    && cmake --install /opt/vendor/librealsense/build
+
+RUN mkdir -p /opt/vendor/ARX_X5 \
+    && curl --fail --location --retry 3 --retry-all-errors \
+        "https://github.com/ARXroboticsX/ARX_X5/archive/refs/heads/${ARX_X5_REF}.tar.gz" \
+        --output /tmp/arx-x5.tar.gz \
+    && tar --extract --gzip --file /tmp/arx-x5.tar.gz \
+        --directory /opt/vendor/ARX_X5 --strip-components=1 \
+    && rm /tmp/arx-x5.tar.gz \
+    && mkdir -p /opt/arx_ws/src \
+    && cp -a /opt/vendor/ARX_X5/ROS2/X5_ws/src/. /opt/arx_ws/src/ \
+    && source "/opt/ros/${ROS_DISTRO}/setup.bash" \
+    && cd /opt/arx_ws \
+    && colcon build --merge-install --cmake-args -DCMAKE_BUILD_TYPE=Release
+
+FROM ros:${ROS_DISTRO}-ros-base-noble
+
+ARG ROS_DISTRO
+ARG ARX_X5_REF=main
+ARG LIBREALSENSE_REF=v2.54.2
+
+LABEL org.opencontainers.image.source="https://github.com/ARXroboticsX/ARX_X5" \
+      arx5.sdk.ref="${ARX_X5_REF}" \
+      realsense.sdk.ref="${LIBREALSENSE_REF}"
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        can-utils \
+        libusb-1.0-0 \
+        python3 \
+        ros-${ROS_DISTRO}-rosbag2 \
+        ros-${ROS_DISTRO}-rosbag2-storage-mcap \
+        udev \
+        usbutils \
+        v4l-utils \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=sdk-builder /usr/local/ /usr/local/
+COPY --from=sdk-builder /opt/arx_ws/install/ /opt/arx_ws/install/
+
+ENV LD_LIBRARY_PATH="/usr/local/lib:${LD_LIBRARY_PATH}" \
+    PYTHONPATH="/usr/local/lib/python3.12/site-packages:${PYTHONPATH}"
 
 WORKDIR /workspace
 

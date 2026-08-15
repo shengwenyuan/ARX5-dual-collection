@@ -1,0 +1,10 @@
+.git
+.venv
+build
+dist
+episodes
+plans
+reports
+__pycache__
+*.egg-info
+*.pyc
