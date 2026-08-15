@@ -1,0 +1,67 @@
+{
+  "cameras": [
+    {
+      "count": 286,
+      "dimensions": {
+        "aligned_depth": [
+          1280,
+          720
+        ],
+        "color": [
+          1280,
+          720
+        ]
+      },
+      "duration_s": 9.481805262,
+      "first_device_timestamp_ms": 1786783606679.4944,
+      "first_frame_number": 0,
+      "last_device_timestamp_ms": 1786783616181.933,
+      "last_frame_number": 285,
+      "max_gap_ms": 41.000469,
+      "observed_hz": 30.057567322352376,
+      "serial": "261122270651",
+      "startup_s": 0.14677648,
+      "timestamp_domain": "timestamp_domain.global_time"
+    },
+    {
+      "count": 286,
+      "dimensions": {
+        "aligned_depth": [
+          1280,
+          720
+        ],
+        "color": [
+          1280,
+          720
+        ]
+      },
+      "duration_s": 9.4845214,
+      "first_device_timestamp_ms": 1786783608279.3726,
+      "first_frame_number": 0,
+      "last_device_timestamp_ms": 1786783617781.8975,
+      "last_frame_number": 285,
+      "max_gap_ms": 40.871335,
+      "observed_hz": 30.048959560574136,
+      "serial": "261022274824",
+      "startup_s": 1.746039597,
+      "timestamp_domain": "timestamp_domain.global_time"
+    },
+    {
+      "error": "worker timeout",
+      "serial": "261122270960"
+    }
+  ],
+  "duration_s": 10.0,
+  "error": "RuntimeError: worker timeout",
+  "serials": [
+    "261122270651",
+    "261022274824",
+    "261122270960"
+  ],
+  "settings": {
+    "fps": 30,
+    "height": 720,
+    "width": 1280
+  },
+  "status": "FAILED"
+}

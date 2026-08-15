@@ -87,3 +87,14 @@
 - 1280×720 三路 150 秒验收、相机逻辑位置映射、键盘 Episode 和 MCAP 提交尚未通过，不得标记整体验收完成。
 
 原始结果保存在 `reports/w3/2026-08-15/`。下一步必须先把两颗 USB2 D405 改接至 USB3 端口、线缆或 Hub，再重复三路基准；不降低正式分辨率标准。
+
+2026-08-15 已完成官方 SDK 基线部署与第二轮短测：
+
+- `arx5-dual-bringup:dev` 已从官方源码构建：ROS 2 Jazzy、`ARXroboticsX/ARX_X5:main`、`librealsense v2.54.2`、Python binding 和 MCAP storage plugin。
+- v2.54.2 在 Ubuntu 24.04 / GCC 13 下使用已批准的 `<cstdint>` 单行兼容补丁；镜像内 SDK 自检通过。
+- 官方 `v2_collect` 已在 `can1/can3` 启动双臂 `remote_master`，左右状态 Topic 均可读取；测试结束时两路 CAN 均为 `ERROR-ACTIVE`，总线错误、丢包和 bus-off 均为 0，容器停止后 CAN 已回收。
+- 官方节点会高频输出“ARX方舟无限”；后续封装需处理日志噪声，但不得修改其重力补偿行为。
+- 三颗 D405 现均枚举为 USB 3.2。三台分别可完成 1280×720 RGB-D @ 30 Hz 短测；三机同时启动时只能稳定两路，最后启动的一路超时。
+- 三颗相机当前共享同一个 Intel xHCI 控制器，主机 `usbfs_memory_mb=16`。尚未获准调整该主机参数，因此三机并发 150 秒验收仍未通过。
+
+本计划继续保持 `in-progress`。下一步是在明确授权后临时提高 `usbfs_memory_mb` 并重复三机短测；若通过，再执行 150 秒频率与吞吐验收。

@@ -1,0 +1,67 @@
+{
+  "cameras": [
+    {
+      "count": 286,
+      "dimensions": {
+        "aligned_depth": [
+          1280,
+          720
+        ],
+        "color": [
+          1280,
+          720
+        ]
+      },
+      "duration_s": 9.488036133,
+      "first_device_timestamp_ms": 1786783552752.8284,
+      "first_frame_number": 0,
+      "last_device_timestamp_ms": 1786783562253.2087,
+      "last_frame_number": 285,
+      "max_gap_ms": 44.018301,
+      "observed_hz": 30.037828271832954,
+      "serial": "261122270651",
+      "startup_s": 0.321953841,
+      "timestamp_domain": "timestamp_domain.global_time"
+    },
+    {
+      "error": "worker timeout",
+      "serial": "261022274824"
+    },
+    {
+      "count": 286,
+      "dimensions": {
+        "aligned_depth": [
+          1280,
+          720
+        ],
+        "color": [
+          1280,
+          720
+        ]
+      },
+      "duration_s": 9.488807734,
+      "first_device_timestamp_ms": 1786783552756.4983,
+      "first_frame_number": 0,
+      "last_device_timestamp_ms": 1786783562257.0767,
+      "last_frame_number": 285,
+      "max_gap_ms": 40.575671,
+      "observed_hz": 30.03538568694957,
+      "serial": "261122270960",
+      "startup_s": 0.325695778,
+      "timestamp_domain": "timestamp_domain.global_time"
+    }
+  ],
+  "duration_s": 10.0,
+  "error": "RuntimeError: worker timeout",
+  "serials": [
+    "261122270651",
+    "261022274824",
+    "261122270960"
+  ],
+  "settings": {
+    "fps": 30,
+    "height": 720,
+    "width": 1280
+  },
+  "status": "FAILED"
+}

@@ -48,13 +48,13 @@ RUN mkdir -p /opt/vendor/librealsense \
     && cmake --build /opt/vendor/librealsense/build --parallel \
     && cmake --install /opt/vendor/librealsense/build
 
-RUN mkdir -p /opt/vendor/ARX_X5 \
-    && curl --fail --location --retry 3 --retry-all-errors \
-        "https://github.com/ARXroboticsX/ARX_X5/archive/refs/heads/${ARX_X5_REF}.tar.gz" \
-        --output /tmp/arx-x5.tar.gz \
-    && tar --extract --gzip --file /tmp/arx-x5.tar.gz \
-        --directory /opt/vendor/ARX_X5 --strip-components=1 \
-    && rm /tmp/arx-x5.tar.gz \
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git \
+    && rm -rf /var/lib/apt/lists/* \
+    && git -c http.version=HTTP/1.1 clone \
+        --depth 1 --filter=blob:none --sparse --branch "${ARX_X5_REF}" \
+        https://github.com/ARXroboticsX/ARX_X5.git /opt/vendor/ARX_X5 \
+    && git -C /opt/vendor/ARX_X5 sparse-checkout set ROS2/X5_ws/src \
     && mkdir -p /opt/arx_ws/src \
     && cp -a /opt/vendor/ARX_X5/ROS2/X5_ws/src/. /opt/arx_ws/src/ \
     && source "/opt/ros/${ROS_DISTRO}/setup.bash" \
@@ -74,6 +74,7 @@ LABEL org.opencontainers.image.source="https://github.com/ARXroboticsX/ARX_X5" \
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         can-utils \
+        iproute2 \
         libusb-1.0-0 \
         python3 \
         ros-${ROS_DISTRO}-rosbag2 \
@@ -87,7 +88,7 @@ COPY --from=sdk-builder /usr/local/ /usr/local/
 COPY --from=sdk-builder /opt/arx_ws/install/ /opt/arx_ws/install/
 
 ENV LD_LIBRARY_PATH="/usr/local/lib:${LD_LIBRARY_PATH}" \
-    PYTHONPATH="/usr/local/lib/python3.12/site-packages:${PYTHONPATH}"
+    PYTHONPATH="/usr/local/OFF:${PYTHONPATH}"
 
 WORKDIR /workspace
 
