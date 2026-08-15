@@ -1,6 +1,6 @@
 # SDK 与 ROS 2 数据面实施计划
 
-- Status: `draft`（分支边界已对齐，等待图像编码与 ArmState 真机测试）
+- Status: `in-progress`（ArmState 方向已冻结，等待图像编码测试与 ROS 2 Source）
 - Parent: `meta_plan.md`
 - Branch: `main`
 - Target: `w3-arx5`、ROS 2 Jazzy、单一 Privileged Docker Image
@@ -17,7 +17,7 @@
 
 - ARX5、RealSense SDK 构建、设备启动、容器与真机脚本。
 - 三路 D405 ROS 2 Source，每路只输出彩色图、对齐 Depth 和原始时间语义。
-- 双臂 ROS 2 Adapter；最终消息字段必须先经官方 Topic 与真机操作测试确认。
+- 双臂 ROS 2 Adapter，将 Vendor 七维数组拆分为六关节与独立夹爪字段。
 - 固定 Topic、消息定义、站点设备映射与频率监督实现。
 - `rosbag2_py + MCAP` 选定 Topic 录制技术验证；外层 Port 合并后实现其 ROS 2 Adapter。
 
@@ -57,11 +57,13 @@
 /embodiments/<left|right>_arm/state
 ```
 
-相机沿用标准 `sensor_msgs/Image`。机械臂暂不冻结自定义消息：先录制官方 `RobotStatus`，由采集者自由操作双臂、夹爪和示教器，确认六关节、夹爪、电流、EEF 与输入字段后，再决定直接复用 Vendor 消息还是定义最小 `ArmState`。
+相机沿用标准 `sensor_msgs/Image`。机械臂使用项目最小自定义 `ArmState`，保留 Vendor Header，并包含：`eef_xyzrpy[6]`、六关节位置/速度/原始电流，以及独立夹爪位置/速度/原始电流。Adapter 原样映射，不换算单位、不降采样。
 
 ## 已核查事实
 
 - 官方 `v2_collect` 发布 `/arm_master_l_status` 与 `/arm_master_r_status`，类型为 `arx5_arm_msg/msg/RobotStatus`；消息包含 `end_pos[6]`、`joint_pos[7]`、`joint_vel[7]`、`joint_cur[7]`。
+- 66.16 秒真机 MCAP 分别录得 66166 与 66165 条消息，两路实际频率约 1000 Hz；字段均为有限值，Header 最大间隔不超过 1.86 ms。
+- 第七位位置、速度和电流随夹爪操作变化，确认必须从六关节数组中拆出。官方消息没有示教器输入字段，后者不进入本轮 `ArmState`。
 - 历史 node010 MCAP 使用 `ARX5_beta` 直读后自定义的 `ArmStateRaw`，只保存六关节位置；相机只有压缩彩色图，没有 Depth，且 Topic 暴露序列号。它仅作为采样与 ROS 2 录制参考，不作为本项目消息契约。
 - D405 官方规格明确不支持多机硬件同步信号。`librealsense v2.54.2` 的 `rs-multicam` 为每台设备启动独立 Pipeline；`syncer` 只能对送入它的不同 Stream 生成 coherent frameset，不构成官方三设备同步方案。
 
@@ -69,13 +71,12 @@
 
 1. 实现单相机单进程 Source 骨架；Launch 启动三进程，按序列号映射逻辑位置并执行单机 Depth 对齐。
 2. 对 YUYV 与 RGB8 各执行 30 秒 MCAP 测试，比较真实频率、CPU、写入吞吐和文件大小后冻结编码与压缩参数。
-3. 在采集者配合下录制官方双臂状态；不指定新位姿，只观察自由操作时字段变化并冻结 ArmState 倾向。
-4. 建立最终 ROS 2 interfaces 与站点配置，加入消息契约测试。
-5. 实现双臂 Adapter；只订阅官方状态并重新发布稳定逻辑消息。
-6. 实现统一频率监督，报告帧数、平均频率、最大帧间隔和完全停流。
-7. 在容器内验证 `rosbag2_py + rosbag2_storage_mcap` 对显式 Topic 的启动、停止、重复录制和干净关闭。
-8. 外层 Port 合并后实现 `RecordingBackend` 与 `StreamMonitor` Adapter，不改变状态机或 Store。
-9. 合并两条开发线，生成单一部署镜像并执行 90～150 秒真机 Episode 验收。
+3. 建立最终 ROS 2 interfaces 与站点配置，加入消息契约测试。
+4. 实现双臂 Adapter；只订阅官方状态并重新发布稳定逻辑消息。
+5. 实现统一频率监督，报告帧数、平均频率、最大帧间隔和完全停流。
+6. 在容器内验证 `rosbag2_py + rosbag2_storage_mcap` 对显式 Topic 的启动、停止、重复录制和干净关闭。
+7. 外层 Port 合并后实现 `RecordingBackend` 与 `StreamMonitor` Adapter，不改变状态机或 Store。
+8. 合并两条开发线，生成单一部署镜像并执行 90～150 秒真机 Episode 验收。
 
 ## 主线保留内容
 
@@ -102,10 +103,18 @@
 ## 开放决策
 
 1. 彩色消息使用设备原生 `yuyv` 还是 SDK 转换后的 `rgb8`；需结合 MCAP 吞吐和训练消费成本决定。
-2. 是否直接复用 Vendor `RobotStatus` 或定义最小 `ArmState`，以及字段、单位和 EEF 坐标系；必须以真机读数为准。
+2. Vendor 字段的物理单位与 EEF 坐标系尚未由官方资料明确；v0.1 保留原始值和字段语义，不猜测换算。
 3. `rosbag2_py` 能否直接满足单文件 `episode.mcap` 契约；不满足时先对齐，不擅自切换直接 MCAP Writer。
 4. 外层分支冻结 `RecordingBackend`、`StreamMonitor` 后，ROS 2 Adapter 的最终包路径与合并顺序。
 
 ## 验收结果
 
-待实施后回写。
+2026-08-15 完成双臂官方状态 MCAP 验收：
+
+- 官方 `RobotStatus` 连续录制 66.16 秒，左 66166 条、右 66165 条，均约 1000 Hz。
+- Header 最大间隔为 1.10 ms 和 1.85 ms；全部向量无非有限值，六关节、夹爪与 EEF 均有有效变化。
+- 原始 MCAP 为 35.7 MiB，可由 Jazzy `ros2 bag info` 与字段分析工具读取。
+- 测试完成后容器与 CAN 接口全部回收，无残留。
+- 结论：采用最小自定义 `ArmState`，保留原始 Header 与数值并拆分夹爪；不纳入示教器输入，不主动降采样。
+
+相机 Source、编码 A/B、逻辑 ArmState Adapter 和整条 Episode 仍未验收，计划保持 `in-progress`。

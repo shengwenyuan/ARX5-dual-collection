@@ -1,6 +1,6 @@
 # 真机接入与最小采集链路
 
-- Status: `in-progress`（SDK 与三路相机基线已通过，继续机械臂频率与最小录制链路）
+- Status: `in-progress`（SDK、三路相机和机械臂原始 MCAP 已通过，继续逻辑 Topic 与 Episode 链路）
 - Target: `w3-arx5`
 - Runtime: Ubuntu 24.04、ROS 2 Jazzy、Privileged Docker、Host Network
 
@@ -108,3 +108,14 @@
 - `usbfs_memory_mb=256` 是当前三路 D405 并发的部署前提，已纳入 privileged bring-up 容器的启动前检查；不持久化到主机配置。
 
 相机 SDK 与三路并发基线已通过；整体计划仍为 `in-progress`，剩余机械臂官方 Topic 频率、键盘 Episode、MCAP + JSON 提交和异常路径验收。
+
+2026-08-15 已完成机械臂官方 Topic 与原始 MCAP 验收：
+
+- 采集者在官方 `remote_master` 重力补偿下自由操作双臂和夹爪，未指定或发送新位姿。
+- `/arm_master_l_status` 与 `/arm_master_r_status` 连续录制 66.16 秒，分别得到 66166 与 66165 条 `RobotStatus`，实际频率均约 1000 Hz。
+- 两路 Header 时间戳连续，最大消息间隔分别为 1.10 ms 与 1.85 ms；`end_pos`、`joint_pos`、`joint_vel`、`joint_cur` 均有有效变化，无非有限值。
+- 第七位关节数据随夹爪操作变化，继续按 `[J1..J6, gripper]` 解释；稳定逻辑消息必须拆分六关节与夹爪。
+- 原始 MCAP 为 35.7 MiB、可读取；停止后容器删除，`can1/can3` 均已回收。
+- 官方 `RobotStatus` 不含示教器输入字段；`ARX_KEY` 或其他输入接口仍需独立辨识。
+
+机械臂 SDK、频率与原始 MCAP 基线已通过。整体计划继续保持 `in-progress`，剩余逻辑 Topic Adapter、键盘 Episode、MCAP + JSON 提交和异常路径验收。
