@@ -1,6 +1,6 @@
 # Episode Runtime 实施计划
 
-- Status: `draft`
+- Status: `in-progress`
 - Parent: `meta_plan.md`
 - Runtime: Python 3.10+、ROS 2 Jazzy、Ubuntu 24.04 Container
 - Target: 先完成无 Vendor SDK 闭环，再接入 `w3-arx5` 真机 Topic
@@ -230,4 +230,8 @@ tests/episode/
 
 ## 验收结果
 
-尚未实施。
+- 2026-08-15：Episode Core Models 已完成并通过单元测试与独立安装链路验收。
+- 已冻结 `EpisodeState`、`EpisodeOutcome`、`StreamSpec`、`EpisodeRequest`、`StreamMetrics` 与 `EpisodeResult`；未引入 ROS2 或 Vendor SDK 依赖。
+- 2026-08-15：Episode Ports 已完成并通过全仓 13 个单测与独立安装链路验收。
+- 已冻结同步轮询式 `RecordTrigger`、`RecordingBackend` 与 `StreamMonitor`；toggle、必需流轮询和 aborted 干净关包语义已确认。
+- Episode Runtime 其余模块与无硬件/真机整体验收尚未实施，计划保持 `in-progress`。
