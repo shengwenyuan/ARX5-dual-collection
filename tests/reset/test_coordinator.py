@@ -48,3 +48,17 @@ def test_reset_failure_never_reports_complete() -> None:
         coordinator.run()
 
     assert ResetState.COMPLETE not in events
+
+
+def test_zero_delay_starts_reset_without_waiting() -> None:
+    events: list[object] = []
+    coordinator = ResetCoordinator(
+        FakeController(events),
+        delay_s=0,
+        sleep_fn=lambda delay: events.append(("sleep", delay)),
+        state_sink=events.append,
+    )
+
+    coordinator.run()
+
+    assert events == [ResetState.RESETTING, "controller", ResetState.COMPLETE]

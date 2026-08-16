@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from arx5_collection.episode.models import EpisodeRequest
 from arx5_collection.production.checks import CheckPhase, CheckResult
 from arx5_collection.production.config import load_station_config
 from arx5_collection.production.orchestrator import ProductionSession
@@ -179,6 +180,42 @@ class ProductionSessionTest(unittest.TestCase):
             session.start()
             session.stop()
         self.assertEqual(events[-2:], ["gate:stop", "system:stop"])
+
+    def test_pre_recording_action_runs_after_session_checks(self) -> None:
+        events: list[str] = []
+        station = load_station_config(ROOT / "config" / "station.w3.json")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            session = ProductionSession(
+                station,
+                root / "episodes",
+                root / "logs",
+                "0.1.0",
+                min_free_bytes=0,
+                identity=FakeIdentity(),  # type: ignore[arg-type]
+                system=FakeSystem(events),  # type: ignore[arg-type]
+                supervisor=FakeSupervisor(events),  # type: ignore[arg-type]
+                readiness=FakeReadiness(events),  # type: ignore[arg-type]
+                commands=FakeCommands(),  # type: ignore[arg-type]
+            )
+            session.start()
+            request = EpisodeRequest(
+                "test",
+                "test",
+                root / "episodes",
+                ROOT / "config" / "station.w3.json",
+                (),
+            )
+            runtime = session.create_runtime(
+                request,
+                object(),  # type: ignore[arg-type]
+                pre_recording_action=lambda: events.append("go-home"),
+            )
+            assert runtime.pre_episode_check is not None
+            runtime.pre_episode_check()
+            session.stop()
+
+        self.assertLess(events.index("gate:require"), events.index("go-home"))
 
 
 if __name__ == "__main__":

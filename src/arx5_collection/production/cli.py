@@ -113,10 +113,15 @@ def run_session(args: argparse.Namespace) -> int:
     with termination_as_interrupt(), session:
         print(f"SESSION READY logs={session_log_dir}", flush=True)
         with KeyboardTrigger(key=args.trigger_key) as trigger:
-            runtime = session.create_runtime(request, trigger)
             reset = ResetCoordinator(
                 RosDualArmResetController(),
+                delay_s=0,
                 state_sink=lambda state: render_reset_state(state, sys.stderr),
+            )
+            runtime = session.create_runtime(
+                request,
+                trigger,
+                pre_recording_action=reset.run,
             )
             return run_episode_loop(
                 runtime,
@@ -124,8 +129,6 @@ def run_session(args: argparse.Namespace) -> int:
                 episodes=args.episodes,
                 stdout=sys.stdout,
                 stderr=sys.stderr,
-                after_episode=reset.run,
-                on_idle_exit=reset.run,
             )
 
 

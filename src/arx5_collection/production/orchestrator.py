@@ -131,8 +131,16 @@ class ProductionSession:
         self._report(require_passed((self._disk_check(CheckPhase.EPISODE),)))
 
     def create_runtime(
-        self, request: EpisodeRequest, trigger: RecordTrigger
+        self,
+        request: EpisodeRequest,
+        trigger: RecordTrigger,
+        pre_recording_action: Callable[[], None] | None = None,
     ) -> EpisodeRuntime:
+        def prepare_episode() -> None:
+            self.pre_episode_check()
+            if pre_recording_action is not None:
+                pre_recording_action()
+
         backend = RosbagRecordingBackend()
         return EpisodeRuntime(
             store=EpisodeStore(request.output_root, min_free_bytes=self.min_free_bytes),
@@ -140,7 +148,7 @@ class ProductionSession:
             backend=backend,
             monitor=RosStreamMonitor(backend),
             software_version=self.software_version,
-            pre_episode_check=self.pre_episode_check,
+            pre_episode_check=prepare_episode,
         )
 
     def stop(self) -> None:

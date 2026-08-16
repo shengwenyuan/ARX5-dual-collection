@@ -23,8 +23,9 @@ class ResetCoordinator:
         self.state_sink = state_sink or (lambda state: None)
 
     def run(self) -> None:
-        self.state_sink(ResetState.WAITING)
-        self.sleep_fn(self.delay_s)
+        if self.delay_s > 0:
+            self.state_sink(ResetState.WAITING)
+            self.sleep_fn(self.delay_s)
         self.state_sink(ResetState.RESETTING)
         self.controller.reset_both()
         self.state_sink(ResetState.COMPLETE)

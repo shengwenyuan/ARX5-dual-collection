@@ -76,13 +76,22 @@ class EpisodeRuntimeTest(unittest.TestCase):
         self.assertEqual(result.errors, ("left_arm stopped",))
         self.assertTrue(result.committed)
 
-    def test_pre_episode_check_runs_after_start_before_store_prepare(self) -> None:
+    def test_pre_episode_check_runs_after_start_before_recorder(self) -> None:
         events: list[str] = []
-        runtime = self.runtime(trigger=FakeTrigger([True, True]))
+
+        class OrderedBackend(FakeBackend):
+            def start(self, mcap_path, streams) -> None:
+                events.append("recorder_started")
+                super().start(mcap_path, streams)
+
+        runtime = self.runtime(
+            trigger=FakeTrigger([True, True]),
+            backend=OrderedBackend(),
+        )
         runtime.pre_episode_check = lambda: events.append("checked")
         result = runtime.run_once(self.request())
         self.assertTrue(result.committed)
-        self.assertEqual(events, ["checked"])
+        self.assertEqual(events, ["checked", "recorder_started"])
 
     def test_pre_episode_check_failure_does_not_create_partial(self) -> None:
         runtime = self.runtime(trigger=FakeTrigger([True]))
