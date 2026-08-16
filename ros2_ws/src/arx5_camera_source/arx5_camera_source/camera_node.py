@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from time import monotonic
 from typing import Any
 
 import pyrealsense2 as rs
 import rclpy
+from arx5_collection_interfaces.msg import StreamStatus
+from arx5_monitoring.reporter import StreamStatusReporter
 from rclpy.node import Node
 from rclpy.qos import (
     QoSDurabilityPolicy,
@@ -32,6 +35,9 @@ class D405Source(Node):
         self.frame_timeout_ms = int(
             self.declare_parameter("frame_timeout_ms", 5000).value
         )
+        self.status_period_s = float(
+            self.declare_parameter("status_period_s", 1.0).value
+        )
         self.color = color_contract(
             str(self.declare_parameter("color_format", "yuyv").value)
         )
@@ -56,6 +62,31 @@ class D405Source(Node):
         self.depth_publisher = self.create_publisher(
             Image, "aligned_depth/image_raw", qos
         )
+        status_qos = QoSProfile(
+            history=QoSHistoryPolicy.KEEP_LAST,
+            depth=32,
+            reliability=QoSReliabilityPolicy.RELIABLE,
+            durability=QoSDurabilityPolicy.VOLATILE,
+        )
+        self.status_publisher = self.create_publisher(
+            StreamStatus, "/monitoring/stream_status", status_qos
+        )
+        topic_root = f"/sensors/camera_{self.camera_name}"
+        self.status_reporters = (
+            StreamStatusReporter(
+                self,
+                self.status_publisher,
+                f"camera_{self.camera_name}_color",
+                f"{topic_root}/color/image_raw",
+            ),
+            StreamStatusReporter(
+                self,
+                self.status_publisher,
+                f"camera_{self.camera_name}_aligned_depth",
+                f"{topic_root}/aligned_depth/image_raw",
+            ),
+        )
+        self._next_status_s = monotonic() + self.status_period_s
         self.pipeline = rs.pipeline()
         self.align = rs.align(rs.stream.color)
         self.started = False
@@ -69,6 +100,8 @@ class D405Source(Node):
             raise ValueError("v0.1 camera stream is fixed at 1280x720@30")
         if self.frame_timeout_ms <= 0:
             raise ValueError("frame_timeout_ms must be positive")
+        if self.status_period_s <= 0:
+            raise ValueError("status_period_s must be positive")
         if self.reliability not in {"best_effort", "reliable"}:
             raise ValueError("reliability must be best_effort or reliable")
 
@@ -182,6 +215,15 @@ class D405Source(Node):
         )
         self.color_publisher.publish(color_message)
         self.depth_publisher.publish(depth_message)
+        sec, nanosec = timestamp_parts(timestamp_ms)
+        message_stamp_ns = sec * 1_000_000_000 + nanosec
+        now_s = monotonic()
+        for reporter in self.status_reporters:
+            reporter.observe(message_stamp_ns, now_s)
+        if now_s >= self._next_status_s:
+            for reporter in self.status_reporters:
+                reporter.publish(now_s)
+            self._next_status_s = now_s + self.status_period_s
 
     def run(self) -> None:
         self.start()

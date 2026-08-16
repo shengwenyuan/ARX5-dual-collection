@@ -1,6 +1,6 @@
 # SDK 与 ROS 2 数据面实施计划
 
-- Status: `in-progress`（相机与逻辑 ArmState 数据链路已验证，等待物理映射、统一频率监督、录制 Adapter 与完整 Episode）
+- Status: `in-progress`（数据 Source、逻辑 ArmState 与轻量频率遥测已验证，等待物理映射、ROS Runtime Adapter 与完整 Episode）
 - Parent: `meta_plan.md`
 - Branch: `main`
 - Target: `w3-arx5`、ROS 2 Jazzy、单一 Privileged Docker Image
@@ -136,4 +136,13 @@
 - 逐条直接比较确认 Header 与全部字段一致；不使用 SHA。Adapter 与 recorder 均干净退出，无残留进程。
 - 最终验收报告位于 Git 忽略的 `reports/w3/2026-08-16/20260816-arm-state-adapter-replay-r5.analysis.json`。
 
-相机与逻辑 ArmState 数据链路验收通过；物理相机映射、统一频率监督、录制 Adapter 和完整 Episode 仍未完成，计划保持 `in-progress`。
+2026-08-16 完成轻量频率遥测与 MCAP 统一审计验收：
+
+- 新增固定 `/monitoring/stream_status` 与八个逻辑 stream id；相机 Source 和双臂 Adapter 在已有回调内统计 Header，不新增大图订阅或载荷复制。
+- `StreamStatus` 每秒报告累计数、窗口数、窗口频率、最大间隔、最近 Header、停流时长与非单调计数；只提供事实，不在 Source 内判 Episode 结果。
+- 双臂 66.16 秒回放中，遥测最终累计数与 MCAP 精确相等：左 66166、右 66165；窗口频率约 1000 Hz，无非单调 Header，映射字段仍逐条一致。
+- 三相机遥测短测中，六个 Stream 的窗口频率为 29.307～30.178 Hz，最大 Header 间隔不超过 34.232 ms；同机 RGB/Depth 累计数一致，无非单调 Header。
+- 统一 MCAP 审计工具直接读取八个数据 Topic 的 Header，输出与 Metadata `StreamMetrics` 对齐的 count、duration、observed_hz、max_gap 和 warnings；频率偏低只写 warning。
+- Docker Hub 暂时无路由时，使用已验收镜像作为本地基底构建 ROS overlay 完成部署；正式 Dockerfile 与 SDK 版本未改变，网络恢复后仍执行标准全量构建。
+
+数据 Source、逻辑 ArmState 与轻量频率遥测验收通过；完全停流决策、MCAP RecordingBackend、物理相机映射和完整 Episode 仍未完成，计划保持 `in-progress`。

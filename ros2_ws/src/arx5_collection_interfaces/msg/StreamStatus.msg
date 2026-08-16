@@ -1,0 +1,11 @@
+std_msgs/Header header
+string stream_id
+string topic
+uint64 total_count
+uint64 window_count
+float64 window_duration_s
+float64 observed_hz
+float64 max_gap_ms
+builtin_interfaces/Time last_message_stamp
+float64 silence_s
+uint64 non_monotonic_count

@@ -24,6 +24,7 @@ for package_name in \
   arm_control \
   arx5_camera_source \
   arx5_collection_interfaces \
+  arx5_monitoring \
   arx5_arm_adapter \
   rosbag2_storage_mcap; do
   ros2 pkg prefix "${package_name}" >/dev/null
@@ -32,6 +33,7 @@ done
 ros2 pkg executables arx5_camera_source | grep -q 'd405_source'
 ros2 pkg executables arx5_arm_adapter | grep -q 'arm_state_adapter'
 ros2 interface show arx5_collection_interfaces/msg/ArmState | grep -q 'gripper_current'
+ros2 interface show arx5_collection_interfaces/msg/StreamStatus | grep -q 'non_monotonic_count'
 
 fastdds_profile=${FASTDDS_DEFAULT_PROFILES_FILE:-}
 [[ -r ${fastdds_profile} ]] || {

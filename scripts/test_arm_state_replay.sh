@@ -80,6 +80,7 @@ fi
 
 setsid ros2 bag record --storage mcap --output "${output_bag}" --topics \
   /embodiments/left_arm/state /embodiments/right_arm/state \
+  /monitoring/stream_status \
   >"${output_bag}.record.log" 2>&1 &
 recorder_pid=$!
 
@@ -87,6 +88,8 @@ for _ in $(seq 1 50); do
   if ros2 topic info /embodiments/left_arm/state 2>/dev/null \
       | grep -q 'Subscription count: 1' \
       && ros2 topic info /embodiments/right_arm/state 2>/dev/null \
+      | grep -q 'Subscription count: 1' \
+      && ros2 topic info /monitoring/stream_status 2>/dev/null \
       | grep -q 'Subscription count: 1'; then
     break
   fi
@@ -97,6 +100,12 @@ left_subscribers=$(ros2 topic info /embodiments/left_arm/state | awk '/Subscript
 right_subscribers=$(ros2 topic info /embodiments/right_arm/state | awk '/Subscription count:/ {print $3}')
 if [[ ${left_subscribers} != 1 || ${right_subscribers} != 1 ]]; then
   echo "error: recorder did not subscribe to both logical topics" >&2
+  exit 1
+fi
+status_subscribers=$(ros2 topic info /monitoring/stream_status \
+  | awk '/Subscription count:/ {print $3}')
+if [[ ${status_subscribers} != 1 ]]; then
+  echo "error: recorder did not subscribe to stream telemetry" >&2
   exit 1
 fi
 

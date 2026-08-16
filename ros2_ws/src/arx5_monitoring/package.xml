@@ -1,17 +1,14 @@
 <?xml version="1.0"?>
 <package format="3">
-  <name>arx5_arm_adapter</name>
+  <name>arx5_monitoring</name>
   <version>0.1.0</version>
-  <description>Read-only adapter from official ARX5 status to collection ArmState.</description>
+  <description>Lightweight source-side telemetry for ARX5 collection streams.</description>
   <maintainer email="devnull@example.com">ARX5 Collection</maintainer>
   <license>Proprietary</license>
 
   <buildtool_depend>ament_python</buildtool_depend>
 
-  <exec_depend>arx5_arm_msg</exec_depend>
   <exec_depend>arx5_collection_interfaces</exec_depend>
-  <exec_depend>arx5_monitoring</exec_depend>
-  <exec_depend>launch_ros</exec_depend>
   <exec_depend>rclpy</exec_depend>
 
   <export>
