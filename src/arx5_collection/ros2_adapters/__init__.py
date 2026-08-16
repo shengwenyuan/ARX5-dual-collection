@@ -2,5 +2,6 @@
 
 from .monitor import RosStreamMonitor
 from .recording import RosbagRecordingBackend
+from .reset import RosDualArmResetController
 
-__all__ = ["RosStreamMonitor", "RosbagRecordingBackend"]
+__all__ = ["RosDualArmResetController", "RosStreamMonitor", "RosbagRecordingBackend"]

@@ -1,6 +1,6 @@
 # Episode 后自动复位实施计划
 
-- Status: `blocked-alignment`
+- Status: `awaiting-hardware-validation`
 - Parent: `meta_plan.md`
 - Branch: `feature/post-episode-reset`
 - Safety boundary: 未经用户确认，不启动真机全链路测试或发送位姿变化信号
@@ -21,7 +21,7 @@ SPACE / A / source failure
   -> FINALIZING
   -> Episode committed
   -> RESET_WAITING (5 s)
-  -> RESETTING (left + right concurrently, 10% speed/acceleration)
+  -> RESETTING (left + right concurrently, Vendor GO_HOME profile)
   -> READY
 
 Ctrl+C
@@ -42,8 +42,8 @@ Ctrl+C
 - 不测量、不配置自定义关节目标。
 - 必须查明并复用 ARX5 官方 `remote_master + G_COMPENSATION` 初始化时已经执行的同一归位动作与位姿。
 - 不通过 `/arx_joy`、Shell 命令拼接或猜测关节值实现。
-- 速度与加速度均以官方允许的比例接口限制为 10%；若官方归位接口不支持速度限制，停止实现并重新对齐，不自行伪造等价动作。
-- 使用官方完成反馈或状态条件确认左右臂均归位完成；不能仅按固定时长假定成功。
+- 使用 Vendor 默认 `GO_HOME` 运动曲线，不伪造不存在的 10% 限速接口。
+- 使用官方状态 Topic 的关节位置与速度连续收敛确认左右臂均归位完成；不能仅按固定时长假定成功。
 
 ## 模块边界
 
@@ -53,8 +53,11 @@ src/arx5_collection/reset/
   ports.py        # DualArmResetController
   coordinator.py  # 5 秒等待、并发归位、完成/错误
 
-ros2_ws/src/arx5_reset_adapter/
-  ...             # 封装确认后的 ARX5 官方归位接口
+src/arx5_collection/ros2_adapters/reset.py
+                  # 双臂服务调用、状态收敛、恢复重力补偿
+
+docker/patches/arx-x5-go-home-services.patch
+                  # Vendor 节点最小私有服务补丁
 ```
 
 - Episode Runtime 继续只负责录制和提交，不直接 import Vendor SDK。
@@ -76,7 +79,7 @@ ros2_ws/src/arx5_reset_adapter/
 
 - 任何 Episode 结果提交后只触发一次复位。
 - 5 秒计时不与 FINALIZING 重叠。
-- 左右臂归位调用并发开始，均使用 10% 速度/加速度。
+- 左右臂归位调用并发开始，均使用 Vendor 默认 `GO_HOME` 运动曲线。
 - 归位期间不会启动下一条 Recorder。
 - `Ctrl+C` 不会绕过复位，归位后原有有序关闭仍完整执行。
 - 无真机确认时，自动化测试不得调用真实 Controller。
@@ -90,6 +93,7 @@ ros2_ws/src/arx5_reset_adapter/
 - 假设工作区安全、无遮挡且无夹持，不扩展复杂防碰撞逻辑。
 - `Ctrl+C` 先等待并归位，再关闭整个 Session。
 - 全链路真机测试必须等待用户再次明确确认。
+- 接受 Vendor 默认 `GO_HOME` 速度；夹爪使用官方示例值 `-1.0`，首次真机验收确认闭合方向。
 
 ## 官方源码核查
 
@@ -99,4 +103,13 @@ ros2_ws/src/arx5_reset_adapter/
 - 官方 `v2_collect.yaml` 给左右臂配置同一组 6 关节 `go_home_position`，不包含夹爪目标。
 - 当前 ROS 2 节点只通过全局 `/arx_joy` 触发 `GO_HOME`，没有独立服务。
 - 公开接口没有归位速度、加速度或完成反馈参数；状态 Topic 仅能用于外部判断关节位置和速度是否收敛。
-- 因此当前无法同时严格满足“不使用 `/arx_joy`、官方接口限速 10%、官方完成反馈、夹爪完全闭合”。在重新对齐控制边界前，不实现真实 Controller Adapter。
+- 已对齐为补丁增加每臂私有 `GO_HOME` 与 `G_COMPENSATION` 服务，不使用 `/arx_joy`；采用 Vendor 默认运动曲线，外部监督状态收敛，并以 `-1.0` 闭合夹爪。
+
+## 实施与软件验收
+
+- Vendor 最小补丁新增 `/arm_master_l|r/go_home` 和 `/arm_master_l|r/gravity_compensation`，归位请求同时下发。
+- `ResetCoordinator` 在 Episode 提交完成后开始等待 5 秒；成功、A、必需流异常和录制中 Ctrl+C 共用同一路径。
+- 空闲 READY 收到 Ctrl+C 时先复位，再进入原有 Session 有序关闭。
+- 六关节在官方 home 目标 `0.03 rad` 内、速度在 `0.05 rad/s` 内连续稳定 `0.5 s` 后，恢复重力补偿；总超时 `45 s`。
+- 纯软件验收：`120 passed, 16 subtests passed`；Python 编译通过；补丁对官方 `main@c783287` dry-run 通过。
+- 尚未启动 Docker 真机全链路或发送任何位姿变化信号；下一步必须由用户现场监督。

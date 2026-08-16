@@ -8,6 +8,7 @@ ARG LIBREALSENSE_REF=v2.54.2
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 COPY docker/patches/librealsense-v2.54.2-gcc13-cstdint.patch /tmp/
+COPY docker/patches/arx-x5-go-home-services.patch /tmp/
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -26,6 +27,7 @@ RUN apt-get update \
         python3-pip \
         ros-${ROS_DISTRO}-ament-index-cpp \
         ros-${ROS_DISTRO}-launch-ros \
+        ros-${ROS_DISTRO}-std-srvs \
     && rm -rf /var/lib/apt/lists/*
 
 RUN mkdir -p /opt/vendor/librealsense \
@@ -55,6 +57,8 @@ RUN apt-get update \
         --depth 1 --filter=blob:none --sparse --branch "${ARX_X5_REF}" \
         https://github.com/ARXroboticsX/ARX_X5.git /opt/vendor/ARX_X5 \
     && git -C /opt/vendor/ARX_X5 sparse-checkout set ROS2/X5_ws/src \
+    && patch --directory /opt/vendor/ARX_X5 --strip 1 \
+        < /tmp/arx-x5-go-home-services.patch \
     && mkdir -p /opt/arx_ws/src \
     && cp -a /opt/vendor/ARX_X5/ROS2/X5_ws/src/. /opt/arx_ws/src/ \
     && source "/opt/ros/${ROS_DISTRO}/setup.bash" \
@@ -87,6 +91,7 @@ RUN apt-get update \
         python3-pip \
         ros-${ROS_DISTRO}-rosbag2 \
         ros-${ROS_DISTRO}-rosbag2-storage-mcap \
+        ros-${ROS_DISTRO}-std-srvs \
         udev \
         usbutils \
         v4l-utils \

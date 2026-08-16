@@ -16,6 +16,7 @@ from .runtime import EpisodeRuntime
 
 RuntimeFactory = Callable[[EpisodeRequest, RecordTrigger], EpisodeRuntime]
 TriggerFactory = Callable[[str], AbstractContextManager[RecordTrigger]]
+LifecycleHook = Callable[[], None]
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -93,6 +94,8 @@ def run_episode_loop(
     episodes: int = 0,
     stdout: TextIO | None = None,
     stderr: TextIO | None = None,
+    after_episode: LifecycleHook | None = None,
+    on_idle_exit: LifecycleHook | None = None,
 ) -> int:
     output = stdout or sys.stdout
     error_output = stderr or sys.stderr
@@ -115,14 +118,17 @@ def run_episode_loop(
 
     runtime.state_sink = state_sink
     completed = 0
+    episode_committed = False
     try:
         while episodes == 0 or completed < episodes:
+            episode_committed = False
             print(
                 "READY: press SPACE to start; Ctrl+C exits the Session",
                 file=error_output,
                 flush=True,
             )
             result = runtime.run_once(request)
+            episode_committed = True
             print(
                 json.dumps(
                     {
@@ -135,6 +141,8 @@ def run_episode_loop(
                 file=output,
                 flush=True,
             )
+            if after_episode is not None:
+                after_episode()
             completed += 1
             if (
                 result.outcome is EpisodeOutcome.ABORTED
@@ -142,6 +150,8 @@ def run_episode_loop(
             ):
                 return 2
     except KeyboardInterrupt:
+        if not episode_committed and on_idle_exit is not None:
+            on_idle_exit()
         return 0
     finally:
         runtime.state_sink = previous_sink

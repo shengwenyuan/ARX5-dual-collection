@@ -17,6 +17,8 @@ from arx5_collection.episode.cli import (
     one_character,
     run_episode_loop,
 )
+from arx5_collection.reset import ResetCoordinator, ResetState
+from arx5_collection.ros2_adapters.reset import RosDualArmResetController
 
 from .checks import CheckFailure, CheckResult
 from .config import load_station_config, validate_task_streams
@@ -112,18 +114,34 @@ def run_session(args: argparse.Namespace) -> int:
         print(f"SESSION READY logs={session_log_dir}", flush=True)
         with KeyboardTrigger(key=args.trigger_key) as trigger:
             runtime = session.create_runtime(request, trigger)
+            reset = ResetCoordinator(
+                RosDualArmResetController(),
+                state_sink=lambda state: render_reset_state(state, sys.stderr),
+            )
             return run_episode_loop(
                 runtime,
                 request,
                 episodes=args.episodes,
                 stdout=sys.stdout,
                 stderr=sys.stderr,
+                after_episode=reset.run,
+                on_idle_exit=reset.run,
             )
 
 
 def render_check(result: CheckResult, output: TextIO) -> None:
     state = "PASS" if result.passed else "FAIL"
     print(f"{state} [{result.phase.value}] {result.name}: {result.detail}", file=output)
+
+
+def render_reset_state(state: ResetState, output: TextIO) -> None:
+    if state is ResetState.WAITING:
+        message = "RESET_WAITING: reset starts in 5 seconds"
+    elif state is ResetState.RESETTING:
+        message = "RESETTING: moving both arms to Vendor home"
+    else:
+        message = "RESET_COMPLETE: gravity compensation restored"
+    print(message, file=output, flush=True)
 
 
 @contextmanager

@@ -1,0 +1,98 @@
+--- a/ROS2/X5_ws/src/arx_x5_ros2/arx_x5_controller/CMakeLists.txt
++++ b/ROS2/X5_ws/src/arx_x5_ros2/arx_x5_controller/CMakeLists.txt
+@@ -6,5 +6,6 @@ find_package(ament_index_cpp REQUIRED)
+ find_package(rclcpp REQUIRED)
+ find_package(std_msgs REQUIRED)
++find_package(std_srvs REQUIRED)
+ find_package(rosidl_default_generators REQUIRED)
+ find_package(arm_control REQUIRED)
+ find_package(arx5_arm_msg REQUIRED)
+@@ -21,7 +22,7 @@ endif ()
+ add_executable(X5Controller src/X5Controller.cpp)
+ target_include_directories(X5Controller PUBLIC lib/arx_hardware_interface/include lib/arx_x5_src/include)
+ target_link_libraries(X5Controller ${DEPEND_LIB})
+-ament_target_dependencies(X5Controller rclcpp ament_index_cpp std_msgs arx5_arm_msg arm_control)
++ament_target_dependencies(X5Controller rclcpp ament_index_cpp std_msgs std_srvs arx5_arm_msg arm_control)
+ 
+ add_executable(KeyBoard src/KeyBoard.cpp)
+ ament_target_dependencies(KeyBoard rclcpp std_msgs arx5_arm_msg)
+--- a/ROS2/X5_ws/src/arx_x5_ros2/arx_x5_controller/package.xml
++++ b/ROS2/X5_ws/src/arx_x5_ros2/arx_x5_controller/package.xml
+@@ -14,6 +14,7 @@
+ 
+     <depend>arx5_arm_msg</depend>
+     <depend>arm_control</depend>
++    <depend>std_srvs</depend>
+ 
+     <build_depend>rosidl_default_generators</build_depend>
+     <exec_depend>rosidl_default_runtime</exec_depend>
+--- a/ROS2/X5_ws/src/arx_x5_ros2/arx_x5_controller/include/arx_x5_controller/X5Controller.hpp
++++ b/ROS2/X5_ws/src/arx_x5_ros2/arx_x5_controller/include/arx_x5_controller/X5Controller.hpp
+@@ -11,6 +11,7 @@
+ #include "arm_control/msg/pos_cmd.hpp"
+ #include "arm_control/msg/joint_control.hpp"
+ #include <std_msgs/msg/int32_multi_array.hpp>
++#include <std_srvs/srv/trigger.hpp>
+ 
+ namespace arx::x5 {
+ class X5Controller : public rclcpp::Node {
+@@ -29,6 +30,11 @@ class X5Controller : public rclcpp::Node {
+   void FollowCmdCallback(const arx5_arm_msg::msg::RobotStatus::SharedPtr msg);
+   void JointControlCallback(const arm_control::msg::JointControl::SharedPtr msg);
+   void arxJoyCB(const std_msgs::msg::Int32MultiArray::SharedPtr msg);
++  void goHome(const std::shared_ptr<std_srvs::srv::Trigger::Request> request,
++              std::shared_ptr<std_srvs::srv::Trigger::Response> response);
++  void enableGravityCompensation(
++      const std::shared_ptr<std_srvs::srv::Trigger::Request> request,
++      std::shared_ptr<std_srvs::srv::Trigger::Response> response);
+  private:
+   std::shared_ptr<InterfacesThread> interfaces_ptr_;
+   enum class CatchControlMode {
+@@ -52,6 +58,8 @@ class X5Controller : public rclcpp::Node {
+   // joint control
+   rclcpp::Subscription<arm_control::msg::JointControl>::SharedPtr joint_control_subscriber_;
+   rclcpp::Subscription<std_msgs::msg::Int32MultiArray>::SharedPtr arx_joy_sub_;
++  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr go_home_service_;
++  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr gravity_compensation_service_;
+ 
+   rclcpp::TimerBase::SharedPtr timer_;
+   bool new_version_ = false;
+--- a/ROS2/X5_ws/src/arx_x5_ros2/arx_x5_controller/src/X5Controller.cpp
++++ b/ROS2/X5_ws/src/arx_x5_ros2/arx_x5_controller/src/X5Controller.cpp
+@@ -82,6 +82,12 @@ X5Controller::X5Controller() : Node("x5_controller_node") {
+     timer_ = this->create_wall_timer(std::chrono::milliseconds(1), std::bind(&X5Controller::PubState, this));
+   }
+   arx_joy_sub_ = this->create_subscription<std_msgs::msg::Int32MultiArray>("/arx_joy",1,std::bind(&X5Controller::arxJoyCB,this,std::placeholders::_1));
++  go_home_service_ = this->create_service<std_srvs::srv::Trigger>(
++      "~/go_home", std::bind(&X5Controller::goHome, this,
++      std::placeholders::_1, std::placeholders::_2));
++  gravity_compensation_service_ = this->create_service<std_srvs::srv::Trigger>(
++      "~/gravity_compensation", std::bind(&X5Controller::enableGravityCompensation,
++      this, std::placeholders::_1, std::placeholders::_2));
+ }
+ 
+ void X5Controller::CmdCallback(const arx5_arm_msg::msg::RobotCmd::SharedPtr msg) {
+@@ -111,6 +117,23 @@ void X5Controller::arxJoyCB(const std_msgs::msg::Int32MultiArray::SharedPtr msg) {
+     interfaces_ptr_->setArmStatus(InterfacesThread::state::GO_HOME);
+ }
+ 
++void X5Controller::goHome(
++    const std::shared_ptr<std_srvs::srv::Trigger::Request>,
++    std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
++  interfaces_ptr_->setCatch(-1.0);
++  interfaces_ptr_->setArmStatus(InterfacesThread::state::GO_HOME);
++  response->success = true;
++  response->message = "GO_HOME accepted; gripper target=-1.0";
++}
++
++void X5Controller::enableGravityCompensation(
++    const std::shared_ptr<std_srvs::srv::Trigger::Request>,
++    std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
++  interfaces_ptr_->setArmStatus(InterfacesThread::state::G_COMPENSATION);
++  response->success = true;
++  response->message = "G_COMPENSATION accepted";
++}
++
+ void X5Controller::PubState() {
+   auto message = arx5_arm_msg::msg::RobotStatus();
+   message.header.stamp = this->get_clock()->now();
