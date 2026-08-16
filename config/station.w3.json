@@ -14,9 +14,8 @@
     }
   ],
   "cameras": {
-    "left": null,
-    "right": null,
-    "overview": null
+    "left": "261122270960",
+    "right": "261022274824",
+    "overview": "261122270651"
   }
 }
-
