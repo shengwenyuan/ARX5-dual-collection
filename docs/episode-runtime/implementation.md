@@ -7,7 +7,7 @@
 
 ## 目标
 
-实现与 ARX5、RealSense SDK 解耦的 Episode 控制面：接收录制触发，管理状态与异常，持续写入临时目录，生成 MCAP 与 JSON，并在完整关闭后原子提交。
+实现与 ARX5、RealSense SDK 解耦的 Episode 控制面：接收录制触发，管理状态与异常，协调 MCAP Adapter，生成 metadata，并在完整关闭后原子提交。
 
 SDK 调研只影响数据源适配器，不得阻塞 Episode Runtime 主线。
 
@@ -17,8 +17,8 @@ SDK 调研只影响数据源适配器，不得阻塞 Episode Runtime 主线。
 
 - Episode 状态机与单实例并发约束。
 - 键盘录制触发和脚踏板接口边界。
-- `.partial` 目录、MCAP Backend、metadata 和原子提交。
-- 必需 Stream 的频率统计、停止检测与 `aborted` 路径。
+- `.partial` 目录、metadata、原子提交，以及对 `RecordingBackend` Hook 的调用。
+- 消费 StreamMonitor 的统计与必需 Stream 停止事件，执行 `aborted` 路径。
 - 本地任务输入、命令行入口、重复 Episode 和异常退出处理。
 - Fake Backend、Fake Stream Monitor 及无硬件集成测试。
 
@@ -28,6 +28,7 @@ SDK 调研只影响数据源适配器，不得阻塞 Episode Runtime 主线。
 - 相机同步、Depth 对齐、EEF 坐标或电流单位解释。
 - 脚踏板驱动、UI、人工 `fail`、DAgger 和远程任务分发。
 - 最终图像编码、MCAP 压缩和磁盘保留阈值。
+- ROS 2 Source、固定 Topic、消息定义、真实频率监督和 MCAP Adapter。
 - SHA 或通用内容校验。
 
 ## 架构决策
@@ -39,6 +40,13 @@ SDK 调研只影响数据源适配器，不得阻塞 Episode Runtime 主线。
 - 相机和机械臂由独立 ROS 2 Source 发布数据；Runtime 只接收配置化 Topic 与健康事件。
 - Runtime 不解析图像、关节或 EEF 载荷，不承担插值、补帧或时间同步。
 - Hook 使用少量 `Protocol` 与数据类表达，不建设通用插件框架。
+
+### 分支与目录边界
+
+- `main` 负责 SDK、Docker、ROS 2 Source、固定 Topic、消息定义、频率监督和 MCAP Adapter。
+- Episode Runtime 开发分支只负责状态机、Hook、Store、metadata 和 CLI。
+- `main` 不修改 `src/arx5_collection/episode/`；Episode Runtime 分支不修改 SDK、Docker 或 ROS 2 Source。
+- Hook 合入后，`main` 在 Episode 包之外实现 `RecordingBackend`、`StreamMonitor` 的 ROS 2 Adapter，不实现或修改 Episode 生命周期。
 
 ### 状态语义
 
@@ -73,10 +81,10 @@ episodes/
 
 | 依赖 | 决策 | 边界与替换条件 |
 |---|---|---|
-| ARX5 与 RealSense 数据源 | Hook + 测试桩 | Runtime 读取 `StreamSpec` 和 ROS Topic；测试使用 Fake Publisher。最终 Source 就绪后只替换 Topic 配置与适配器 |
-| Topic 叶子名称与消息类型 | 等待，但不阻塞 | `/sensors/...`、`/embodiments/...` 根路径已冻结；叶子名称和类型由 Source 计划确认，Runtime 不硬编码 |
-| Stream 频率与掉线检测 | Hook + 测试桩 | 先实现 `StreamMonitor` 协议和 Fake Monitor；ROS 实现等待 Topic 类型与可用监控方式确认 |
-| MCAP 写入方式 | Hook + 立即技术验证 | 先实现 `RecordingBackend` 和 Fake Backend；在现有 Jazzy Container 中验证 `rosbag2_py`，再冻结真实 Backend |
+| ARX5 与 RealSense 数据源 | main 实现 | Runtime 只读取 `StreamSpec` 并通过 Hook 协作，不接触 Source 或 Vendor SDK |
+| Topic 叶子名称与消息类型 | main 冻结 | Runtime 不硬编码、不重命名，只消费 main 提供的配置 |
+| Stream 频率与掉线检测 | main 实现 Adapter | 本分支只维护 `StreamMonitor` 契约与 Fake；Runtime 轮询 Hook |
+| MCAP 写入方式 | main 实现 Adapter | 本分支只维护 `RecordingBackend` 契约与 Fake；Runtime 不 import `rosbag2_py` |
 | 键盘与脚踏板 | Hook + 实现键盘 | `RecordTrigger` 是稳定边界；v0.1 实现键盘，脚踏板在设备与驱动确定前完全等待，不创建伪驱动 |
 | 任务与 UI | Hook + CLI | CLI 构造 `EpisodeRequest`；未来 UI 调用同一入口，不为 UI 建临时页面或服务 |
 | 人工 `fail` | 等待 | 结果 Schema 保留 `fail`，v0.1 不创建临时按键；UI 计划确认后再接入 |
@@ -117,6 +125,15 @@ episodes/
 
 上述契约不包含 Vendor 对象。未知单位继续保留在 Source 消息语义中，不由 Runtime 猜测。
 
+### Metadata v1
+
+- `started_at`、`ended_at` 使用 RFC 3339 UTC；`duration_s` 必须由单调时钟计算。
+- 不建立全局 `frame_count`、统一 FPS 或统一帧轴。
+- 每个 Stream 以 `id`、`topic`、`required` 标识；统计字段仅包含 `expected_hz`、`message_count`、`observed_hz`、`max_gap_ms`。
+- `calibration.intrinsics` 与 `calibration.extrinsics` 必须存在，v0.1 固定写 `null`。
+- 不记录 `container_image` 或 `committed`；目录是否脱离 `.partial` 即提交事实。
+- 核心对象严格校验；只有设备 `configuration` 与顶层 `extensions` 允许开放字段。
+
 ## 目录设计
 
 ```text
@@ -129,7 +146,6 @@ src/arx5_collection/episode/
   cli.py
   adapters/
     keyboard.py
-    rosbag2_mcap.py
 
 schemas/
   episode-metadata-v1.json
@@ -140,7 +156,6 @@ tests/episode/
   test_store.py
   test_metadata.py
   test_keyboard.py
-  test_rosbag2_mcap.py
 ```
 
 `fakes.py` 只服务测试；不得进入生产 Adapter 目录。
@@ -159,20 +174,19 @@ tests/episode/
 - Workstream A：状态机、键盘触发和 CLI。
 - Workstream B：临时目录、metadata、原子提交和遗留目录报告。
 - Workstream C：Fake Backend、Fake Monitor、掉线与 Backend 故障注入。
-- Workstream D：Jazzy Container 内的 MCAP Backend 技术验证。
 
-四条 Workstream 只通过 `models.py` 与 `ports.py` 协作，避免同时修改同一实现文件。
+三个 Workstream 只通过 `models.py` 与 `ports.py` 协作，避免同时修改同一实现文件。
 
-### 3. 冻结 MCAP Backend
+### 3. 对接 main 数据面 Adapter
 
-优先验证现有 `rosbag2_py + rosbag2_storage_mcap`：
+main 负责验证 `rosbag2_py + rosbag2_storage_mcap` 与 ROS Stream Monitor：
 
 1. 录制显式 Topic 列表，不使用全量 Topic 捕获。
 2. 连续开始、停止十条 Episode，不重启进程。
 3. 验证干净关闭、异常停止和 MCAP 可读取性。
 4. 验证最终目录能收敛为 `episode.mcap + metadata.json`。
 
-如果 `rosbag2_py` 无法稳定满足两文件契约，停止真实 Backend 实现并重新对齐；不得自行引入直接 MCAP Writer 或改变 Episode 格式。
+如果 Adapter 无法满足契约，停止集成并重新对齐；Episode Runtime 分支不得自行实现 ROS 2 Adapter、直接 MCAP Writer 或改变 Episode 格式。
 
 ### 4. 无 SDK 集成
 
@@ -207,7 +221,7 @@ tests/episode/
 
 - 使用真实 `/sensors/...` 与 `/embodiments/...` Topic 完成 90～150 秒 Episode。
 - Runtime 无 Vendor SDK import，替换 Source 不修改状态机与 Store。
-- 实际帧数、平均频率和最大帧间隔写入 metadata。
+- 每个 Stream 的 `expected_hz`、`message_count`、`observed_hz` 和 `max_gap_ms` 写入 metadata。
 - 重复 Episode 无后台进程、文件句柄或临时目录泄漏。
 
 真机验收通过后，计划状态才可更新为 `verified`。
@@ -221,8 +235,8 @@ tests/episode/
 
 ## 开放决策
 
-- 真实 MCAP Backend：等待 `rosbag2_py` 技术验证。
-- ROS Stream Monitor 实现：等待 Topic 类型和 Jazzy 可用接口验证。
+- 真实 MCAP Backend：由 main 的 SDK/ROS 2 计划实现和验证。
+- ROS Stream Monitor：由 main 根据固定 Topic 和消息定义实现。
 - `min_free_bytes` 默认值：等待三路 720p 吞吐基准。
 - Topic 叶子名称与消息类型：等待 Source/SDK 计划冻结。
 
@@ -234,4 +248,6 @@ tests/episode/
 - 已冻结 `EpisodeState`、`EpisodeOutcome`、`StreamSpec`、`EpisodeRequest`、`StreamMetrics` 与 `EpisodeResult`；未引入 ROS2 或 Vendor SDK 依赖。
 - 2026-08-15：Episode Ports 已完成并通过全仓 13 个单测与独立安装链路验收。
 - 已冻结同步轮询式 `RecordTrigger`、`RecordingBackend` 与 `StreamMonitor`；toggle、必需流轮询和 aborted 干净关包语义已确认。
+- 2026-08-16：Metadata v1 Contract 已完成并通过 Draft 2020-12 Schema 检查、全仓 19 个单测与工作区外链路验收。
+- 已冻结单调时长、逐 Stream 统计、v0.1 标定空桩和严格扩展边界；生产 Runtime 未增加 Schema 验证依赖。
 - Episode Runtime 其余模块与无硬件/真机整体验收尚未实施，计划保持 `in-progress`。
