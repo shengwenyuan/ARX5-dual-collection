@@ -112,4 +112,5 @@ docker/patches/arx-x5-go-home-services.patch
 - 空闲 READY 收到 Ctrl+C 时先复位，再进入原有 Session 有序关闭。
 - 六关节在官方 home 目标 `0.03 rad` 内、速度在 `0.05 rad/s` 内连续稳定 `0.5 s` 后，恢复重力补偿；总超时 `45 s`。
 - 纯软件验收：`120 passed, 16 subtests passed`；Python 编译通过；补丁对官方 `main@c783287` dry-run 通过。
+- w3 独立临时目录完成 production 镜像构建：`arx5-dual-collection:reset-validation-7ec92f0`；ARX5 C++、collection ROS 和 Python 包均构建成功，非 privileged/无网络静态检查确认 CLI 与两个私有服务符号存在。
 - 尚未启动 Docker 真机全链路或发送任何位姿变化信号；下一步必须由用户现场监督。
