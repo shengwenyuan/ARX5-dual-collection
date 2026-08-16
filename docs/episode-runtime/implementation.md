@@ -258,4 +258,5 @@ main 负责验证 `rosbag2_py + rosbag2_storage_mcap` 与 ROS Stream Monitor：
 - 2026-08-16：同步最新 main 后完成全仓 51 个单测与 8 条安装后链路回归；低频 warning 与目录提交失败路径补充通过。
 - 2026-08-16：main 已完成真实 ROS Adapter。Jazzy 容器内连续 10 次录制均生成单一可读 MCAP，50 Hz 数据审计无 warning；停止 telemetry 后 2.107 秒内返回必需流失败，异常 MCAP 正常关闭。
 - Adapter 与冻结 Port 运行时一致，未修改 `src/arx5_collection/episode/`。
+- 2026-08-16：控制面与 ROS Adapter 本地合流完成；合并树全仓 82 个测试与 8 条安装后 Episode 链路全部通过。
 - 计划状态保持 `implemented`；`verified` 等待生产组合入口、Docker 整链与真机 90～150 秒验收。
