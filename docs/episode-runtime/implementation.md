@@ -254,4 +254,6 @@ main 负责验证 `rosbag2_py + rosbag2_storage_mcap` 与 ROS Stream Monitor：
 - 2026-08-16：Episode Store 已完成并通过全仓 31 个单测与独立安装文件生命周期验收；失败路径保留 partial，成功目录严格为两文件。
 - 2026-08-16：Episode Runtime 状态机已完成并通过全仓 36 个单测与独立安装连续十 Episode 链路验收；单调时长及 success/aborted/finalization 路径均覆盖。
 - 2026-08-16：Keyboard Trigger 已完成并通过全仓 40 个单测与独立安装 PTY 链路验收；终端 context 退出可恢复设置。
+- 2026-08-16：CLI Core 已完成并通过全仓 43 个单测与独立安装两 Episode 链路验收；真实 launcher 明确等待 main Adapter 工厂。
+- Episode Runtime 开发分支职责内的状态机、Hook、Store、metadata、Keyboard 与 CLI Core 已实现并逐模块验收。
 - Episode Runtime 其余模块与无硬件/真机整体验收尚未实施，计划保持 `in-progress`。
