@@ -1,108 +1,93 @@
-# Episode 后自动复位需求
+# Episode 后自动复位实施计划
 
-- Status: `draft-alignment`
+- Status: `in-progress`
 - Parent: `meta_plan.md`
-- Trigger: 正常 `SPACE` 结束并成功提交 Episode
-- Safety: 目标位姿、运动路径和 Vendor 控制接口确认前禁止真机下发
+- Branch: `feature/post-episode-reset`
+- Safety boundary: 未经用户确认，不启动真机全链路测试或发送位姿变化信号
 
 ## 目标
 
-每条正常 Episode 完成后，系统等待 5 秒，再以低速将双臂移动到经过验证的标准初始位姿，并确认夹爪完全闭合。复位完成且状态稳定后才重新进入 `READY`，保证下一条 Episode 从一致状态开始。
+每条 Episode 结束后，无论由 `SPACE`、`A`、必需流异常还是 `Ctrl+C` 触发，都等待 Episode 完成提交，再等待 5 秒，然后让左右臂同时、低速复用 ARX5 官方“开启重力补偿时的归位”动作。归位完成后：
 
-该需求首次突破当前“采集程序只读取机械臂状态”的冻结边界。实现前必须同步更新 `meta_plan.md`，并建立独立、可取消、可验收的运动控制边界。
+- 正常 Session 继续运行时进入 `READY`。
+- `Ctrl+C` 请求退出时，归位完成后再执行原有 Session 关闭与资源回收。
 
-## 建议状态流
+复位期间 Recorder 已停止，不把复位运动写入刚结束的 Episode。
 
-```text
-RECORDING
-  --SPACE--> FINALIZING
-  --> SUCCESS_COMMITTED
-  --> RESET_PENDING (5 s countdown)
-  --> RESETTING
-  --> RESET_VERIFYING
-  --> READY
-
-RESET_PENDING / RESETTING
-  --cancel or safety failure--> RESET_BLOCKED
-
-RECORDING
-  --A / source failure / Ctrl+C--> ABORTED or SESSION EXIT
-  --> no automatic reset
-```
-
-- 复位属于生产 Session 的 Episode 后处理，不属于 Recorder，也不写入刚结束的 MCAP。
-- Episode Core 仍只负责录制与原子提交；Production 层在收到 committed `success` 后执行 `PostEpisodeReset`。
-- 复位未成功时不得显示 `READY`，不得开始下一条 Episode。
-- `RESET_BLOCKED` 只能由明确的人工处理恢复，不能静默跳过。
-
-## 安全边界
-
-- 目标必须是已由用户在真机验证的双臂关节位姿和夹爪闭合值；不得由代码猜测、从 URDF 默认值推导或自动创建新位姿。
-- 优先使用关节空间目标与经过验证的安全路径，不直接猜测 EEF 直线路径。
-- 速度、加速度、超时和关节容差必须写入站点 Reset 配置，并受 Vendor 官方上限约束。
-- 启动运动前必须确认双臂状态新鲜、CAN 无错误、Controller 健康、当前无 Recorder、没有下一条 Episode。
-- 5 秒等待期必须显示明确倒计时和取消方式；自动运动不能无提示发生。
-- 运动期间必须能调用 Vendor 支持的 stop/hold；仅杀死进程不能作为正常急停方案。
-- 任何通信中断、状态停更、超时、超差或取消都立即停止复位并进入 `RESET_BLOCKED`。
-- 软件取消不能替代真机急停；首次开发和验收必须由用户在设备旁操作。
-
-## 标准位姿配置
-
-建议将标准位姿作为 w3 站点配置的独立版本化对象：
+## 冻结状态流
 
 ```text
-reset_pose:
-  version
-  left_joint_positions[6]
-  left_gripper_closed
-  right_joint_positions[6]
-  right_gripper_closed
-  optional_verified_waypoints
-  velocity_scale
-  acceleration_scale
-  timeout_s
-  joint_tolerance
-  stationary_velocity_tolerance
-  stable_duration_s
+SPACE / A / source failure
+  -> FINALIZING
+  -> Episode committed
+  -> RESET_WAITING (5 s)
+  -> RESETTING (left + right concurrently, 10% speed/acceleration)
+  -> READY
+
+Ctrl+C
+  -> 当前 Episode 若存在则先完成 aborted 提交
+  -> RESET_WAITING (5 s)
+  -> RESETTING
+  -> ordered Session shutdown
 ```
 
-建议提供只读状态采样命令，由用户手动摆好双臂并闭合夹爪后捕获候选数值；候选值必须人工检查并明确确认后才能成为生产配置。采样命令本身不发送运动指令。
+- `A` 与正常结束后的复位路径一致，仅 Episode outcome 不同。
+- 空闲 `READY` 时收到 `Ctrl+C` 也执行 5 秒等待和归位，再关闭 Session。
+- 归位失败时不进入 `READY`；返回明确错误并关闭 Session。
+- 双臂同时运动，不增加逐臂顺序、避障、物体释放或额外 waypoint。
+- 前提简化为：标准位姿安全、工作区无遮挡、夹爪无夹持。
+
+## 官方位姿与控制边界
+
+- 不测量、不配置自定义关节目标。
+- 必须查明并复用 ARX5 官方 `remote_master + G_COMPENSATION` 初始化时已经执行的同一归位动作与位姿。
+- 不通过 `/arx_joy`、Shell 命令拼接或猜测关节值实现。
+- 速度与加速度均以官方允许的比例接口限制为 10%；若官方归位接口不支持速度限制，停止实现并重新对齐，不自行伪造等价动作。
+- 使用官方完成反馈或状态条件确认左右臂均归位完成；不能仅按固定时长假定成功。
 
 ## 模块边界
 
 ```text
 src/arx5_collection/reset/
-  models.py       # ResetPose、ResetState、ResetResult
-  ports.py        # ArmResetController、SafetyGate
-  coordinator.py  # countdown、顺序、验证、取消
-  config.py       # 站点 Reset 配置严格解析
+  models.py       # ResetState、ResetResult
+  ports.py        # DualArmResetController
+  coordinator.py  # 5 秒等待、并发归位、完成/错误
 
 ros2_ws/src/arx5_reset_adapter/
-  ...             # 仅封装确认后的 ARX5 官方控制接口
+  ...             # 封装确认后的 ARX5 官方归位接口
 ```
 
-- CLI 只展示倒计时、状态和错误，不包含运动步骤。
-- Coordinator 不直接 import Vendor SDK，通过最小 Controller Port 调用。
-- 不使用 Shell 拼接运动命令，不通过 `/arx_joy` 注入控制。
-- 复位逻辑与数据清洗完全无关。
+- Episode Runtime 继续只负责录制和提交，不直接 import Vendor SDK。
+- Production Session 在每次 Episode 结果之后调用 Reset Coordinator。
+- CLI 只显示 `RESET_WAITING / RESETTING / RESET_COMPLETE`，不承载运动步骤。
+- 复位逻辑与离线数据清洗无关。
 
 ## 实施步骤
 
-1. 查明 ARX5 官方 ROS 2/SDK 中低速关节目标、夹爪闭合、stop/hold、完成反馈和重力补偿模式切换的真实接口。
-2. 用户手动摆放并捕获标准双臂关节位姿与夹爪闭合值，冻结 w3 Reset 配置。
-3. 使用 Fake Controller 完成状态流、5 秒倒计时、取消、超时、错误和稳定判定测试。
-4. 接入单臂、无负载、低速真机测试；由用户现场确认启动与停止。
-5. 验证安全路径后测试双臂复位；确认复位过程不写入上一 Episode。
-6. 连续多条 Episode 验收 `success -> reset -> READY`，失败时必须停在 `RESET_BLOCKED`。
-7. 验收完成后再更新 `meta_plan.md` 的只读边界和正式状态图。
+1. 只读核查 ARX5 官方源码，确认初始化归位、速度/加速度限制、双臂并发调用和完成反馈。
+2. 冻结最小 `DualArmResetController` Port 与 Session 调用点。
+3. 使用 Fake Controller 实现并测试 SPACE、A、source failure、录制中 Ctrl+C、空闲 Ctrl+C。
+4. 覆盖 5 秒从 Episode 提交后开始、双臂并发、复位失败不 READY、退出时先复位后 shutdown。
+5. 构建 Docker/ROS Package 并完成不触发运动的静态检查。
+6. 停在真机链路测试前，等待用户明确确认和现场监督。
+7. 真机验收后回写本计划与 `meta_plan.md` 的控制边界。
 
-## 待对齐决策
+## 首版验收
 
-1. 5 秒从按下结束 `SPACE` 开始，还是从 MCAP/metadata 成功提交后开始。
-2. 自动复位是否只用于 committed `success`；`A`、设备异常和录制中 `Ctrl+C` 是否永不自动复位。
-3. 标准位姿是否由用户手动摆好后通过只读命令捕获六关节与夹爪值。
-4. Episode 结束时夹爪可能持有物体：复位前由人清空，还是需要“释放物体”动作；不得直接闭合并携带未知物体运动。
-5. 双臂同时移动还是按固定顺序逐臂移动；是否需要已验证中间 waypoint。
-6. “慢速”的速度/加速度比例、最大复位时间、到位容差与稳定时长。
-7. 5 秒等待和运动中的取消键，以及取消后如何人工恢复。
+- 任何 Episode 结果提交后只触发一次复位。
+- 5 秒计时不与 FINALIZING 重叠。
+- 左右臂归位调用并发开始，均使用 10% 速度/加速度。
+- 归位期间不会启动下一条 Recorder。
+- `Ctrl+C` 不会绕过复位，归位后原有有序关闭仍完整执行。
+- 无真机确认时，自动化测试不得调用真实 Controller。
+
+## 已对齐决策
+
+- 5 秒从 Episode 成功或异常提交完成后开始。
+- `SPACE`、`A`、设备异常和 `Ctrl+C` 均自动复位。
+- 复用官方重力补偿初始化归位，不采集或维护自定义目标位姿。
+- 双臂同时运动；速度与加速度比例为 10%。
+- 假设工作区安全、无遮挡且无夹持，不扩展复杂防碰撞逻辑。
+- `Ctrl+C` 先等待并归位，再关闭整个 Session。
+- 全链路真机测试必须等待用户再次明确确认。
 
