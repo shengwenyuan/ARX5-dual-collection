@@ -15,6 +15,7 @@ from analyze_episode_streams import (  # noqa: E402
     CAMERA_STREAMS,
     TelemetryStats,
     TimingStats,
+    rgbd_pairing,
     serialized_header_stamp_ns,
 )
 
@@ -67,3 +68,21 @@ def test_telemetry_total_count_is_monotonic() -> None:
     assert summary["min_observed_hz"] == 1000.0
     with pytest.raises(RuntimeError, match="decreased"):
         stats.add("/embodiments/left_arm/state", 10, 1, 1.0, 1.0, 0.0, 0)
+
+
+def test_rgbd_pairing_reports_boundary_orphans_without_fabrication() -> None:
+    result = rgbd_pairing(
+        {
+            "camera_left_color": {1, 2},
+            "camera_left_aligned_depth": {1, 2, 3},
+            "camera_right_color": {4},
+            "camera_right_aligned_depth": {4},
+        }
+    )
+    assert result["left"] == {
+        "paired_count": 2,
+        "color_only_count": 0,
+        "depth_only_count": 1,
+    }
+    assert result["right"]["paired_count"] == 1
+    assert result["overview"]["paired_count"] == 0

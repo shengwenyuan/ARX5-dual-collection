@@ -170,6 +170,21 @@ def serialized_header_stamp_ns(payload: bytes) -> int:
     return sec * 1_000_000_000 + nanosec
 
 
+def rgbd_pairing(
+    header_stamps: dict[str, set[int]],
+) -> dict[str, dict[str, int]]:
+    result = {}
+    for role in ("left", "right", "overview"):
+        color = header_stamps.get(f"camera_{role}_color", set())
+        depth = header_stamps.get(f"camera_{role}_aligned_depth", set())
+        result[role] = {
+            "paired_count": len(color & depth),
+            "color_only_count": len(color - depth),
+            "depth_only_count": len(depth - color),
+        }
+    return result
+
+
 def analyze(
     bag_path: Path,
     streams: tuple[StreamDefinition, ...],
@@ -211,6 +226,7 @@ def analyze(
         raise RuntimeError(f"missing required telemetry topic: {STATUS_TOPIC}")
 
     timing = {stream.id: TimingStats() for stream in streams}
+    header_stamps = {stream.id: set() for stream in streams}
     telemetry: dict[str, TelemetryStats] = {}
     status_message_type = (
         get_message(STATUS_TYPE) if STATUS_TOPIC in topic_types else None
@@ -219,7 +235,9 @@ def analyze(
         topic, payload, _ = reader.read_next()
         stream = by_topic.get(topic)
         if stream is not None:
-            timing[stream.id].add(serialized_header_stamp_ns(payload))
+            stamp_ns = serialized_header_stamp_ns(payload)
+            timing[stream.id].add(stamp_ns)
+            header_stamps[stream.id].add(stamp_ns)
         elif topic == STATUS_TOPIC and status_message_type is not None:
             message = deserialize_message(payload, status_message_type)
             stats = telemetry.setdefault(
@@ -254,6 +272,11 @@ def analyze(
             }
             for stream in streams
         },
+        "rgbd_pairing": (
+            {}
+            if telemetry_only
+            else rgbd_pairing(header_stamps)
+        ),
         "telemetry": {
             stream_id: stats.summary()
             for stream_id, stats in sorted(telemetry.items())
