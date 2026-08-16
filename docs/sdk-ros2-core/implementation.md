@@ -1,6 +1,6 @@
 # SDK 与 ROS 2 数据面实施计划
 
-- Status: `in-progress`（ArmState 方向已冻结，等待图像编码测试与 ROS 2 Source）
+- Status: `in-progress`（相机数据链路已验证，等待物理映射、逻辑 ArmState Adapter 与完整 Episode）
 - Parent: `meta_plan.md`
 - Branch: `main`
 - Target: `w3-arx5`、ROS 2 Jazzy、单一 Privileged Docker Image
@@ -36,6 +36,8 @@
 - 双臂采用官方 `v2_collect`、`remote_master` 和重力补偿；采集侧不发布 `/arx_joy` 或运动指令。
 - RealSense 使用稳定 `librealsense v2.54.2`；三路 1280×720 RGB-D @ 30 Hz。
 - v0.1 相机 Source 使用 `rclpy + pyrealsense2` 且每颗相机独立进程；C++ 迁移按 `docs/optimization/d405-cpp-source.md` 后续实施。
+- 彩色图固定为设备 YUYV，ROS 编码为 `yuv422_yuy2`；Depth 为 `16UC1`。RGB8 不增加原始信息，只在消费侧按需转换。
+- 图像 Topic 使用 Reliable QoS；Fast DDS 使用 64 MiB SHM Segment、2048 消息队列，容器 `/dev/shm` 固定为 1 GiB。
 - Depth 与同机彩色帧做空间对齐；禁止时间插值、补帧、重复帧和伪造同步帧。
 - D405 不支持多机硬件同步。三台设备使用独立 Pipeline 与 Global Time 时间戳，不做跨设备 frameset 重组。
 - 所有 Topic 使用逻辑名称，不暴露 CAN、USB 和序列号。
@@ -103,10 +105,9 @@
 
 ## 开放决策
 
-1. 彩色消息使用设备原生 `yuyv` 还是 SDK 转换后的 `rgb8`；需结合 MCAP 吞吐和训练消费成本决定。
-2. Vendor 字段的物理单位与 EEF 坐标系尚未由官方资料明确；v0.1 保留原始值和字段语义，不猜测换算。
-3. `rosbag2_py` 能否直接满足单文件 `episode.mcap` 契约；不满足时先对齐，不擅自切换直接 MCAP Writer。
-4. 外层分支冻结 `RecordingBackend`、`StreamMonitor` 后，ROS 2 Adapter 的最终包路径与合并顺序。
+1. Vendor 字段的物理单位与 EEF 坐标系尚未由官方资料明确；v0.1 保留原始值和字段语义，不猜测换算。
+2. `rosbag2_py` 能否直接满足单文件 `episode.mcap` 契约；不满足时先对齐，不擅自切换直接 MCAP Writer。
+3. 外层分支冻结 `RecordingBackend`、`StreamMonitor` 后，ROS 2 Adapter 的最终包路径与合并顺序。
 
 ## 验收结果
 
@@ -118,4 +119,13 @@
 - 测试完成后容器与 CAN 接口全部回收，无残留。
 - 结论：采用最小自定义 `ArmState`，保留原始 Header 与数值并拆分夹爪；不纳入示教器输入，不主动降采样。
 
-相机 Source、编码 A/B、逻辑 ArmState Adapter 和整条 Episode 仍未验收，计划保持 `in-progress`。
+2026-08-16 完成 Python 三相机 ROS 2 数据链路验收：
+
+- 三颗 D405 使用独立 `rclpy + pyrealsense2` 进程，发布六个固定 `sensor_msgs/msg/Image` Topic；单机 Depth 与 Color 计数一致。
+- Best Effort 与默认 512 KiB Fast DDS SHM 会产生大量传输丢失；改用 Reliable QoS、64 MiB SHM Segment、2048 消息队列和 1 GiB `/dev/shm` 后丢失归零。
+- YUYV 与 RGB8 的 12 秒 A/B 均达到 30 Hz；YUYV MCAP 为 3.6 GiB，RGB8 为 4.5 GiB，因此冻结 YUYV。
+- YUYV 正式录制 151.66 秒，MCAP 为 46.9 GiB、共 27298 条；三路分别录得 4549/4549/4551 组对齐 RGB-D，平均 29.992～29.999 Hz。
+- overview Header 最大间隔 33.344 ms；left/right 各出现一次约 66.67 ms 的真实间隔。未插值、补帧或伪造同步，rosbag2 未报告传输丢失。
+- 测试序列号按临时顺序映射 Topic；真实 left/right/overview 物理映射尚未确认，不得写入正式 Station 配置。
+
+相机数据链路验收通过；物理映射、逻辑 ArmState Adapter 和完整 Episode 仍未完成，计划保持 `in-progress`。
