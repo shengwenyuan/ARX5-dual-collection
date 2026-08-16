@@ -52,7 +52,8 @@
 ## 语言与进程边界
 
 - Episode 状态机、Hook、Store、metadata、CLI 和键盘输入使用 Python。
-- 三路 D405 数据链路使用 `rclcpp + librealsense C++`；每颗相机独立进程，负责取帧、单机 Depth 对齐、图像发布和必要的编码转换。
+- v0.1 三路 D405 Source 使用 `rclpy + pyrealsense2`，每颗相机独立进程，负责取帧、单机 Depth 对齐、图像发布和必要的编码转换。
+- `rclcpp + librealsense C++` 相机数据链路作为后续性能优化，不阻塞 v0.1；迁移必须保持 Topic、消息和站点配置契约不变。
 - 双臂状态 Adapter 与频率监督先使用 Python；只有真机实测的频率、抖动或资源占用不达标时才迁移到 C++。
 - Python 只管理 `rosbag2/MCAP` 的启停和结果交接，录制与存储数据面沿用 ROS 2 的 C++ 实现。
 

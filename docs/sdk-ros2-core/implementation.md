@@ -35,6 +35,7 @@
 - ARX5 只使用 `ARXroboticsX/ARX_X5:main`，排除 `ARX5_beta`。
 - 双臂采用官方 `v2_collect`、`remote_master` 和重力补偿；采集侧不发布 `/arx_joy` 或运动指令。
 - RealSense 使用稳定 `librealsense v2.54.2`；三路 1280×720 RGB-D @ 30 Hz。
+- v0.1 相机 Source 使用 `rclpy + pyrealsense2` 且每颗相机独立进程；C++ 迁移按 `docs/optimization/d405-cpp-source.md` 后续实施。
 - Depth 与同机彩色帧做空间对齐；禁止时间插值、补帧、重复帧和伪造同步帧。
 - D405 不支持多机硬件同步。三台设备使用独立 Pipeline 与 Global Time 时间戳，不做跨设备 frameset 重组。
 - 所有 Topic 使用逻辑名称，不暴露 CAN、USB 和序列号。
@@ -69,7 +70,7 @@
 
 ## 实施顺序
 
-1. 实现单相机单进程 Source 骨架；Launch 启动三进程，按序列号映射逻辑位置并执行单机 Depth 对齐。
+1. 实现 Python 单相机单进程 Source 骨架；Launch 启动三进程，按序列号映射逻辑位置并执行单机 Depth 对齐。
 2. 对 YUYV 与 RGB8 各执行 30 秒 MCAP 测试，比较真实频率、CPU、写入吞吐和文件大小后冻结编码与压缩参数。
 3. 建立最终 ROS 2 interfaces 与站点配置，加入消息契约测试。
 4. 实现双臂 Adapter；只订阅官方状态并重新发布稳定逻辑消息。

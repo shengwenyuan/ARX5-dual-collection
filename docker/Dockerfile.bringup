@@ -61,6 +61,12 @@ RUN apt-get update \
     && cd /opt/arx_ws \
     && colcon build --merge-install --cmake-args -DCMAKE_BUILD_TYPE=Release
 
+COPY ros2_ws/src/arx5_camera_source /opt/collection_ws/src/arx5_camera_source
+
+RUN source "/opt/ros/${ROS_DISTRO}/setup.bash" \
+    && cd /opt/collection_ws \
+    && colcon build --merge-install
+
 FROM ros:${ROS_DISTRO}-ros-base-noble
 
 ARG ROS_DISTRO
@@ -86,6 +92,7 @@ RUN apt-get update \
 
 COPY --from=sdk-builder /usr/local/ /usr/local/
 COPY --from=sdk-builder /opt/arx_ws/install/ /opt/arx_ws/install/
+COPY --from=sdk-builder /opt/collection_ws/install/ /opt/collection_ws/install/
 COPY scripts/ /opt/arx5-dual-collection/scripts/
 
 ENV LD_LIBRARY_PATH="/usr/local/lib:${LD_LIBRARY_PATH}" \
