@@ -17,6 +17,7 @@ if [[ ${actual_realsense} != "${expected_realsense}" ]]; then
 fi
 
 python3 -c 'import pyrealsense2'
+python3 -c 'from arx5_collection.ros2_adapters import RosStreamMonitor, RosbagRecordingBackend'
 
 for package_name in \
   arx_x5_controller \

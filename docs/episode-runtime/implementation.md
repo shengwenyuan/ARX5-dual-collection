@@ -74,9 +74,9 @@ episodes/
 | 依赖 | 决策 | 边界与替换条件 |
 |---|---|---|
 | ARX5 与 RealSense 数据源 | Hook + 测试桩 | Runtime 读取 `StreamSpec` 和 ROS Topic；测试使用 Fake Publisher。最终 Source 就绪后只替换 Topic 配置与适配器 |
-| Topic 叶子名称与消息类型 | 等待，但不阻塞 | `/sensors/...`、`/embodiments/...` 根路径已冻结；叶子名称和类型由 Source 计划确认，Runtime 不硬编码 |
-| Stream 频率与掉线检测 | Hook + 测试桩 | 先实现 `StreamMonitor` 协议和 Fake Monitor；ROS 实现等待 Topic 类型与可用监控方式确认 |
-| MCAP 写入方式 | Hook + 立即技术验证 | 先实现 `RecordingBackend` 和 Fake Backend；在现有 Jazzy Container 中验证 `rosbag2_py`，再冻结真实 Backend |
+| Topic 与消息类型 | 已冻结 | 六路相机 `sensor_msgs/Image` 与双路逻辑 `ArmState` 由 Station 配置传入，Runtime 不硬编码物理设备身份 |
+| Stream 频率与掉线检测 | 已实现 ROS Adapter | `RosStreamMonitor` 只订阅 `/monitoring/stream_status`；必需流无遥测、心跳停止或数据静默返回失败，低频只警告 |
+| MCAP 写入方式 | 已冻结 | `RosbagRecordingBackend` 使用 Jazzy `rosbag2_py` 与 MCAP，显式 Topic、订阅就绪屏障、严格单文件收敛 |
 | 键盘与脚踏板 | Hook + 实现键盘 | `RecordTrigger` 是稳定边界；v0.1 实现键盘，脚踏板在设备与驱动确定前完全等待，不创建伪驱动 |
 | 任务与 UI | Hook + CLI | CLI 构造 `EpisodeRequest`；未来 UI 调用同一入口，不为 UI 建临时页面或服务 |
 | 人工 `fail` | 等待 | 结果 Schema 保留 `fail`，v0.1 不创建临时按键；UI 计划确认后再接入 |
@@ -221,10 +221,9 @@ tests/episode/
 
 ## 开放决策
 
-- 真实 MCAP Backend：等待 `rosbag2_py` 技术验证。
-- ROS Stream Monitor 实现：等待 Topic 类型和 Jazzy 可用接口验证。
 - `min_free_bytes` 默认值：等待三路 720p 吞吐基准。
-- Topic 叶子名称与消息类型：等待 Source/SDK 计划冻结。
+- 三颗 D405 的物理角色映射：逻辑 Topic 已冻结，正式 Station 配置等待现场确认 left/right/overview。
+- main 与外层 Runtime 的合并接线：Port 已一致，合并时只提供 Adapter factory 与配置，不修改控制面核心。
 
 这些开放项已由 Hook 或等待边界隔离，不阻塞 Episode Runtime 核心开发。
 
@@ -234,4 +233,6 @@ tests/episode/
 - 已冻结 `EpisodeState`、`EpisodeOutcome`、`StreamSpec`、`EpisodeRequest`、`StreamMetrics` 与 `EpisodeResult`；未引入 ROS2 或 Vendor SDK 依赖。
 - 2026-08-15：Episode Ports 已完成并通过全仓 13 个单测与独立安装链路验收。
 - 已冻结同步轮询式 `RecordTrigger`、`RecordingBackend` 与 `StreamMonitor`；toggle、必需流轮询和 aborted 干净关包语义已确认。
+- 2026-08-16：main 已完成真实 ROS Adapter。Jazzy 容器内连续 10 次录制均生成单一可读 MCAP，50 Hz 数据审计无 warning；停止 telemetry 后 2.107 秒内返回必需流失败，异常 MCAP 正常关闭。
+- 全仓 50 个单元测试通过；Adapter 与冻结 Port 运行时一致，未修改 `src/arx5_collection/episode/`。
 - Episode Runtime 其余模块与无硬件/真机整体验收尚未实施，计划保持 `in-progress`。

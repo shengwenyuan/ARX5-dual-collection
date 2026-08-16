@@ -1,6 +1,6 @@
 # SDK 与 ROS 2 数据面实施计划
 
-- Status: `in-progress`（数据 Source、逻辑 ArmState 与轻量频率遥测已验证，等待物理映射、ROS Runtime Adapter 与完整 Episode）
+- Status: `in-progress`（数据 Source、逻辑 ArmState、频率遥测与 ROS Runtime Adapter 已验证，等待物理映射和完整 Episode）
 - Parent: `meta_plan.md`
 - Branch: `main`
 - Target: `w3-arx5`、ROS 2 Jazzy、单一 Privileged Docker Image
@@ -77,8 +77,8 @@
 3. 建立最终 ROS 2 interfaces 与站点配置，加入消息契约测试。
 4. 实现双臂 Adapter；只订阅官方状态并重新发布稳定逻辑消息。
 5. 实现统一频率监督，报告帧数、平均频率、最大帧间隔和完全停流。
-6. 在容器内验证 `rosbag2_py + rosbag2_storage_mcap` 对显式 Topic 的启动、停止、重复录制和干净关闭。
-7. 外层 Port 合并后实现 `RecordingBackend` 与 `StreamMonitor` Adapter，不改变状态机或 Store。
+6. 在容器内验证 `rosbag2_py + rosbag2_storage_mcap` 对显式 Topic 的启动、停止、重复录制和干净关闭。已完成。
+7. 外层 Port 合并后实现 `RecordingBackend` 与 `StreamMonitor` Adapter，不改变状态机或 Store。已完成，等待两树合并接线。
 8. 合并两条开发线，生成单一部署镜像并执行 90～150 秒真机 Episode 验收。
 
 ## 主线保留内容
@@ -106,8 +106,7 @@
 ## 开放决策
 
 1. Vendor 字段的物理单位与 EEF 坐标系尚未由官方资料明确；v0.1 保留原始值和字段语义，不猜测换算。
-2. `rosbag2_py` 能否直接满足单文件 `episode.mcap` 契约；不满足时先对齐，不擅自切换直接 MCAP Writer。
-3. 外层分支冻结 `RecordingBackend`、`StreamMonitor` 后，ROS 2 Adapter 的最终包路径与合并顺序。
+2. 外层分支与 main 的合并顺序及真实 CLI factory 接线；两侧 Port 已一致，合并不得改写状态机或 Store。
 
 ## 验收结果
 
@@ -145,4 +144,13 @@
 - 统一 MCAP 审计工具直接读取八个数据 Topic 的 Header，输出与 Metadata `StreamMetrics` 对齐的 count、duration、observed_hz、max_gap 和 warnings；频率偏低只写 warning。
 - Docker Hub 暂时无路由时，使用已验收镜像作为本地基底构建 ROS overlay 完成部署；正式 Dockerfile 与 SDK 版本未改变，网络恢复后仍执行标准全量构建。
 
-数据 Source、逻辑 ArmState 与轻量频率遥测验收通过；完全停流决策、MCAP RecordingBackend、物理相机映射和完整 Episode 仍未完成，计划保持 `in-progress`。
+2026-08-16 完成 ROS Runtime Adapter 验收：
+
+- 新增 `RosbagRecordingBackend`，只录制 `StreamSpec.topic`；按 Jazzy 官方生命周期执行 `start_spin → record → stop → stop_spin`，并等待全部录制订阅建立后才允许 Episode 开始。
+- rosbag2 自有隐藏目录严格收敛为单一 `episode.mcap`；异常结构保留现场，不覆盖目标，不生成 SHA。
+- 新增只订阅 `/monitoring/stream_status` 的 `RosStreamMonitor`；必需流无遥测、心跳停止或数据静默会返回明确失败，低频只写 warning。
+- w3 容器内连续启停 10 次，每包录得 30～31 条 50 Hz 测试消息，最终审计为 49.916～50.052 Hz，全部无 warning；11 个测试目录均仅含一个 MCAP，无 recorder 残留。
+- 停止 telemetry 但保持数据继续发布时，2.107 秒后得到 `required stream smoke_arm_state telemetry stopped`；异常链路仍干净关闭为 171 条可读 MCAP。
+- 全仓 50 个单元测试通过；正式 Dockerfile 已打包 Python Runtime Adapter，并由 SDK 自检验证 import。
+
+数据 Source、逻辑 ArmState、轻量频率遥测及 ROS Runtime Adapter 验收通过；物理相机映射、两树合并接线和完整 Episode 仍未完成，计划保持 `in-progress`。

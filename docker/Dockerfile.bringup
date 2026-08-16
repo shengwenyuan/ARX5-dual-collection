@@ -94,11 +94,12 @@ RUN apt-get update \
 COPY --from=sdk-builder /usr/local/ /usr/local/
 COPY --from=sdk-builder /opt/arx_ws/install/ /opt/arx_ws/install/
 COPY --from=sdk-builder /opt/collection_ws/install/ /opt/collection_ws/install/
+COPY src/ /opt/arx5-runtime/src/
 COPY config/fastdds-shm.xml /opt/arx5-dual-collection/config/fastdds-shm.xml
 COPY scripts/ /opt/arx5-dual-collection/scripts/
 
 ENV LD_LIBRARY_PATH="/usr/local/lib:${LD_LIBRARY_PATH}" \
-    PYTHONPATH="/usr/local/OFF:${PYTHONPATH}" \
+    PYTHONPATH="/opt/arx5-runtime/src:/usr/local/OFF:${PYTHONPATH}" \
     RMW_IMPLEMENTATION="rmw_fastrtps_cpp" \
     FASTDDS_DEFAULT_PROFILES_FILE="/opt/arx5-dual-collection/config/fastdds-shm.xml"
 
