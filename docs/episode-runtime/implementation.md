@@ -253,4 +253,5 @@ main 负责验证 `rosbag2_py + rosbag2_storage_mcap` 与 ROS Stream Monitor：
 - 2026-08-16：Metadata Writer 已完成并通过全仓 25 个单测与独立安装链路验收，生成结果通过 Metadata v1 Schema。
 - 2026-08-16：Episode Store 已完成并通过全仓 31 个单测与独立安装文件生命周期验收；失败路径保留 partial，成功目录严格为两文件。
 - 2026-08-16：Episode Runtime 状态机已完成并通过全仓 36 个单测与独立安装连续十 Episode 链路验收；单调时长及 success/aborted/finalization 路径均覆盖。
+- 2026-08-16：Keyboard Trigger 已完成并通过全仓 40 个单测与独立安装 PTY 链路验收；终端 context 退出可恢复设置。
 - Episode Runtime 其余模块与无硬件/真机整体验收尚未实施，计划保持 `in-progress`。
