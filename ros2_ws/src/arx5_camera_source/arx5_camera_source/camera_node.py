@@ -5,7 +5,12 @@ from typing import Any
 import pyrealsense2 as rs
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import qos_profile_sensor_data
+from rclpy.qos import (
+    QoSDurabilityPolicy,
+    QoSHistoryPolicy,
+    QoSProfile,
+    QoSReliabilityPolicy,
+)
 from sensor_msgs.msg import Image
 
 from arx5_camera_source.image_contract import (
@@ -30,13 +35,26 @@ class D405Source(Node):
         self.color = color_contract(
             str(self.declare_parameter("color_format", "yuyv").value)
         )
+        self.reliability = str(
+            self.declare_parameter("reliability", "reliable").value
+        )
         self._validate_parameters()
 
+        qos = QoSProfile(
+            history=QoSHistoryPolicy.KEEP_LAST,
+            depth=2,
+            reliability=(
+                QoSReliabilityPolicy.RELIABLE
+                if self.reliability == "reliable"
+                else QoSReliabilityPolicy.BEST_EFFORT
+            ),
+            durability=QoSDurabilityPolicy.VOLATILE,
+        )
         self.color_publisher = self.create_publisher(
-            Image, "color/image_raw", qos_profile_sensor_data
+            Image, "color/image_raw", qos
         )
         self.depth_publisher = self.create_publisher(
-            Image, "aligned_depth/image_raw", qos_profile_sensor_data
+            Image, "aligned_depth/image_raw", qos
         )
         self.pipeline = rs.pipeline()
         self.align = rs.align(rs.stream.color)
@@ -51,6 +69,8 @@ class D405Source(Node):
             raise ValueError("v0.1 camera stream is fixed at 1280x720@30")
         if self.frame_timeout_ms <= 0:
             raise ValueError("frame_timeout_ms must be positive")
+        if self.reliability not in {"best_effort", "reliable"}:
+            raise ValueError("reliability must be best_effort or reliable")
 
     def _verify_global_time(self, device: Any) -> None:
         supported = 0
@@ -88,7 +108,8 @@ class D405Source(Node):
         self._verify_global_time(profile.get_device())
         self.get_logger().info(
             f"started {self.camera_name} D405 {self.serial} "
-            f"at {self.width}x{self.height}@{self.fps} {self.color.name}"
+            f"at {self.width}x{self.height}@{self.fps} {self.color.name} "
+            f"{self.reliability}"
         )
 
     def stop(self) -> None:
@@ -179,11 +200,14 @@ def main(args: list[str] | None = None) -> None:
     except KeyboardInterrupt:
         pass
     except BaseException as error:
-        exit_code = 1
-        if node is not None:
-            node.get_logger().fatal(f"camera source failed: {type(error).__name__}: {error}")
-        else:
-            print(f"camera source failed: {type(error).__name__}: {error}")
+        if rclpy.ok():
+            exit_code = 1
+            if node is not None:
+                node.get_logger().fatal(
+                    f"camera source failed: {type(error).__name__}: {error}"
+                )
+            else:
+                print(f"camera source failed: {type(error).__name__}: {error}")
     finally:
         if node is not None:
             try:

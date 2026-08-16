@@ -10,6 +10,7 @@ services:
     init: true
     privileged: true
     network_mode: host
+    shm_size: "1gb"
     stop_grace_period: 5s
     environment:
       ARX5_USBFS_MEMORY_MB: "256"

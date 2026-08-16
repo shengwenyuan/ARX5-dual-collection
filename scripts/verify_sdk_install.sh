@@ -24,6 +24,18 @@ done
 
 ros2 pkg executables arx5_camera_source | grep -q 'd405_source'
 
+fastdds_profile=${FASTDDS_DEFAULT_PROFILES_FILE:-}
+[[ -r ${fastdds_profile} ]] || {
+  echo "error: missing Fast DDS profile: ${fastdds_profile:-unset}" >&2
+  exit 1
+}
+
+shm_size_bytes=$(df --block-size=1 --output=size /dev/shm | tail -n 1)
+if (( shm_size_bytes < 1073741824 )); then
+  echo "error: /dev/shm must be at least 1 GiB, found ${shm_size_bytes} bytes" >&2
+  exit 1
+fi
+
 controller=/opt/arx_ws/install/lib/arx_x5_controller/X5Controller
 [[ -x ${controller} ]] || {
   echo "error: missing ARX5 controller: ${controller}" >&2
