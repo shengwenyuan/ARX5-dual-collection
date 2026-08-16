@@ -69,4 +69,6 @@ ProductionSession.create_runtime
 - 第一轮结束后归位方案已由真机验证可运动，但确认 `GO_HOME` 不适合作为退出安全状态，因此废止。
 - 当前最小修改将相同 Controller 移至 Recorder 启动前，移除 Episode 结束和 Ctrl+C 的归位回调，并移除原 5 秒等待。
 - 第一轮纯软件验收为 `120 passed, 16 subtests passed`；w3 production 镜像 `arx5-dual-collection:post-reset-337c6ca` 构建成功。
-- 本轮修改完成纯软件测试后，重新构建独立 feature 镜像并由用户监督真机复验。
+- 本轮纯软件验收为 `117 passed, 16 subtests passed`；顺序测试确认归位与重力补偿完成早于 Recorder start。
+- w3 独立 feature 镜像 `arx5-dual-collection:post-reset-df012c1` 构建成功；无设备静态检查确认生产入口不存在结束后归位回调。
+- 下一步由用户监督真机复验 SPACE 前置归位、重力补偿保持和 Ctrl+C 单纯退出。
