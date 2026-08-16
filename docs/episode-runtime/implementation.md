@@ -250,4 +250,5 @@ main 负责验证 `rosbag2_py + rosbag2_storage_mcap` 与 ROS Stream Monitor：
 - 已冻结同步轮询式 `RecordTrigger`、`RecordingBackend` 与 `StreamMonitor`；toggle、必需流轮询和 aborted 干净关包语义已确认。
 - 2026-08-16：Metadata v1 Contract 已完成并通过 Draft 2020-12 Schema 检查、全仓 19 个单测与工作区外链路验收。
 - 已冻结单调时长、逐 Stream 统计、v0.1 标定空桩和严格扩展边界；生产 Runtime 未增加 Schema 验证依赖。
+- 2026-08-16：Metadata Writer 已完成并通过全仓 25 个单测与独立安装链路验收，生成结果通过 Metadata v1 Schema。
 - Episode Runtime 其余模块与无硬件/真机整体验收尚未实施，计划保持 `in-progress`。
