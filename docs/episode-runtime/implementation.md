@@ -251,4 +251,5 @@ main 负责验证 `rosbag2_py + rosbag2_storage_mcap` 与 ROS Stream Monitor：
 - 2026-08-16：Metadata v1 Contract 已完成并通过 Draft 2020-12 Schema 检查、全仓 19 个单测与工作区外链路验收。
 - 已冻结单调时长、逐 Stream 统计、v0.1 标定空桩和严格扩展边界；生产 Runtime 未增加 Schema 验证依赖。
 - 2026-08-16：Metadata Writer 已完成并通过全仓 25 个单测与独立安装链路验收，生成结果通过 Metadata v1 Schema。
+- 2026-08-16：Episode Store 已完成并通过全仓 31 个单测与独立安装文件生命周期验收；失败路径保留 partial，成功目录严格为两文件。
 - Episode Runtime 其余模块与无硬件/真机整体验收尚未实施，计划保持 `in-progress`。
