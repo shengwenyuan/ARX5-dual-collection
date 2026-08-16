@@ -160,7 +160,9 @@ src/arx5_collection/production/
 
 - 2026-08-16：完成 Station/八路 Task 严格模型、统一 CheckResult、usbfs/USB2CAN/CAN 生命周期和独立进程组；全量无硬件测试通过。
 - 2026-08-16：完成统一 devices 核对、常驻 telemetry 就绪门、逐颗 D405 放行、真实 Runtime 装配、SPACE/SPACE 与 Ctrl+C 语义，以及 Production Docker target/Compose；全量测试为 107 passed、16 subtests passed。
-- 待验收：本机无 Docker，Compose 解析、production image 构建、PID 1、w3 五设备核对和八路 Episode 均转入真机部署步骤，不提前判定通过。
+- 2026-08-16：production image、PID 1、独立进程组、五设备、八路 READY、连续两条短 Episode 和完整回收已在 w3 通过；详见 `docs/milestones/production-session.md`。
+- 2026-08-16：重复 Ctrl+C 清理问题已修复并以连续双 INT、`EXIT=0` 真机复验；全量无硬件测试更新为 109 passed、16 subtests passed。
+- 待验收：90～150 秒正式 Episode 与必需 Source 停止后的 aborted 链路；完成前计划保持 `in-progress`。
 
 ## 已对齐决策
 
