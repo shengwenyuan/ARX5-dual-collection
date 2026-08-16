@@ -7,6 +7,7 @@ expected_realsense=${EXPECTED_REALSENSE_VERSION:-2.54.2}
 set +u
 source "/opt/ros/${ros_distro}/setup.bash"
 source /opt/arx_ws/install/setup.bash
+source /opt/collection_ws/install/setup.bash
 set -u
 
 actual_realsense=$(pkg-config --modversion realsense2)
@@ -17,9 +18,11 @@ fi
 
 python3 -c 'import pyrealsense2'
 
-for package_name in arx_x5_controller arx5_arm_msg arm_control rosbag2_storage_mcap; do
+for package_name in arx_x5_controller arx5_arm_msg arm_control arx5_camera_source rosbag2_storage_mcap; do
   ros2 pkg prefix "${package_name}" >/dev/null
 done
+
+ros2 pkg executables arx5_camera_source | grep -q 'd405_source'
 
 controller=/opt/arx_ws/install/lib/arx_x5_controller/X5Controller
 [[ -x ${controller} ]] || {
