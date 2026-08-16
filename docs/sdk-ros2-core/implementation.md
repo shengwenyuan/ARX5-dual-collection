@@ -153,4 +153,6 @@
 - 停止 telemetry 但保持数据继续发布时，2.107 秒后得到 `required stream smoke_arm_state telemetry stopped`；异常链路仍干净关闭为 171 条可读 MCAP。
 - 全仓 50 个单元测试通过；正式 Dockerfile 已打包 Python Runtime Adapter，并由 SDK 自检验证 import。
 
-数据 Source、逻辑 ArmState、轻量频率遥测及 ROS Runtime Adapter 验收通过；物理相机映射、两树合并接线和完整 Episode 仍未完成，计划保持 `in-progress`。
+数据 Source、逻辑 ArmState、轻量频率遥测、ROS Runtime Adapter 与物理相机映射验收通过；关闭路径、两树合并接线和完整 Episode 仍未完成，计划保持 `in-progress`。
+
+2026-08-16 八路 ROS 2 数据面已完成 43.925 秒联合 MCAP 验收，结论见 `docs/milestones/eight-stream-mcap.md`。该结果标记短时联合录制里程碑，不替代 150 秒稳定性与完整 Episode 验收。
