@@ -5,46 +5,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from arx5_collection.production.config import load_station_config
+
 from .models import EpisodeRequest, EpisodeResult
 
 
 def load_station(path: Path) -> dict[str, Any]:
-    config = json.loads(path.read_text())
-    devices = []
-
-    for arm in config["arms"]:
-        devices.append(
-            {
-                "id": f"{arm['name']}_arm",
-                "kind": "arm",
-                "serial_number": arm.get("usb_serial"),
-                "configuration": {
-                    "can_interface": arm["can_interface"],
-                    "sdk_type": config["sdk_type"],
-                },
-            }
-        )
-
-    for name, camera in config["cameras"].items():
-        camera_config = camera or {}
-        devices.append(
-            {
-                "id": f"camera_{name}",
-                "kind": "camera",
-                "serial_number": camera_config.get("serial_number"),
-                "configuration": {
-                    key: value
-                    for key, value in camera_config.items()
-                    if key != "serial_number"
-                },
-            }
-        )
-
-    return {
-        "id": config.get("station_id"),
-        "config_schema_version": config["schema_version"],
-        "devices": devices,
-    }
+    return load_station_config(path).metadata()
 
 
 def build_metadata(

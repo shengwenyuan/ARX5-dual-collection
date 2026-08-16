@@ -1,0 +1,54 @@
+{
+  "task_id": "eight-stream-collection",
+  "task_description": "Record synchronized dual-arm state and three aligned RGB-D camera streams",
+  "streams": [
+    {
+      "id": "left_arm_state",
+      "topic": "/embodiments/left_arm/state",
+      "required": true,
+      "expected_hz": 1000.0
+    },
+    {
+      "id": "right_arm_state",
+      "topic": "/embodiments/right_arm/state",
+      "required": true,
+      "expected_hz": 1000.0
+    },
+    {
+      "id": "camera_left_color",
+      "topic": "/sensors/camera_left/color/image_raw",
+      "required": true,
+      "expected_hz": 30.0
+    },
+    {
+      "id": "camera_left_aligned_depth",
+      "topic": "/sensors/camera_left/aligned_depth/image_raw",
+      "required": true,
+      "expected_hz": 30.0
+    },
+    {
+      "id": "camera_right_color",
+      "topic": "/sensors/camera_right/color/image_raw",
+      "required": true,
+      "expected_hz": 30.0
+    },
+    {
+      "id": "camera_right_aligned_depth",
+      "topic": "/sensors/camera_right/aligned_depth/image_raw",
+      "required": true,
+      "expected_hz": 30.0
+    },
+    {
+      "id": "camera_overview_color",
+      "topic": "/sensors/camera_overview/color/image_raw",
+      "required": true,
+      "expected_hz": 30.0
+    },
+    {
+      "id": "camera_overview_aligned_depth",
+      "topic": "/sensors/camera_overview/aligned_depth/image_raw",
+      "required": true,
+      "expected_hz": 30.0
+    }
+  ]
+}

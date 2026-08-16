@@ -61,14 +61,14 @@ def result() -> EpisodeResult:
 class MetadataWriterTest(unittest.TestCase):
     def test_load_station_maps_current_devices(self) -> None:
         station = load_station(STATION_PATH)
-        self.assertIsNone(station["id"])
+        self.assertEqual(station["id"], "w3-arx5")
         self.assertEqual(station["config_schema_version"], 1)
         self.assertEqual(len(station["devices"]), 5)
         self.assertEqual(
             station["devices"][0]["configuration"],
             {"can_interface": "can1", "sdk_type": 2},
         )
-        self.assertIsNone(station["devices"][2]["serial_number"])
+        self.assertEqual(station["devices"][2]["serial_number"], "261122270960")
 
     def test_build_metadata_maps_time_and_streams(self) -> None:
         metadata = build_metadata(request(), result(), load_station(STATION_PATH), "0.1.0")
