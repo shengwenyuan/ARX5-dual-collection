@@ -1,6 +1,6 @@
 # Episode 后自动复位实施计划
 
-- Status: `in-progress`
+- Status: `blocked-alignment`
 - Parent: `meta_plan.md`
 - Branch: `feature/post-episode-reset`
 - Safety boundary: 未经用户确认，不启动真机全链路测试或发送位姿变化信号
@@ -91,3 +91,12 @@ ros2_ws/src/arx5_reset_adapter/
 - `Ctrl+C` 先等待并归位，再关闭整个 Session。
 - 全链路真机测试必须等待用户再次明确确认。
 
+## 官方源码核查
+
+核查基线：`ARXroboticsX/ARX_X5 main@c783287`。
+
+- `remote_master` 启动时直接调用 `G_COMPENSATION`；显式归位是另一个 `GO_HOME` 状态。
+- 官方 `v2_collect.yaml` 给左右臂配置同一组 6 关节 `go_home_position`，不包含夹爪目标。
+- 当前 ROS 2 节点只通过全局 `/arx_joy` 触发 `GO_HOME`，没有独立服务。
+- 公开接口没有归位速度、加速度或完成反馈参数；状态 Topic 仅能用于外部判断关节位置和速度是否收敛。
+- 因此当前无法同时严格满足“不使用 `/arx_joy`、官方接口限速 10%、官方完成反馈、夹爪完全闭合”。在重新对齐控制边界前，不实现真实 Controller Adapter。
