@@ -106,7 +106,7 @@ def run_episode_loop(
             previous_sink(state)
         if state is EpisodeState.RECORDING:
             print(
-                "RECORDING: press SPACE to end with success; Ctrl+C aborts the Session",
+                "RECORDING: SPACE=success, A=abort and continue, Ctrl+C=abort and exit",
                 file=error_output,
                 flush=True,
             )
@@ -136,7 +136,10 @@ def run_episode_loop(
                 flush=True,
             )
             completed += 1
-            if result.outcome is EpisodeOutcome.ABORTED:
+            if (
+                result.outcome is EpisodeOutcome.ABORTED
+                and result.errors != ("operator requested abort",)
+            ):
                 return 2
     except KeyboardInterrupt:
         return 0

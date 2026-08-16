@@ -70,6 +70,19 @@ class EpisodeStoreTest(unittest.TestCase):
             {"episode.mcap", "metadata.json"},
         )
 
+    def test_aborted_commit_uses_aborted_subdirectory(self) -> None:
+        pending = self.store.prepare("episode-aborted")
+        pending.mcap_path.write_bytes(b"mcap")
+        pending.metadata_path.write_text("{}")
+
+        stored = self.store.commit(pending, aborted=True)
+
+        self.assertEqual(
+            stored.directory,
+            self.root / "aborted" / "episode-aborted",
+        )
+        self.assertTrue(stored.mcap_path.is_file())
+
     def test_list_partials_only_reports(self) -> None:
         first = self.store.prepare("first")
         second = self.store.prepare("second")

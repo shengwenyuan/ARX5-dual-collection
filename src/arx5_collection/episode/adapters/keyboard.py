@@ -7,6 +7,8 @@ import tty
 from types import TracebackType
 from typing import TextIO
 
+from ..ports import TriggerEvent
+
 
 class KeyboardTrigger:
     def __init__(self, stream: TextIO | None = None, key: str = " ") -> None:
@@ -38,8 +40,15 @@ class KeyboardTrigger:
             )
             self._original_settings = None
 
-    def wait(self, timeout_s: float) -> bool:
+    def wait(self, timeout_s: float) -> TriggerEvent | None:
         if self._original_settings is None:
             raise RuntimeError("keyboard trigger must be used as a context manager")
         readable, _, _ = select.select([self.stream], [], [], timeout_s)
-        return bool(readable) and self.stream.read(1) == self.key
+        if not readable:
+            return None
+        key = self.stream.read(1)
+        if key == self.key:
+            return TriggerEvent.ACTIVATE
+        if key in {"a", "A"}:
+            return TriggerEvent.ABORT
+        return None

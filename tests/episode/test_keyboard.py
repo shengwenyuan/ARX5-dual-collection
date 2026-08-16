@@ -5,7 +5,7 @@ import termios
 import unittest
 
 from arx5_collection.episode.adapters.keyboard import KeyboardTrigger
-from arx5_collection.episode.ports import RecordTrigger
+from arx5_collection.episode.ports import RecordTrigger, TriggerEvent
 
 
 class KeyboardTriggerTest(unittest.TestCase):
@@ -22,11 +22,18 @@ class KeyboardTriggerTest(unittest.TestCase):
 
     def test_timeout_wrong_key_and_trigger_key(self) -> None:
         with KeyboardTrigger(self.stream) as trigger:
-            self.assertFalse(trigger.wait(0.01))
+            self.assertIsNone(trigger.wait(0.01))
             os.write(self.master_fd, b"x")
-            self.assertFalse(trigger.wait(0.1))
+            self.assertIsNone(trigger.wait(0.1))
             os.write(self.master_fd, b" ")
-            self.assertTrue(trigger.wait(0.1))
+            self.assertIs(trigger.wait(0.1), TriggerEvent.ACTIVATE)
+
+    def test_a_is_abort_case_insensitively(self) -> None:
+        with KeyboardTrigger(self.stream) as trigger:
+            os.write(self.master_fd, b"a")
+            self.assertIs(trigger.wait(0.1), TriggerEvent.ABORT)
+            os.write(self.master_fd, b"A")
+            self.assertIs(trigger.wait(0.1), TriggerEvent.ABORT)
 
     def test_context_restores_terminal(self) -> None:
         original = termios.tcgetattr(self.stream.fileno())

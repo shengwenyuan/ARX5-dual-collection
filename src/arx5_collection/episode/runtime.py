@@ -13,7 +13,7 @@ from .models import (
     EpisodeState,
     StreamMetrics,
 )
-from .ports import RecordTrigger, RecordingBackend, StreamMonitor
+from .ports import RecordTrigger, RecordingBackend, StreamMonitor, TriggerEvent
 from .store import EpisodeStore
 
 
@@ -99,7 +99,10 @@ class EpisodeRuntime:
                 self.software_version,
             )
             write_metadata(pending.metadata_path, metadata)
-            stored = self.store.commit(pending)
+            stored = self.store.commit(
+                pending,
+                aborted=outcome is EpisodeOutcome.ABORTED,
+            )
             return replace(
                 pending_result,
                 committed=True,
@@ -110,8 +113,8 @@ class EpisodeRuntime:
             self.state = EpisodeState.READY
 
     def _wait_for_start(self) -> None:
-        while not self.trigger.wait(self.poll_interval_s):
-            pass
+        while self.trigger.wait(self.poll_interval_s) is not TriggerEvent.ACTIVATE:
+            continue
 
     def _wait_for_end(self) -> tuple[EpisodeOutcome, tuple[str, ...]]:
         try:
@@ -119,7 +122,10 @@ class EpisodeRuntime:
                 failure = self.monitor.required_failure()
                 if failure is not None:
                     return EpisodeOutcome.ABORTED, (failure,)
-                if self.trigger.wait(self.poll_interval_s):
+                event = self.trigger.wait(self.poll_interval_s)
+                if event is TriggerEvent.ABORT:
+                    return EpisodeOutcome.ABORTED, ("operator requested abort",)
+                if event is TriggerEvent.ACTIVATE:
                     return EpisodeOutcome.SUCCESS, ()
         except KeyboardInterrupt:
             return EpisodeOutcome.ABORTED, ("recording interrupted",)

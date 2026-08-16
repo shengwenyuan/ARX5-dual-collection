@@ -13,6 +13,7 @@ from arx5_collection.episode.store import EpisodeStore
 
 from .fakes import FakeBackend, FakeMonitor, FakeTrigger
 from arx5_collection.episode.models import StreamMetrics
+from arx5_collection.episode.ports import TriggerEvent
 
 
 ROOT = Path(__file__).parents[2]
@@ -107,6 +108,23 @@ class EpisodeCliTest(unittest.TestCase):
         )
         self.assertEqual(exit_code, 2)
         self.assertEqual(len(list(self.output_root.iterdir())), 1)
+
+    def test_a_aborts_current_episode_and_continues(self) -> None:
+        trigger = ContextTrigger(
+            [True, TriggerEvent.ABORT, True, True]
+        )
+        output = io.StringIO()
+        exit_code = run_cli(
+            runtime_factory=self.runtime_factory(),
+            argv=self.argv(2),
+            trigger_factory=lambda key: trigger,
+            stdout=output,
+            stderr=io.StringIO(),
+        )
+        rows = [json.loads(line) for line in output.getvalue().splitlines()]
+        self.assertEqual(exit_code, 0)
+        self.assertEqual([row["outcome"] for row in rows], ["aborted", "success"])
+        self.assertIn("/aborted/", rows[0]["mcap_path"])
 
     def runtime_factory(self):
         ids = iter(["episode-001", "episode-002"])

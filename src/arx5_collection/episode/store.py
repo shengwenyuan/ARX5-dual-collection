@@ -52,7 +52,11 @@ class EpisodeStore:
             metadata_path=partial_dir / "metadata.json",
         )
 
-    def commit(self, pending: PendingEpisode) -> StoredEpisode:
+    def commit(
+        self,
+        pending: PendingEpisode,
+        aborted: bool = False,
+    ) -> StoredEpisode:
         if not pending.partial_dir.is_dir():
             raise FileNotFoundError(pending.partial_dir)
 
@@ -62,12 +66,20 @@ class EpisodeStore:
         if not pending.mcap_path.is_file() or not pending.metadata_path.is_file():
             raise RuntimeError("episode artifacts must be regular files")
 
-        pending.partial_dir.rename(pending.final_dir)
+        final_dir = (
+            self.root / "aborted" / pending.episode_id
+            if aborted
+            else pending.final_dir
+        )
+        if final_dir.exists():
+            raise FileExistsError(f"episode already exists: {pending.episode_id}")
+        final_dir.parent.mkdir(parents=True, exist_ok=True)
+        pending.partial_dir.rename(final_dir)
         return StoredEpisode(
             episode_id=pending.episode_id,
-            directory=pending.final_dir,
-            mcap_path=pending.final_dir / "episode.mcap",
-            metadata_path=pending.final_dir / "metadata.json",
+            directory=final_dir,
+            mcap_path=final_dir / "episode.mcap",
+            metadata_path=final_dir / "metadata.json",
         )
 
     def list_partials(self) -> tuple[Path, ...]:

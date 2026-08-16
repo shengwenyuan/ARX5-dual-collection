@@ -17,6 +17,7 @@ from arx5_collection.episode.models import (
     StreamSpec,
 )
 from arx5_collection.episode.runtime import EpisodeRuntime
+from arx5_collection.episode.ports import TriggerEvent
 from arx5_collection.episode.store import EpisodeStore
 
 from .fakes import FakeBackend, FakeMonitor, FakeTrigger
@@ -97,6 +98,16 @@ class EpisodeRuntimeTest(unittest.TestCase):
         result = runtime.run_once(self.request())
         self.assertEqual(result.outcome, EpisodeOutcome.ABORTED)
         self.assertEqual(result.errors, ("recording interrupted",))
+        self.assertEqual(result.mcap_path.parent.parent.name, "aborted")
+
+    def test_operator_abort_commits_under_aborted(self) -> None:
+        runtime = self.runtime(
+            trigger=FakeTrigger([True, TriggerEvent.ABORT]),
+        )
+        result = runtime.run_once(self.request())
+        self.assertEqual(result.outcome, EpisodeOutcome.ABORTED)
+        self.assertEqual(result.errors, ("operator requested abort",))
+        self.assertEqual(result.mcap_path.parent.parent, self.output_root / "aborted")
 
     def test_stream_warning_does_not_change_success(self) -> None:
         metrics = (StreamMetrics(STREAM.id, 4_500, 90.0, 50.0, 40.0, ("low rate",)),)

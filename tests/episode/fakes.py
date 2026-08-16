@@ -3,16 +3,24 @@ from __future__ import annotations
 from pathlib import Path
 
 from arx5_collection.episode.models import StreamMetrics, StreamSpec
+from arx5_collection.episode.ports import TriggerEvent
 
 
 class FakeTrigger:
-    def __init__(self, events: list[bool | BaseException]) -> None:
+    def __init__(
+        self,
+        events: list[bool | TriggerEvent | BaseException],
+    ) -> None:
         self.events = iter(events)
 
-    def wait(self, timeout_s: float) -> bool:
+    def wait(self, timeout_s: float) -> TriggerEvent | None:
         event = next(self.events, False)
         if isinstance(event, BaseException):
             raise event
+        if event is True:
+            return TriggerEvent.ACTIVATE
+        if event is False:
+            return None
         return event
 
 

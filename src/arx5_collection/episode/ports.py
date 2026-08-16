@@ -1,15 +1,21 @@
 from __future__ import annotations
 
 from pathlib import Path
+from enum import Enum
 from typing import Protocol, runtime_checkable
 
 from .models import StreamMetrics, StreamSpec
 
 
+class TriggerEvent(str, Enum):
+    ACTIVATE = "activate"
+    ABORT = "abort"
+
+
 @runtime_checkable
 class RecordTrigger(Protocol):
-    def wait(self, timeout_s: float) -> bool:
-        """Return whether one trigger press arrived before the timeout."""
+    def wait(self, timeout_s: float) -> TriggerEvent | None:
+        """Return the trigger event received before the timeout, if any."""
         ...
 
 
