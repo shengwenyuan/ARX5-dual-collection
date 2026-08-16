@@ -1,6 +1,6 @@
 # Episode Runtime 实施计划
 
-- Status: `in-progress`
+- Status: `implemented`
 - Parent: `meta_plan.md`
 - Runtime: Python 3.10+、ROS 2 Jazzy、Ubuntu 24.04 Container
 - Target: 先完成无 Vendor SDK 闭环，再接入 `w3-arx5` 真机 Topic
@@ -256,4 +256,5 @@ main 负责验证 `rosbag2_py + rosbag2_storage_mcap` 与 ROS Stream Monitor：
 - 2026-08-16：Keyboard Trigger 已完成并通过全仓 40 个单测与独立安装 PTY 链路验收；终端 context 退出可恢复设置。
 - 2026-08-16：CLI Core 已完成并通过全仓 43 个单测与独立安装两 Episode 链路验收；真实 launcher 明确等待 main Adapter 工厂。
 - Episode Runtime 开发分支职责内的状态机、Hook、Store、metadata、Keyboard 与 CLI Core 已实现并逐模块验收。
-- Episode Runtime 其余模块与无硬件/真机整体验收尚未实施，计划保持 `in-progress`。
+- 2026-08-16：同步最新 main 后完成全仓 51 个单测与 8 条安装后链路回归；低频 warning 与目录提交失败路径补充通过。
+- 计划状态更新为 `implemented`；`verified` 等待 main 提供真实 ROS2 Adapter 后完成 CLI launcher、Docker 与真机整体验收。

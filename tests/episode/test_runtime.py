@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 from jsonschema import Draft202012Validator, FormatChecker
 
@@ -80,6 +81,17 @@ class EpisodeRuntimeTest(unittest.TestCase):
         self.assertEqual(result.outcome, EpisodeOutcome.ABORTED)
         self.assertEqual(result.errors, ("recording interrupted",))
 
+    def test_stream_warning_does_not_change_success(self) -> None:
+        metrics = (StreamMetrics(STREAM.id, 4_500, 90.0, 50.0, 40.0, ("low rate",)),)
+        runtime = self.runtime(
+            trigger=FakeTrigger([True, True]),
+            monitor=FakeMonitor(metrics),
+        )
+        result = runtime.run_once(self.request())
+        metadata = json.loads(result.metadata_path.read_text())
+        self.assertEqual(result.outcome, EpisodeOutcome.SUCCESS)
+        self.assertEqual(metadata["streams"][0]["warnings"], ["low rate"])
+
     def test_finalization_failure_preserves_partial_and_resets_state(self) -> None:
         runtime = self.runtime(
             trigger=FakeTrigger([True, True]),
@@ -89,6 +101,21 @@ class EpisodeRuntimeTest(unittest.TestCase):
             runtime.run_once(self.request())
         self.assertEqual(runtime.state, EpisodeState.READY)
         self.assertEqual(len(EpisodeStore(self.output_root).list_partials()), 1)
+
+    def test_commit_failure_preserves_complete_partial(self) -> None:
+        store = EpisodeStore(self.output_root)
+        runtime = self.runtime(trigger=FakeTrigger([True, True]), store=store)
+        with patch.object(store, "commit", side_effect=OSError("rename failed")):
+            with self.assertRaisesRegex(OSError, "rename failed"):
+                runtime.run_once(self.request())
+
+        partials = store.list_partials()
+        self.assertEqual(runtime.state, EpisodeState.READY)
+        self.assertEqual(len(partials), 1)
+        self.assertEqual(
+            {path.name for path in partials[0].iterdir()},
+            {"episode.mcap", "metadata.json"},
+        )
 
     def test_ten_episodes_run_without_restarting_runtime(self) -> None:
         ids = iter(f"episode-{index:02d}" for index in range(10))
@@ -115,6 +142,7 @@ class EpisodeRuntimeTest(unittest.TestCase):
     def runtime(
         self,
         trigger: FakeTrigger,
+        store: EpisodeStore | None = None,
         backend: FakeBackend | None = None,
         monitor: FakeMonitor | None = None,
         episode_id_factory=None,
@@ -122,7 +150,7 @@ class EpisodeRuntimeTest(unittest.TestCase):
         monotonic_clock=None,
     ) -> EpisodeRuntime:
         return EpisodeRuntime(
-            store=EpisodeStore(self.output_root),
+            store=store or EpisodeStore(self.output_root),
             trigger=trigger,
             backend=backend or FakeBackend(),
             monitor=monitor or FakeMonitor(METRICS),
