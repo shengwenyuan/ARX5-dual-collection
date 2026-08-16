@@ -1,6 +1,6 @@
 # SDK 与 ROS 2 数据面实施计划
 
-- Status: `in-progress`（相机数据链路已验证，等待物理映射、逻辑 ArmState Adapter 与完整 Episode）
+- Status: `in-progress`（相机与逻辑 ArmState 数据链路已验证，等待物理映射、统一频率监督、录制 Adapter 与完整 Episode）
 - Parent: `meta_plan.md`
 - Branch: `main`
 - Target: `w3-arx5`、ROS 2 Jazzy、单一 Privileged Docker Image
@@ -128,4 +128,12 @@
 - overview Header 最大间隔 33.344 ms；left/right 各出现一次约 66.67 ms 的真实间隔。未插值、补帧或伪造同步，rosbag2 未报告传输丢失。
 - 测试序列号按临时顺序映射 Topic；真实 left/right/overview 物理映射尚未确认，不得写入正式 Station 配置。
 
-相机数据链路验收通过；物理映射、逻辑 ArmState Adapter 和完整 Episode 仍未完成，计划保持 `in-progress`。
+2026-08-16 完成逻辑 ArmState Adapter 回放验收：
+
+- 新增 `arx5_collection_interfaces/msg/ArmState` 与只读 Python Adapter；输入固定为官方双臂 `RobotStatus`，输出固定为 `/embodiments/left_arm/state` 与 `/embodiments/right_arm/state`。
+- Adapter 只保留 Header、拆分六关节与夹爪并原样复制 EEF、位置、速度和原始电流；不换算单位、不降采样、不引用控制接口。
+- 使用既有 66.16 秒官方 MCAP 以真实速率回放，逻辑 MCAP 左 66166 条、右 66165 条，共 132331 条；Header 频率均约 1000 Hz。
+- 逐条直接比较确认 Header 与全部字段一致；不使用 SHA。Adapter 与 recorder 均干净退出，无残留进程。
+- 最终验收报告位于 Git 忽略的 `reports/w3/2026-08-16/20260816-arm-state-adapter-replay-r5.analysis.json`。
+
+相机与逻辑 ArmState 数据链路验收通过；物理相机映射、统一频率监督、录制 Adapter 和完整 Episode 仍未完成，计划保持 `in-progress`。

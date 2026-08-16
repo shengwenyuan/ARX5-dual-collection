@@ -61,9 +61,10 @@ RUN apt-get update \
     && cd /opt/arx_ws \
     && colcon build --merge-install --cmake-args -DCMAKE_BUILD_TYPE=Release
 
-COPY ros2_ws/src/arx5_camera_source /opt/collection_ws/src/arx5_camera_source
+COPY ros2_ws/src/ /opt/collection_ws/src/
 
 RUN source "/opt/ros/${ROS_DISTRO}/setup.bash" \
+    && source /opt/arx_ws/install/setup.bash \
     && cd /opt/collection_ws \
     && colcon build --merge-install
 

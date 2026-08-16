@@ -18,11 +18,20 @@ fi
 
 python3 -c 'import pyrealsense2'
 
-for package_name in arx_x5_controller arx5_arm_msg arm_control arx5_camera_source rosbag2_storage_mcap; do
+for package_name in \
+  arx_x5_controller \
+  arx5_arm_msg \
+  arm_control \
+  arx5_camera_source \
+  arx5_collection_interfaces \
+  arx5_arm_adapter \
+  rosbag2_storage_mcap; do
   ros2 pkg prefix "${package_name}" >/dev/null
 done
 
 ros2 pkg executables arx5_camera_source | grep -q 'd405_source'
+ros2 pkg executables arx5_arm_adapter | grep -q 'arm_state_adapter'
+ros2 interface show arx5_collection_interfaces/msg/ArmState | grep -q 'gripper_current'
 
 fastdds_profile=${FASTDDS_DEFAULT_PROFILES_FILE:-}
 [[ -r ${fastdds_profile} ]] || {
