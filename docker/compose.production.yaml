@@ -1,0 +1,33 @@
+name: arx5-dual-production
+
+services:
+  collector:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.bringup
+      target: production
+    image: arx5-dual-collection:production
+    container_name: arx5-collect-w3
+    privileged: true
+    network_mode: host
+    shm_size: "1gb"
+    stdin_open: true
+    tty: true
+    stop_grace_period: 45s
+    environment:
+      ARX5_USBFS_MEMORY_MB: "256"
+    volumes:
+      - /run/udev:/run/udev:ro
+      - ..:/workspace:ro
+      - ../reports:/reports
+    command:
+      - arx5-collect
+      - run
+      - --station-config
+      - /workspace/config/station.w3.json
+      - --task-config
+      - /workspace/config/task.eight-stream.json
+      - --output-root
+      - ${ARX5_OUTPUT_ROOT:-/reports/w3/episodes}
+      - --session-log-root
+      - /reports/w3/session-logs

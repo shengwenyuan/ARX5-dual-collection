@@ -68,7 +68,7 @@ RUN source "/opt/ros/${ROS_DISTRO}/setup.bash" \
     && cd /opt/collection_ws \
     && colcon build --merge-install
 
-FROM ros:${ROS_DISTRO}-ros-base-noble
+FROM ros:${ROS_DISTRO}-ros-base-noble AS runtime-base
 
 ARG ROS_DISTRO
 ARG ARX_X5_REF=main
@@ -84,6 +84,7 @@ RUN apt-get update \
         iproute2 \
         libusb-1.0-0 \
         python3 \
+        python3-pip \
         ros-${ROS_DISTRO}-rosbag2 \
         ros-${ROS_DISTRO}-rosbag2-storage-mcap \
         udev \
@@ -95,14 +96,29 @@ COPY --from=sdk-builder /usr/local/ /usr/local/
 COPY --from=sdk-builder /opt/arx_ws/install/ /opt/arx_ws/install/
 COPY --from=sdk-builder /opt/collection_ws/install/ /opt/collection_ws/install/
 COPY src/ /opt/arx5-runtime/src/
+COPY pyproject.toml /opt/arx5-runtime/pyproject.toml
 COPY config/fastdds-shm.xml /opt/arx5-dual-collection/config/fastdds-shm.xml
 COPY scripts/ /opt/arx5-dual-collection/scripts/
 
-ENV LD_LIBRARY_PATH="/usr/local/lib:${LD_LIBRARY_PATH}" \
-    PYTHONPATH="/opt/arx5-runtime/src:/usr/local/OFF:${PYTHONPATH}" \
+RUN python3 -m pip install \
+        --break-system-packages \
+        --no-build-isolation \
+        --no-deps \
+        /opt/arx5-runtime
+
+ENV AMENT_PREFIX_PATH="/opt/collection_ws/install:/opt/arx_ws/install:${AMENT_PREFIX_PATH}" \
+    CMAKE_PREFIX_PATH="/opt/collection_ws/install:/opt/arx_ws/install:${CMAKE_PREFIX_PATH}" \
+    LD_LIBRARY_PATH="/usr/local/lib:/opt/collection_ws/install/lib:/opt/arx_ws/install/lib:${LD_LIBRARY_PATH}" \
+    PATH="/opt/collection_ws/install/bin:/opt/arx_ws/install/bin:${PATH}" \
+    PYTHONPATH="/opt/collection_ws/install/lib/python3.12/site-packages:/opt/arx_ws/install/lib/python3.12/site-packages:/opt/arx5-runtime/src:/usr/local/OFF:${PYTHONPATH}" \
     RMW_IMPLEMENTATION="rmw_fastrtps_cpp" \
     FASTDDS_DEFAULT_PROFILES_FILE="/opt/arx5-dual-collection/config/fastdds-shm.xml"
 
 WORKDIR /workspace
 
+FROM runtime-base AS bringup
 ENTRYPOINT ["/opt/arx5-dual-collection/scripts/can_daemon.sh"]
+
+FROM runtime-base AS production
+ENTRYPOINT ["/ros_entrypoint.sh"]
+CMD ["arx5-collect", "--help"]

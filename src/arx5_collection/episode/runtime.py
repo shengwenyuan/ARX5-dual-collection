@@ -28,6 +28,8 @@ class EpisodeRuntime:
         episode_id_factory: Callable[[], str] | None = None,
         wall_clock: Callable[[], datetime] | None = None,
         monotonic_clock: Callable[[], float] | None = None,
+        pre_episode_check: Callable[[], None] | None = None,
+        state_sink: Callable[[EpisodeState], None] | None = None,
         poll_interval_s: float = 0.1,
     ) -> None:
         self.store = store
@@ -43,6 +45,8 @@ class EpisodeRuntime:
 
             monotonic_clock = monotonic
         self.monotonic_clock = monotonic_clock
+        self.pre_episode_check = pre_episode_check
+        self.state_sink = state_sink
         self.poll_interval_s = poll_interval_s
         self.state = EpisodeState.READY
 
@@ -51,6 +55,8 @@ class EpisodeRuntime:
             raise RuntimeError("an episode is already active")
 
         self._wait_for_start()
+        if self.pre_episode_check is not None:
+            self.pre_episode_check()
         pending = self.store.prepare(self.episode_id_factory())
         started_at = self.wall_clock()
         started_monotonic = self.monotonic_clock()
@@ -64,10 +70,14 @@ class EpisodeRuntime:
                 raise
 
             self.state = EpisodeState.RECORDING
+            if self.state_sink is not None:
+                self.state_sink(self.state)
             outcome, errors = self._wait_for_end()
             ended_at = self.wall_clock()
             duration_s = self.monotonic_clock() - started_monotonic
             self.state = EpisodeState.FINALIZING
+            if self.state_sink is not None:
+                self.state_sink(self.state)
 
             stream_metrics = self._stop_components()
             pending_result = EpisodeResult(

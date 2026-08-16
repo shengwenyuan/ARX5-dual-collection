@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import IO, Any
 
+from .config import CameraConfig
+
 
 @dataclass(frozen=True, slots=True)
 class ProcessSpec:
@@ -169,3 +171,61 @@ class RosProcessSupervisor:
         if errors:
             raise RuntimeError("one or more ROS process groups failed to stop") from errors[0]
         return tuple(exits)
+
+
+class RosCommandSet:
+    """Build the frozen production argv contract without invoking a shell."""
+
+    def __init__(self, log_dir: Path) -> None:
+        self.log_dir = log_dir
+
+    def arx5_v2_collect(self) -> ManagedProcess:
+        return self._process(
+            "arx5-v2-collect",
+            (
+                "ros2",
+                "launch",
+                "/opt/arx_ws/install/share/arx_x5_controller/launch/x5_v2/v2_collect.launch.py",
+            ),
+        )
+
+    def arm_state_adapter(self) -> ManagedProcess:
+        return self._process(
+            "arm-state-adapter",
+            ("ros2", "run", "arx5_arm_adapter", "arm_state_adapter"),
+        )
+
+    def d405_source(self, camera: CameraConfig) -> ManagedProcess:
+        return self._process(
+            f"d405-{camera.role}",
+            (
+                "ros2",
+                "run",
+                "arx5_camera_source",
+                "d405_source",
+                "--ros-args",
+                "-r",
+                f"__node:=d405_source_{camera.role}",
+                "-r",
+                f"__ns:=/sensors/camera_{camera.role}",
+                "-p",
+                f"camera_name:={camera.role}",
+                "-p",
+                f"serial:='{camera.serial_number}'",
+                "-p",
+                "width:=1280",
+                "-p",
+                "height:=720",
+                "-p",
+                "fps:=30",
+                "-p",
+                "color_format:=yuyv",
+                "-p",
+                "reliability:=reliable",
+            ),
+        )
+
+    def _process(self, name: str, argv: tuple[str, ...]) -> ManagedProcess:
+        return ManagedProcess(
+            ProcessSpec(name=name, argv=argv, log_path=self.log_dir / f"{name}.log")
+        )

@@ -148,7 +148,10 @@ class CanInterfaceManager:
                 capture_output=True,
                 text=True,
             )
-            return self.check()
+            result = self.check()
+            if not result.passed:
+                raise RuntimeError(result.detail)
+            return result
         except BaseException:
             self.process.stop(interrupt_timeout_s=1.0, terminate_timeout_s=1.0)
             raise

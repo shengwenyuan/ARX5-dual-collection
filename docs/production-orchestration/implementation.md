@@ -156,6 +156,12 @@ src/arx5_collection/production/
 - 项目自有进程均可无 traceback 顺序关闭；无 Source、Recorder、临时目录或文件句柄泄漏。
 - 150 秒八路 Episode 与必需流停止测试通过后，本计划状态更新为 `verified`。
 
+## 实施记录
+
+- 2026-08-16：完成 Station/八路 Task 严格模型、统一 CheckResult、usbfs/USB2CAN/CAN 生命周期和独立进程组；全量无硬件测试通过。
+- 2026-08-16：完成统一 devices 核对、常驻 telemetry 就绪门、逐颗 D405 放行、真实 Runtime 装配、SPACE/SPACE 与 Ctrl+C 语义，以及 Production Docker target/Compose；全量测试为 107 passed、16 subtests passed。
+- 待验收：本机无 Docker，Compose 解析、production image 构建、PID 1、w3 五设备核对和八路 Episode 均转入真机部署步骤，不提前判定通过。
+
 ## 已对齐决策
 
 - `arx5-collect` 全权管理 usbfs、USB2CAN、CAN 和 ROS 子进程；内部保持清晰模块边界。

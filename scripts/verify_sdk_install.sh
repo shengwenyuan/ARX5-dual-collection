@@ -18,6 +18,8 @@ fi
 
 python3 -c 'import pyrealsense2'
 python3 -c 'from arx5_collection.ros2_adapters import RosStreamMonitor, RosbagRecordingBackend'
+command -v arx5-collect >/dev/null
+arx5-collect --help >/dev/null
 
 for package_name in \
   arx_x5_controller \

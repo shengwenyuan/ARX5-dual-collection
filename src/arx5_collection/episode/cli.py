@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import TextIO
 
 from .adapters.keyboard import KeyboardTrigger
-from .models import EpisodeRequest, StreamSpec
+from .models import EpisodeOutcome, EpisodeRequest, EpisodeState, StreamSpec
 from .ports import RecordTrigger
 from .runtime import EpisodeRuntime
 
@@ -78,28 +78,70 @@ def run_cli(
 
     with make_trigger(args.trigger_key) as trigger:
         runtime = runtime_factory(request, trigger)
-        for partial in runtime.store.list_partials():
-            print(f"partial episode found: {partial}", file=error_output)
+        return run_episode_loop(
+            runtime,
+            request,
+            episodes=args.episodes,
+            stdout=output,
+            stderr=error_output,
+        )
 
-        completed = 0
-        try:
-            while args.episodes == 0 or completed < args.episodes:
-                result = runtime.run_once(request)
-                print(
-                    json.dumps(
-                        {
-                            "episode_id": result.episode_id,
-                            "outcome": result.outcome.value,
-                            "mcap_path": str(result.mcap_path),
-                            "metadata_path": str(result.metadata_path),
-                        }
-                    ),
-                    file=output,
-                    flush=True,
-                )
-                completed += 1
-        except KeyboardInterrupt:
-            return 0
+
+def run_episode_loop(
+    runtime: EpisodeRuntime,
+    request: EpisodeRequest,
+    episodes: int = 0,
+    stdout: TextIO | None = None,
+    stderr: TextIO | None = None,
+) -> int:
+    output = stdout or sys.stdout
+    error_output = stderr or sys.stderr
+    for partial in runtime.store.list_partials():
+        print(f"partial episode found: {partial}", file=error_output)
+
+    previous_sink = runtime.state_sink
+
+    def state_sink(state: EpisodeState) -> None:
+        if previous_sink is not None:
+            previous_sink(state)
+        if state is EpisodeState.RECORDING:
+            print(
+                "RECORDING: press SPACE to end with success; Ctrl+C aborts the Session",
+                file=error_output,
+                flush=True,
+            )
+        elif state is EpisodeState.FINALIZING:
+            print("FINALIZING", file=error_output, flush=True)
+
+    runtime.state_sink = state_sink
+    completed = 0
+    try:
+        while episodes == 0 or completed < episodes:
+            print(
+                "READY: press SPACE to start; Ctrl+C exits the Session",
+                file=error_output,
+                flush=True,
+            )
+            result = runtime.run_once(request)
+            print(
+                json.dumps(
+                    {
+                        "episode_id": result.episode_id,
+                        "outcome": result.outcome.value,
+                        "mcap_path": str(result.mcap_path),
+                        "metadata_path": str(result.metadata_path),
+                    }
+                ),
+                file=output,
+                flush=True,
+            )
+            completed += 1
+            if result.outcome is EpisodeOutcome.ABORTED:
+                return 2
+    except KeyboardInterrupt:
+        return 0
+    finally:
+        runtime.state_sink = previous_sink
     return 0
 
 

@@ -8,6 +8,7 @@ from arx5_arm_msg.msg import RobotStatus
 from arx5_collection_interfaces.msg import ArmState, StreamStatus
 from arx5_monitoring.reporter import StreamStatusReporter
 from rclpy.executors import ExternalShutdownException
+from rclpy.exceptions import RCLError
 from rclpy.node import Node
 from rclpy.qos import (
     QoSDurabilityPolicy,
@@ -116,6 +117,9 @@ def main(args: list[str] | None = None) -> None:
         rclpy.spin(node)
     except (KeyboardInterrupt, ExternalShutdownException):
         pass
+    except RCLError:
+        if rclpy.ok():
+            raise
     finally:
         node.destroy_node()
         if rclpy.ok():

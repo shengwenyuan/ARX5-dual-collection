@@ -96,6 +96,18 @@ class EpisodeCliTest(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertTrue(trigger.closed)
 
+    def test_aborted_episode_exits_the_session(self) -> None:
+        trigger = ContextTrigger([True, KeyboardInterrupt(), True, True])
+        exit_code = run_cli(
+            runtime_factory=self.runtime_factory(),
+            argv=self.argv(0),
+            trigger_factory=lambda key: trigger,
+            stdout=io.StringIO(),
+            stderr=io.StringIO(),
+        )
+        self.assertEqual(exit_code, 2)
+        self.assertEqual(len(list(self.output_root.iterdir())), 1)
+
     def runtime_factory(self):
         ids = iter(["episode-001", "episode-002"])
         clock_values = iter([0.0, 1.0, 2.0, 3.0])

@@ -75,6 +75,23 @@ class EpisodeRuntimeTest(unittest.TestCase):
         self.assertEqual(result.errors, ("left_arm stopped",))
         self.assertTrue(result.committed)
 
+    def test_pre_episode_check_runs_after_start_before_store_prepare(self) -> None:
+        events: list[str] = []
+        runtime = self.runtime(trigger=FakeTrigger([True, True]))
+        runtime.pre_episode_check = lambda: events.append("checked")
+        result = runtime.run_once(self.request())
+        self.assertTrue(result.committed)
+        self.assertEqual(events, ["checked"])
+
+    def test_pre_episode_check_failure_does_not_create_partial(self) -> None:
+        runtime = self.runtime(trigger=FakeTrigger([True]))
+        runtime.pre_episode_check = lambda: (_ for _ in ()).throw(
+            RuntimeError("not ready")
+        )
+        with self.assertRaisesRegex(RuntimeError, "not ready"):
+            runtime.run_once(self.request())
+        self.assertFalse(self.output_root.exists())
+
     def test_recording_interrupt_commits_aborted_episode(self) -> None:
         runtime = self.runtime(trigger=FakeTrigger([True, KeyboardInterrupt()]))
         result = runtime.run_once(self.request())

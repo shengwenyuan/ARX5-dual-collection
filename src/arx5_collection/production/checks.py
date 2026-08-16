@@ -34,7 +34,11 @@ class CheckFailure(RuntimeError):
 
 def run_checks(checks: Iterable[Check]) -> tuple[CheckResult, ...]:
     results = tuple(check() for check in checks)
+    return require_passed(results)
+
+
+def require_passed(results: Iterable[CheckResult]) -> tuple[CheckResult, ...]:
+    results = tuple(results)
     if any(not result.passed for result in results):
         raise CheckFailure(results)
     return results
-
