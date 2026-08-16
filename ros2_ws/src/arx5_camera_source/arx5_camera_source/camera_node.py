@@ -52,21 +52,12 @@ class D405Source(Node):
         if self.frame_timeout_ms <= 0:
             raise ValueError("frame_timeout_ms must be positive")
 
-    def _configure_global_time(self) -> None:
-        matching_device = None
-        for device in rs.context().query_devices():
-            if device.get_info(rs.camera_info.serial_number) == self.serial:
-                matching_device = device
-                break
-        if matching_device is None:
-            raise RuntimeError(f"RealSense {self.serial} was not found")
-
+    def _verify_global_time(self, device: Any) -> None:
         supported = 0
-        for sensor in matching_device.query_sensors():
+        for sensor in device.query_sensors():
             if sensor.supports(rs.option.global_time_enabled):
-                sensor.set_option(rs.option.global_time_enabled, 1.0)
                 if sensor.get_option(rs.option.global_time_enabled) != 1.0:
-                    raise RuntimeError(f"RealSense {self.serial} rejected Global Time")
+                    raise RuntimeError(f"RealSense {self.serial} does not enable Global Time")
                 supported += 1
         if supported == 0:
             raise RuntimeError(f"RealSense {self.serial} does not expose Global Time")
@@ -92,9 +83,9 @@ class D405Source(Node):
         return config
 
     def start(self) -> None:
-        self._configure_global_time()
-        self.pipeline.start(self._stream_config())
+        profile = self.pipeline.start(self._stream_config())
         self.started = True
+        self._verify_global_time(profile.get_device())
         self.get_logger().info(
             f"started {self.camera_name} D405 {self.serial} "
             f"at {self.width}x{self.height}@{self.fps} {self.color.name}"
