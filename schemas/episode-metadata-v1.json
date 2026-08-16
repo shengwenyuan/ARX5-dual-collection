@@ -1,0 +1,142 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ARX5 Episode Metadata v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "episode_id",
+    "task",
+    "outcome",
+    "timing",
+    "station",
+    "streams",
+    "calibration",
+    "software",
+    "errors",
+    "extensions"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "episode_id": {"type": "string", "minLength": 1},
+    "task": {"$ref": "#/$defs/task"},
+    "outcome": {"enum": ["success", "fail", "aborted"]},
+    "timing": {"$ref": "#/$defs/timing"},
+    "station": {"$ref": "#/$defs/station"},
+    "streams": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/stream"}
+    },
+    "calibration": {"$ref": "#/$defs/calibration"},
+    "software": {"$ref": "#/$defs/software"},
+    "errors": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "extensions": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  },
+  "$defs": {
+    "task": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "description"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "description": {"type": "string", "minLength": 1}
+      }
+    },
+    "timing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["started_at", "ended_at", "duration_s"],
+      "properties": {
+        "started_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "ended_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "duration_s": {"type": "number", "minimum": 0}
+      }
+    },
+    "station": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "config_schema_version", "devices"],
+      "properties": {
+        "id": {"type": ["string", "null"], "minLength": 1},
+        "config_schema_version": {"type": "integer", "minimum": 1},
+        "devices": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/device"}
+        }
+      }
+    },
+    "device": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "serial_number", "configuration"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "kind": {"type": "string", "minLength": 1},
+        "serial_number": {"type": ["string", "null"], "minLength": 1},
+        "configuration": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "stream": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "topic",
+        "required",
+        "expected_hz",
+        "message_count",
+        "observed_hz",
+        "max_gap_ms",
+        "warnings"
+      ],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "topic": {"type": "string", "minLength": 1},
+        "required": {"type": "boolean"},
+        "expected_hz": {"type": "number", "exclusiveMinimum": 0},
+        "message_count": {"type": "integer", "minimum": 0},
+        "observed_hz": {"type": "number", "minimum": 0},
+        "max_gap_ms": {"type": "number", "minimum": 0},
+        "warnings": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      }
+    },
+    "calibration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["intrinsics", "extrinsics"],
+      "properties": {
+        "intrinsics": {"type": "null"},
+        "extrinsics": {"type": "null"}
+      }
+    },
+    "software": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "version": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}

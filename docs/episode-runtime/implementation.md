@@ -1,13 +1,13 @@
 # Episode Runtime 实施计划
 
-- Status: `in-progress`
+- Status: `implemented`
 - Parent: `meta_plan.md`
 - Runtime: Python 3.10+、ROS 2 Jazzy、Ubuntu 24.04 Container
 - Target: 先完成无 Vendor SDK 闭环，再接入 `w3-arx5` 真机 Topic
 
 ## 目标
 
-实现与 ARX5、RealSense SDK 解耦的 Episode 控制面：接收录制触发，管理状态与异常，持续写入临时目录，生成 MCAP 与 JSON，并在完整关闭后原子提交。
+实现与 ARX5、RealSense SDK 解耦的 Episode 控制面：接收录制触发，管理状态与异常，协调 MCAP Adapter，生成 metadata，并在完整关闭后原子提交。
 
 SDK 调研只影响数据源适配器，不得阻塞 Episode Runtime 主线。
 
@@ -17,8 +17,8 @@ SDK 调研只影响数据源适配器，不得阻塞 Episode Runtime 主线。
 
 - Episode 状态机与单实例并发约束。
 - 键盘录制触发和脚踏板接口边界。
-- `.partial` 目录、MCAP Backend、metadata 和原子提交。
-- 必需 Stream 的频率统计、停止检测与 `aborted` 路径。
+- `.partial` 目录、metadata、原子提交，以及对 `RecordingBackend` Hook 的调用。
+- 消费 StreamMonitor 的统计与必需 Stream 停止事件，执行 `aborted` 路径。
 - 本地任务输入、命令行入口、重复 Episode 和异常退出处理。
 - Fake Backend、Fake Stream Monitor 及无硬件集成测试。
 
@@ -28,6 +28,7 @@ SDK 调研只影响数据源适配器，不得阻塞 Episode Runtime 主线。
 - 相机同步、Depth 对齐、EEF 坐标或电流单位解释。
 - 脚踏板驱动、UI、人工 `fail`、DAgger 和远程任务分发。
 - 最终图像编码、MCAP 压缩和磁盘保留阈值。
+- ROS 2 Source、固定 Topic、消息定义、真实频率监督和 MCAP Adapter。
 - SHA 或通用内容校验。
 
 ## 架构决策
@@ -39,6 +40,13 @@ SDK 调研只影响数据源适配器，不得阻塞 Episode Runtime 主线。
 - 相机和机械臂由独立 ROS 2 Source 发布数据；Runtime 只接收配置化 Topic 与健康事件。
 - Runtime 不解析图像、关节或 EEF 载荷，不承担插值、补帧或时间同步。
 - Hook 使用少量 `Protocol` 与数据类表达，不建设通用插件框架。
+
+### 分支与目录边界
+
+- `main` 负责 SDK、Docker、ROS 2 Source、固定 Topic、消息定义、频率监督和 MCAP Adapter。
+- Episode Runtime 开发分支只负责状态机、Hook、Store、metadata 和 CLI。
+- `main` 不修改 `src/arx5_collection/episode/`；Episode Runtime 分支不修改 SDK、Docker 或 ROS 2 Source。
+- Hook 合入后，`main` 在 Episode 包之外实现 `RecordingBackend`、`StreamMonitor` 的 ROS 2 Adapter，不实现或修改 Episode 生命周期。
 
 ### 状态语义
 
@@ -73,10 +81,10 @@ episodes/
 
 | 依赖 | 决策 | 边界与替换条件 |
 |---|---|---|
-| ARX5 与 RealSense 数据源 | Hook + 测试桩 | Runtime 读取 `StreamSpec` 和 ROS Topic；测试使用 Fake Publisher。最终 Source 就绪后只替换 Topic 配置与适配器 |
+| ARX5 与 RealSense 数据源 | main 实现 | Runtime 只读取 `StreamSpec` 和 ROS Topic，通过 Hook 协作，不接触 Source 或 Vendor SDK |
 | Topic 与消息类型 | 已冻结 | 六路相机 `sensor_msgs/Image` 与双路逻辑 `ArmState` 由 Station 配置传入，Runtime 不硬编码物理设备身份 |
-| Stream 频率与掉线检测 | 已实现 ROS Adapter | `RosStreamMonitor` 只订阅 `/monitoring/stream_status`；必需流无遥测、心跳停止或数据静默返回失败，低频只警告 |
-| MCAP 写入方式 | 已冻结 | `RosbagRecordingBackend` 使用 Jazzy `rosbag2_py` 与 MCAP，显式 Topic、订阅就绪屏障、严格单文件收敛 |
+| Stream 频率与掉线检测 | 已实现 ROS Adapter | `RosStreamMonitor` 位于 Episode 包外，只订阅 `/monitoring/stream_status`；Runtime 通过冻结的 `StreamMonitor` Hook 轮询 |
+| MCAP 写入方式 | 已实现 ROS Adapter | `RosbagRecordingBackend` 位于 Episode 包外，使用 Jazzy `rosbag2_py` 与 MCAP；Runtime 只调用冻结的 `RecordingBackend` Hook |
 | 键盘与脚踏板 | Hook + 实现键盘 | `RecordTrigger` 是稳定边界；v0.1 实现键盘，脚踏板在设备与驱动确定前完全等待，不创建伪驱动 |
 | 任务与 UI | Hook + CLI | CLI 构造 `EpisodeRequest`；未来 UI 调用同一入口，不为 UI 建临时页面或服务 |
 | 人工 `fail` | 等待 | 结果 Schema 保留 `fail`，v0.1 不创建临时按键；UI 计划确认后再接入 |
@@ -117,6 +125,15 @@ episodes/
 
 上述契约不包含 Vendor 对象。未知单位继续保留在 Source 消息语义中，不由 Runtime 猜测。
 
+### Metadata v1
+
+- `started_at`、`ended_at` 使用 RFC 3339 UTC；`duration_s` 必须由单调时钟计算。
+- 不建立全局 `frame_count`、统一 FPS 或统一帧轴。
+- 每个 Stream 以 `id`、`topic`、`required` 标识；统计字段仅包含 `expected_hz`、`message_count`、`observed_hz`、`max_gap_ms`。
+- `calibration.intrinsics` 与 `calibration.extrinsics` 必须存在，v0.1 固定写 `null`。
+- 不记录 `container_image` 或 `committed`；目录是否脱离 `.partial` 即提交事实。
+- 核心对象严格校验；只有设备 `configuration` 与顶层 `extensions` 允许开放字段。
+
 ## 目录设计
 
 ```text
@@ -129,7 +146,6 @@ src/arx5_collection/episode/
   cli.py
   adapters/
     keyboard.py
-    rosbag2_mcap.py
 
 schemas/
   episode-metadata-v1.json
@@ -140,7 +156,6 @@ tests/episode/
   test_store.py
   test_metadata.py
   test_keyboard.py
-  test_rosbag2_mcap.py
 ```
 
 `fakes.py` 只服务测试；不得进入生产 Adapter 目录。
@@ -159,20 +174,19 @@ tests/episode/
 - Workstream A：状态机、键盘触发和 CLI。
 - Workstream B：临时目录、metadata、原子提交和遗留目录报告。
 - Workstream C：Fake Backend、Fake Monitor、掉线与 Backend 故障注入。
-- Workstream D：Jazzy Container 内的 MCAP Backend 技术验证。
 
-四条 Workstream 只通过 `models.py` 与 `ports.py` 协作，避免同时修改同一实现文件。
+三个 Workstream 只通过 `models.py` 与 `ports.py` 协作，避免同时修改同一实现文件。
 
-### 3. 冻结 MCAP Backend
+### 3. 对接 main 数据面 Adapter
 
-优先验证现有 `rosbag2_py + rosbag2_storage_mcap`：
+main 负责验证 `rosbag2_py + rosbag2_storage_mcap` 与 ROS Stream Monitor：
 
 1. 录制显式 Topic 列表，不使用全量 Topic 捕获。
 2. 连续开始、停止十条 Episode，不重启进程。
 3. 验证干净关闭、异常停止和 MCAP 可读取性。
 4. 验证最终目录能收敛为 `episode.mcap + metadata.json`。
 
-如果 `rosbag2_py` 无法稳定满足两文件契约，停止真实 Backend 实现并重新对齐；不得自行引入直接 MCAP Writer 或改变 Episode 格式。
+如果 Adapter 无法满足契约，停止集成并重新对齐；Episode Runtime 分支不得自行实现 ROS 2 Adapter、直接 MCAP Writer 或改变 Episode 格式。
 
 ### 4. 无 SDK 集成
 
@@ -207,7 +221,7 @@ tests/episode/
 
 - 使用真实 `/sensors/...` 与 `/embodiments/...` Topic 完成 90～150 秒 Episode。
 - Runtime 无 Vendor SDK import，替换 Source 不修改状态机与 Store。
-- 实际帧数、平均频率和最大帧间隔写入 metadata。
+- 每个 Stream 的 `expected_hz`、`message_count`、`observed_hz` 和 `max_gap_ms` 写入 metadata。
 - 重复 Episode 无后台进程、文件句柄或临时目录泄漏。
 
 真机验收通过后，计划状态才可更新为 `verified`。
@@ -223,7 +237,7 @@ tests/episode/
 
 - `min_free_bytes` 默认值：等待三路 720p 吞吐基准。
 - 三颗 D405 的物理角色映射：逻辑 Topic 已冻结，正式 Station 配置等待现场确认 left/right/overview。
-- main 与外层 Runtime 的合并接线：Port 已一致，合并时只提供 Adapter factory 与配置，不修改控制面核心。
+- 生产组合入口：Port 已一致，后续只增加 Adapter factory、固定 Stream 配置与 CLI launcher，不修改控制面核心或 ROS Adapter。
 
 这些开放项已由 Hook 或等待边界隔离，不阻塞 Episode Runtime 核心开发。
 
@@ -233,6 +247,15 @@ tests/episode/
 - 已冻结 `EpisodeState`、`EpisodeOutcome`、`StreamSpec`、`EpisodeRequest`、`StreamMetrics` 与 `EpisodeResult`；未引入 ROS2 或 Vendor SDK 依赖。
 - 2026-08-15：Episode Ports 已完成并通过全仓 13 个单测与独立安装链路验收。
 - 已冻结同步轮询式 `RecordTrigger`、`RecordingBackend` 与 `StreamMonitor`；toggle、必需流轮询和 aborted 干净关包语义已确认。
+- 2026-08-16：Metadata v1 Contract 已完成并通过 Draft 2020-12 Schema 检查、全仓 19 个单测与工作区外链路验收。
+- 已冻结单调时长、逐 Stream 统计、v0.1 标定空桩和严格扩展边界；生产 Runtime 未增加 Schema 验证依赖。
+- 2026-08-16：Metadata Writer 已完成并通过全仓 25 个单测与独立安装链路验收，生成结果通过 Metadata v1 Schema。
+- 2026-08-16：Episode Store 已完成并通过全仓 31 个单测与独立安装文件生命周期验收；失败路径保留 partial，成功目录严格为两文件。
+- 2026-08-16：Episode Runtime 状态机已完成并通过全仓 36 个单测与独立安装连续十 Episode 链路验收；单调时长及 success/aborted/finalization 路径均覆盖。
+- 2026-08-16：Keyboard Trigger 已完成并通过全仓 40 个单测与独立安装 PTY 链路验收；终端 context 退出可恢复设置。
+- 2026-08-16：CLI Core 已完成并通过全仓 43 个单测与独立安装两 Episode 链路验收；真实 launcher 明确等待 main Adapter 工厂。
+- Episode Runtime 开发分支职责内的状态机、Hook、Store、metadata、Keyboard 与 CLI Core 已实现并逐模块验收。
+- 2026-08-16：同步最新 main 后完成全仓 51 个单测与 8 条安装后链路回归；低频 warning 与目录提交失败路径补充通过。
 - 2026-08-16：main 已完成真实 ROS Adapter。Jazzy 容器内连续 10 次录制均生成单一可读 MCAP，50 Hz 数据审计无 warning；停止 telemetry 后 2.107 秒内返回必需流失败，异常 MCAP 正常关闭。
-- 全仓 50 个单元测试通过；Adapter 与冻结 Port 运行时一致，未修改 `src/arx5_collection/episode/`。
-- Episode Runtime 其余模块与无硬件/真机整体验收尚未实施，计划保持 `in-progress`。
+- Adapter 与冻结 Port 运行时一致，未修改 `src/arx5_collection/episode/`。
+- 计划状态保持 `implemented`；`verified` 等待生产组合入口、Docker 整链与真机 90～150 秒验收。
