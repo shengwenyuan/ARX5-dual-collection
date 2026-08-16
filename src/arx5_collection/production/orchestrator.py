@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import shutil
+import signal
 from collections.abc import Callable
+from contextlib import contextmanager
 from pathlib import Path
 from types import TracebackType
+from typing import Iterator
 
 from arx5_collection.episode.models import EpisodeRequest
 from arx5_collection.episode.ports import RecordTrigger
@@ -141,6 +144,10 @@ class ProductionSession:
         )
 
     def stop(self) -> None:
+        with ignore_repeated_termination():
+            self._stop_owned_resources()
+
+    def _stop_owned_resources(self) -> None:
         errors: list[BaseException] = []
         if self.supervisor.names:
             try:
@@ -198,3 +205,16 @@ class ProductionSession:
             "camera_overview_color",
             "camera_overview_aligned_depth",
         )
+
+
+@contextmanager
+def ignore_repeated_termination() -> Iterator[None]:
+    previous_interrupt = signal.getsignal(signal.SIGINT)
+    previous_terminate = signal.getsignal(signal.SIGTERM)
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    signal.signal(signal.SIGTERM, signal.SIG_IGN)
+    try:
+        yield
+    finally:
+        signal.signal(signal.SIGINT, previous_interrupt)
+        signal.signal(signal.SIGTERM, previous_terminate)

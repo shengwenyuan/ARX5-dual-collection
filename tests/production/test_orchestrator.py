@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import signal
 import tempfile
 import unittest
 from pathlib import Path
@@ -96,6 +97,13 @@ class FakeSupervisor:
         return exits
 
 
+class RepeatedInterruptSupervisor(FakeSupervisor):
+    def stop_all(self):
+        signal.raise_signal(signal.SIGINT)
+        signal.raise_signal(signal.SIGTERM)
+        return super().stop_all()
+
+
 class FakeCommands:
     def arx5_v2_collect(self):
         return NamedProcess("arx5-v2-collect")
@@ -150,6 +158,26 @@ class ProductionSessionTest(unittest.TestCase):
                 "ros:stop:arx5-v2-collect",
             ],
         )
+        self.assertEqual(events[-2:], ["gate:stop", "system:stop"])
+
+    def test_repeated_signals_do_not_interrupt_owned_cleanup(self) -> None:
+        events: list[str] = []
+        station = load_station_config(ROOT / "config" / "station.w3.json")
+        with tempfile.TemporaryDirectory() as directory:
+            session = ProductionSession(
+                station,
+                Path(directory) / "episodes",
+                Path(directory) / "logs",
+                "0.1.0",
+                min_free_bytes=0,
+                identity=FakeIdentity(),  # type: ignore[arg-type]
+                system=FakeSystem(events),  # type: ignore[arg-type]
+                supervisor=RepeatedInterruptSupervisor(events),  # type: ignore[arg-type]
+                readiness=FakeReadiness(events),  # type: ignore[arg-type]
+                commands=FakeCommands(),  # type: ignore[arg-type]
+            )
+            session.start()
+            session.stop()
         self.assertEqual(events[-2:], ["gate:stop", "system:stop"])
 
 
