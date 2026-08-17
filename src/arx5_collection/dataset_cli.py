@@ -10,8 +10,11 @@ from arx5_collection.cleaning.pipeline import clean_episode
 from arx5_collection.cleaning.pipeline import inspect_episode
 from arx5_collection.pi05_dataset.actions import GripperCalibration
 from arx5_collection.pi05_dataset.discovery import discover_episode_dirs
+from arx5_collection.pi05_dataset.eef_selection import EqualEefPolicy
 from arx5_collection.pi05_dataset.exporter import export_lerobot
 from arx5_collection.pi05_dataset.selection_pipeline import select_dataset
+from arx5_collection.pi05_dataset.selection_pipeline import DatasetSelection
+from arx5_collection.pi05_dataset.selection_pipeline import select_equal_eef_dataset
 from arx5_collection.pi05_dataset.validate import compute_openpi_norm_stats
 from arx5_collection.pi05_dataset.validate import validate_lerobot
 from arx5_collection.pi05_dataset.validate import validate_openpi
@@ -57,12 +60,10 @@ def _handle_clean(args: argparse.Namespace) -> int:
     return 0
 
 
-def _handle_select_pi05(args: argparse.Namespace) -> int:
-    selection = select_dataset(
-        _selected_episode_dirs(args),
-        args.audit_root,
-        args.output_root,
-        args.task,
+def _gripper_calibrations(
+    args: argparse.Namespace,
+) -> tuple[GripperCalibration, GripperCalibration]:
+    return (
         GripperCalibration(
             args.left_gripper_open,
             args.left_gripper_closed,
@@ -74,6 +75,9 @@ def _handle_select_pi05(args: argparse.Namespace) -> int:
             args.gripper_tolerance,
         ),
     )
+
+
+def _print_selection(selection: DatasetSelection) -> None:
     print(
         json.dumps(
             {
@@ -86,6 +90,39 @@ def _handle_select_pi05(args: argparse.Namespace) -> int:
             sort_keys=True,
         )
     )
+
+
+def _handle_select_pi05(args: argparse.Namespace) -> int:
+    left_gripper, right_gripper = _gripper_calibrations(args)
+    selection = select_dataset(
+        _selected_episode_dirs(args),
+        args.audit_root,
+        args.output_root,
+        args.task,
+        left_gripper,
+        right_gripper,
+    )
+    _print_selection(selection)
+    return 0
+
+
+def _handle_select_pi05_eef(args: argparse.Namespace) -> int:
+    left_gripper, right_gripper = _gripper_calibrations(args)
+    policy = EqualEefPolicy(
+        eef_distance_m=args.eef_distance_mm / 1000.0,
+        gripper_delta_threshold=args.gripper_delta_threshold,
+        max_sample_interval_ns=round(args.max_sample_interval_ms * 1_000_000),
+    )
+    selection = select_equal_eef_dataset(
+        _selected_episode_dirs(args),
+        args.audit_root,
+        args.output_root,
+        args.task,
+        left_gripper,
+        right_gripper,
+        policy,
+    )
+    _print_selection(selection)
     return 0
 
 
@@ -125,6 +162,19 @@ def _handle_norm_stats(args: argparse.Namespace) -> int:
     return 0
 
 
+def _add_selection_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--input-root", type=Path, action="append", required=True)
+    parser.add_argument("--audit-root", type=Path, required=True)
+    parser.add_argument("--output-root", type=Path, required=True)
+    parser.add_argument("--task", required=True)
+    parser.add_argument("--left-gripper-open", type=float, required=True)
+    parser.add_argument("--left-gripper-closed", type=float, required=True)
+    parser.add_argument("--right-gripper-open", type=float, required=True)
+    parser.add_argument("--right-gripper-closed", type=float, required=True)
+    parser.add_argument("--gripper-tolerance", type=float, default=0.05)
+    parser.add_argument("--outcome", action="append", choices=("success", "fail", "aborted"))
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="arx5-dataset")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -143,17 +193,33 @@ def build_parser() -> argparse.ArgumentParser:
         "select-pi05",
         help="build 50 Hz π0.5 sample and motion-segment indexes",
     )
-    select_parser.add_argument("--input-root", type=Path, action="append", required=True)
-    select_parser.add_argument("--audit-root", type=Path, required=True)
-    select_parser.add_argument("--output-root", type=Path, required=True)
-    select_parser.add_argument("--task", required=True)
-    select_parser.add_argument("--left-gripper-open", type=float, required=True)
-    select_parser.add_argument("--left-gripper-closed", type=float, required=True)
-    select_parser.add_argument("--right-gripper-open", type=float, required=True)
-    select_parser.add_argument("--right-gripper-closed", type=float, required=True)
-    select_parser.add_argument("--gripper-tolerance", type=float, default=0.05)
-    select_parser.add_argument("--outcome", action="append", choices=("success", "fail", "aborted"))
+    _add_selection_arguments(select_parser)
     select_parser.set_defaults(handler=_handle_select_pi05)
+
+    eef_parser = subparsers.add_parser(
+        "select-pi05-eef",
+        help="build an equal-EEF-distance π0.5 trajectory index",
+    )
+    _add_selection_arguments(eef_parser)
+    eef_parser.add_argument(
+        "--eef-distance-mm",
+        type=float,
+        default=5.0,
+        help="endpoint EEF translation threshold in millimetres",
+    )
+    eef_parser.add_argument(
+        "--gripper-delta-threshold",
+        type=float,
+        default=0.02,
+        help="trigger threshold after gripper normalization to [0,1]",
+    )
+    eef_parser.add_argument(
+        "--max-sample-interval-ms",
+        type=float,
+        default=100.0,
+        help="maximum real Header-time gap between retained trajectory samples",
+    )
+    eef_parser.set_defaults(handler=_handle_select_pi05_eef)
 
     export_parser = subparsers.add_parser(
         "to-lerobot",

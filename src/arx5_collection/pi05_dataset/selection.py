@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from bisect import bisect_right
 from dataclasses import dataclass
+from typing import Protocol
 
 from arx5_collection.cleaning.models import ArmSample
 from arx5_collection.cleaning.models import EpisodeScan
@@ -43,6 +44,13 @@ class Pi05Policy:
             )
         ):
             raise ValueError("pi05 policy values must not be negative")
+
+
+class SegmentPolicy(Protocol):
+    idle_delta_threshold: float
+    min_idle_frames: int
+    min_motion_frames: int
+    trim_segment_end_frames: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -156,7 +164,7 @@ def _runs(mask: list[bool], value: bool) -> list[tuple[int, int]]:
 
 def select_nonidle_segments(
     samples: tuple[Pi05Sample, ...],
-    policy: Pi05Policy = Pi05Policy(),
+    policy: SegmentPolicy = Pi05Policy(),
 ) -> tuple[Pi05Segment, ...]:
     if not samples:
         return ()

@@ -75,6 +75,16 @@ class Pi05SampleArtifact(TypedDict):
     exclusion_reason: str | None
 
 
+class EqualEefSampleArtifact(Pi05SampleArtifact):
+    source_header_stamp_ns: int
+    delta_time_ns: int
+    sampling_reasons: list[str]
+    left_eef_delta_m: float
+    right_eef_delta_m: float
+    left_gripper_delta: float
+    right_gripper_delta: float
+
+
 class Pi05SegmentArtifact(TypedDict):
     schema_version: int
     filter_version: str
@@ -116,6 +126,25 @@ class SelectionReportArtifact(TypedDict):
     sample_count: int
     eligible_sample_count: int
     segment_count: int
+
+
+class EqualEefSamplingContractArtifact(TypedDict):
+    mode: str
+    eef_field: str
+    translation_unit: str
+    distance_metric: str
+    dual_arm_reduce: str
+    eef_distance_m: float
+    gripper_delta_threshold: float
+    max_sample_interval_ns: int
+    timestamp_clock: str
+    observation_rule: str
+    nominal_fps: int
+    horizon_semantics: str
+
+
+class EqualEefSelectionReportArtifact(SelectionReportArtifact):
+    sampling_contract: EqualEefSamplingContractArtifact
 
 
 def message_ref_to_artifact(ref: MessageRef) -> MessageRefArtifact:

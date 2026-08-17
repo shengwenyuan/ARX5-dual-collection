@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://arx5.local/schemas/pi05-sample-v2.json",
+  "title": "ARX5 equal-EEF-distance π0.5 sample",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "filter_version", "state_action_version",
+    "source_episode_id", "source_sample_index", "tick_ns",
+    "source_header_stamp_ns", "delta_time_ns", "sampling_reasons",
+    "left_eef_delta_m", "right_eef_delta_m",
+    "left_gripper_delta", "right_gripper_delta",
+    "frame_group_id", "images", "arms", "state", "action",
+    "segment_id", "training_eligible", "exclusion_reason"
+  ],
+  "properties": {
+    "schema_version": { "const": 2 },
+    "filter_version": { "const": "pi05-arx-filter-v2-equal-eef-distance" },
+    "state_action_version": { "const": "arx5-measured-position-proxy-v1" },
+    "source_episode_id": { "type": "string", "minLength": 1 },
+    "source_sample_index": { "type": "integer", "minimum": 0 },
+    "tick_ns": { "type": "integer", "minimum": 0 },
+    "source_header_stamp_ns": { "type": "integer", "minimum": 0 },
+    "delta_time_ns": { "type": "integer", "minimum": 0 },
+    "sampling_reasons": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "enum": ["initial", "eef_distance", "gripper", "max_interval"] }
+    },
+    "left_eef_delta_m": { "type": "number", "minimum": 0 },
+    "right_eef_delta_m": { "type": "number", "minimum": 0 },
+    "left_gripper_delta": { "type": "number", "minimum": 0 },
+    "right_gripper_delta": { "type": "number", "minimum": 0 },
+    "frame_group_id": { "type": "integer", "minimum": 0 },
+    "images": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cam_high", "cam_left_wrist", "cam_right_wrist"],
+      "properties": {
+        "cam_high": { "$ref": "#/$defs/ref" },
+        "cam_left_wrist": { "$ref": "#/$defs/ref" },
+        "cam_right_wrist": { "$ref": "#/$defs/ref" }
+      }
+    },
+    "arms": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["left", "right"],
+      "properties": {
+        "left": { "$ref": "#/$defs/ref" },
+        "right": { "$ref": "#/$defs/ref" }
+      }
+    },
+    "state": { "$ref": "#/$defs/vector14" },
+    "action": { "$ref": "#/$defs/vector14" },
+    "segment_id": { "type": ["string", "null"] },
+    "training_eligible": { "type": "boolean" },
+    "exclusion_reason": { "type": ["string", "null"] }
+  },
+  "$defs": {
+    "ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["topic", "sequence", "header_stamp_ns", "bag_timestamp_ns"],
+      "properties": {
+        "topic": { "type": "string", "minLength": 1 },
+        "sequence": { "type": "integer", "minimum": 0 },
+        "header_stamp_ns": { "type": "integer", "minimum": 0 },
+        "bag_timestamp_ns": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "vector14": {
+      "type": "array",
+      "minItems": 14,
+      "maxItems": 14,
+      "items": { "type": "number" }
+    }
+  }
+}

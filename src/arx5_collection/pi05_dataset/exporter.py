@@ -133,6 +133,8 @@ def export_lerobot(
             "gripper_calibration": selection_report["gripper_calibration"],
             "tasks": sorted({str(segment["task"]) for segment in segment_rows}),
         }
+        if "sampling_contract" in selection_report:
+            report["sampling_contract"] = selection_report["sampling_contract"]
         write_json(report_path, report)
     finally:
         if cache_parent.exists():

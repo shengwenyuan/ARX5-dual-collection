@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from pathlib import Path
+from typing import Callable
 from typing import Mapping
 from typing import TYPE_CHECKING
 from typing import cast
@@ -9,6 +10,8 @@ from typing import cast
 from arx5_collection.artifacts import ArmRefsArtifact
 from arx5_collection.artifacts import CameraRefsArtifact
 from arx5_collection.artifacts import ExcludedEpisodeArtifact
+from arx5_collection.artifacts import EqualEefSampleArtifact
+from arx5_collection.artifacts import EqualEefSamplingContractArtifact
 from arx5_collection.artifacts import GripperCalibrationArtifact
 from arx5_collection.artifacts import GripperCalibrationsArtifact
 from arx5_collection.artifacts import Pi05SampleArtifact
@@ -28,6 +31,8 @@ from arx5_collection.cleaning.models import LEFT_ARM_TOPIC
 from arx5_collection.cleaning.models import MessageRef
 from arx5_collection.cleaning.models import RIGHT_ARM_TOPIC
 from arx5_collection.pi05_dataset.actions import GripperCalibration
+from arx5_collection.pi05_dataset.eef_selection import EqualEefPolicy
+from arx5_collection.pi05_dataset.eef_selection import EqualEefSample
 from arx5_collection.pi05_dataset.selection import Pi05Policy
 from arx5_collection.pi05_dataset.selection import Pi05Sample
 from arx5_collection.pi05_dataset.selection import Pi05Segment
@@ -38,8 +43,13 @@ if TYPE_CHECKING:
 
 
 FILTER_VERSION = "pi05-arx-filter-v1"
+EQUAL_EEF_FILTER_VERSION = "pi05-arx-filter-v2-equal-eef-distance"
 STATE_ACTION_VERSION = "arx5-measured-position-proxy-v1"
 SCHEMA_VERSION = 1
+EQUAL_EEF_SCHEMA_VERSION = 2
+
+
+SampleEncoder = Callable[[str, Pi05Sample, str | None], Pi05SampleArtifact]
 
 
 def _mapping(value: object, label: str) -> Mapping[str, object]:
@@ -144,15 +154,43 @@ def sample_to_artifact(
     )
 
 
+def equal_eef_sample_to_artifact(
+    episode_id: str,
+    sample: Pi05Sample,
+    segment_id: str | None,
+) -> EqualEefSampleArtifact:
+    if not isinstance(sample, EqualEefSample):
+        raise TypeError("equal EEF artifacts require EqualEefSample")
+    artifact = cast(
+        EqualEefSampleArtifact,
+        sample_to_artifact(episode_id, sample, segment_id),
+    )
+    artifact.update(
+        schema_version=EQUAL_EEF_SCHEMA_VERSION,
+        filter_version=EQUAL_EEF_FILTER_VERSION,
+        source_header_stamp_ns=sample.tick_ns,
+        delta_time_ns=sample.delta_time_ns,
+        sampling_reasons=list(sample.sampling_reasons),
+        left_eef_delta_m=sample.left_eef_delta_m,
+        right_eef_delta_m=sample.right_eef_delta_m,
+        left_gripper_delta=sample.left_gripper_delta,
+        right_gripper_delta=sample.right_gripper_delta,
+    )
+    return artifact
+
+
 def segment_to_artifact(
     episode: EpisodeSelection,
     segment: Pi05Segment,
+    *,
+    schema_version: int = SCHEMA_VERSION,
+    filter_version: str = FILTER_VERSION,
 ) -> Pi05SegmentArtifact:
     first = segment.samples[0]
     last = segment.samples[-1]
     return Pi05SegmentArtifact(
-        schema_version=SCHEMA_VERSION,
-        filter_version=FILTER_VERSION,
+        schema_version=schema_version,
+        filter_version=filter_version,
         segment_id=f"{episode.episode_id}--{segment.segment_index:03d}",
         source_episode_id=episode.episode_id,
         source_start_sample_index=segment.start_sample_index,
@@ -168,24 +206,34 @@ def _calibration_artifact(calibration: GripperCalibration) -> GripperCalibration
     return GripperCalibrationArtifact(**asdict(calibration))
 
 
-def write_selection_artifacts(
+def _write_selection_artifacts(
     output_root: Path,
     selection: DatasetSelection,
-    policy: Pi05Policy,
+    policy: Pi05Policy | EqualEefPolicy,
     left_gripper: GripperCalibration,
     right_gripper: GripperCalibration,
+    *,
+    schema_version: int,
+    filter_version: str,
+    sample_encoder: SampleEncoder,
+    sampling_contract: EqualEefSamplingContractArtifact | None = None,
 ) -> Path:
     target = output_root / "selection"
     segment_rows = []
     memberships: dict[tuple[str, int], str] = {}
     for episode in selection.episodes:
         for segment in episode.segments:
-            row = segment_to_artifact(episode, segment)
+            row = segment_to_artifact(
+                episode,
+                segment,
+                schema_version=schema_version,
+                filter_version=filter_version,
+            )
             segment_rows.append(row)
             for sample in segment.samples:
                 memberships[(episode.episode_id, sample.sample_index)] = row["segment_id"]
     sample_rows = [
-        sample_to_artifact(
+        sample_encoder(
             episode.episode_id,
             sample,
             memberships.get((episode.episode_id, sample.sample_index)),
@@ -198,9 +246,9 @@ def write_selection_artifacts(
         right=_calibration_artifact(right_gripper),
     )
     excluded = cast(list[ExcludedEpisodeArtifact], list(selection.excluded_episodes))
-    report = SelectionReportArtifact(
-        schema_version=SCHEMA_VERSION,
-        filter_version=FILTER_VERSION,
+    report: dict[str, object] = SelectionReportArtifact(
+        schema_version=schema_version,
+        filter_version=filter_version,
         state_action_version=STATE_ACTION_VERSION,
         policy=cast(dict[str, object], asdict(policy)),
         gripper_calibration=calibrations,
@@ -211,8 +259,63 @@ def write_selection_artifacts(
         eligible_sample_count=sum(row["training_eligible"] for row in sample_rows),
         segment_count=len(segment_rows),
     )
+    if sampling_contract is not None:
+        report["sampling_contract"] = sampling_contract
     with staged_directory(target) as temporary:
         write_jsonl(temporary / "sample_index.jsonl", sample_rows)
         write_jsonl(temporary / "segments.jsonl", segment_rows)
         write_json(temporary / "selection.json", report)
     return target
+
+
+def write_selection_artifacts(
+    output_root: Path,
+    selection: DatasetSelection,
+    policy: Pi05Policy,
+    left_gripper: GripperCalibration,
+    right_gripper: GripperCalibration,
+) -> Path:
+    return _write_selection_artifacts(
+        output_root,
+        selection,
+        policy,
+        left_gripper,
+        right_gripper,
+        schema_version=SCHEMA_VERSION,
+        filter_version=FILTER_VERSION,
+        sample_encoder=sample_to_artifact,
+    )
+
+
+def write_equal_eef_selection_artifacts(
+    output_root: Path,
+    selection: DatasetSelection,
+    policy: EqualEefPolicy,
+    left_gripper: GripperCalibration,
+    right_gripper: GripperCalibration,
+) -> Path:
+    sampling_contract = EqualEefSamplingContractArtifact(
+        mode="equal_eef_distance",
+        eef_field="ArmState.eef_xyzrpy[:3]",
+        translation_unit="metre",
+        distance_metric="endpoint_euclidean",
+        dual_arm_reduce="max",
+        eef_distance_m=policy.eef_distance_m,
+        gripper_delta_threshold=policy.gripper_delta_threshold,
+        max_sample_interval_ns=policy.max_sample_interval_ns,
+        timestamp_clock="header_stamp_ns",
+        observation_rule="latest_complete_frame_group_at_or_before_tick",
+        nominal_fps=policy.nominal_fps,
+        horizon_semantics="trajectory_steps",
+    )
+    return _write_selection_artifacts(
+        output_root,
+        selection,
+        policy,
+        left_gripper,
+        right_gripper,
+        schema_version=EQUAL_EEF_SCHEMA_VERSION,
+        filter_version=EQUAL_EEF_FILTER_VERSION,
+        sample_encoder=equal_eef_sample_to_artifact,
+        sampling_contract=sampling_contract,
+    )

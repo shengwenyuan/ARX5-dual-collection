@@ -104,11 +104,17 @@ def read_episode_scan(episode_dir: Path) -> EpisodeScan:
         if topic not in (LEFT_ARM_TOPIC, RIGHT_ARM_TOPIC):
             continue
         message = deserialize_message(payload, arm_message_type)
+        eef = tuple(float(value) for value in message.eef_xyzrpy)
         joints = tuple(float(value) for value in message.joint_positions)
         gripper = float(message.gripper_position)
-        if not all(math.isfinite(value) for value in (*joints, gripper)):
+        if not all(math.isfinite(value) for value in (*eef, *joints, gripper)):
             continue
-        sample = ArmSample(ref=ref, joint_positions=joints, gripper_position=gripper)
+        sample = ArmSample(
+            ref=ref,
+            joint_positions=joints,
+            gripper_position=gripper,
+            eef_xyzrpy=eef,
+        )
         (left_arm if topic == LEFT_ARM_TOPIC else right_arm).append(sample)
 
     return EpisodeScan(

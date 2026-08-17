@@ -6,7 +6,7 @@
 - Selection policy: `pi05-arx-filter-v1`
 - Time basis: `header_stamp_ns`
 - Status: `v1 implemented, exported, OpenPI-verified and trained`
-- Next selector: `equal-eef-distance`（需求已对齐，尚未实现）
+- Next selector: `pi05-arx-filter-v2-equal-eef-distance`（已实现并通过单测，正式数据验收 pending）
 - Detailed design: `docs/data-cleaning/pi05-mcap-to-lerobot.md`
 
 ## 维护约定
@@ -46,26 +46,28 @@
   -> pi05_base joint-only SFT
 ```
 
-## 下一版：等 EEF 位移采样（已对齐，pending）
+## 下一版：等 EEF 位移采样（implemented，正式数据验收 pending）
 
 下一版不再用固定 `delta t` 构造 50 Hz 采样点，而是把轨迹重采样为近似等 EEF 位移的离散序列。该变化必须生成新的 filter/dataset version，不覆盖 v1。
 
 已冻结的需求如下：
 
 1. 当前 1000 Hz 数据仍是双臂实测位置代理，不引入独立 command/action Topic。
-2. 直接读取已录制的 EEF Topic，不通过 joint FK 重建 EEF。
+2. 直接读取双臂 ArmState Topic 已录制的 `eef_xyzrpy[:3]`，不通过 joint FK 重建 EEF；平移单位按 metre 解释。
 3. EEF 只用于决定采样点；最终 `state/action` 继续使用 14 维 joint 表达，保持 joint-only SFT。
 4. 按 `header_stamp_ns` 遍历真实状态样本。保留首点后，当
    `max(left_eef_delta, right_eef_delta) >= 5 mm` 时保留第一个越过阈值的真实样本。
 5. `eef_delta` 使用上一个保留点与当前点的平移欧氏距离。沿 1000 Hz 轨迹累计路径长度理论上更精确，但当前选择端点距离以降低计算成本；不插值或生成虚构状态。
-6. 夹爪状态变化必须独立触发采样；另设可配置的最大采样间隔，初值在正式数据分布分析后冻结。
+6. 夹爪归一化值变化 `>= 0.02` 时独立触发采样；最大采样间隔可配置，当前默认 `100 ms`。
 7. 每个采样 tick 必须关联完整三相机帧组：选择满足
    `observation_cutoff_ns <= tick_ns` 的最新帧组，不允许三相机分别独立取帧，也不允许未来图像。
 8. 继续使用 `header_stamp_ns` 做状态、EEF、RGB/Depth 和三相机的物理时间关联；`bag_timestamp_ns` 只留档和校验来源。
 9. 不修改 OpenPI dataloader。导出的序列定义为“等距离轨迹索引”；LeRobot `fps` 是兼容性名义值，50-step horizon 表示约 50 个轨迹步，不再表示约 1 秒真实时间。
 10. 保留每个样本的真实 `source_header_stamp_ns` 和相邻真实 `delta_time_ns`，避免名义 fps 混淆物理时间。
 
-实现前先完成行为保持型结构重构：集中 Artifact TypedDict 与 `MessageRef` codec；拆分 selection pipeline 和 artifact codec；集中 OpenPI 模型契约；CLI 使用显式 handler；统一目录发布的原子可见语义。
+行为保持型结构重构已经完成：集中 Artifact TypedDict 与 `MessageRef` codec；拆分 selection pipeline 和 artifact codec；集中 OpenPI 模型契约；CLI 使用显式 handler；统一目录发布的原子可见语义。
+
+当前实现入口为 `pi05_dataset.eef_selection.build_equal_eef_samples` 和 CLI `select-pi05-eef`。v1 的固定 50 Hz `select-pi05` 保留，不改变已有复现路径。
 
 ## 功能状态表
 
@@ -86,6 +88,9 @@
 | 50 Hz sample | Header-based 因果采样 | enabled | 每 20 ms 选择 `observation_cutoff_ns <= tick` 的最新帧组 | `pi05_dataset.selection.build_samples` | π0.5 频率适配 + 项目时序策略 |
 | 50 Hz sample | 图像 age 限制 | enabled | 最大 `40 ms`；约 30 Hz 图像可被相邻 50 Hz tick 复用 | `Pi05Policy.image_max_age_ns` | 项目参数 |
 | 50 Hz sample | 双臂状态选择 | enabled | tick 前最新状态；最大 Header age `2 ms`；不插值 | `pi05_dataset.selection._latest_arm` | 项目参数 |
+| 等 EEF 位移 sample | 双臂空间触发 | pending | `max(left,right) >= 5 mm`；端点欧氏距离；真实 Header tick | `pi05_dataset.eef_selection.build_equal_eef_samples` | 已实现、待正式数据验收 |
+| 等 EEF 位移 sample | 夹爪/时间触发 | pending | 归一化夹爪变化 `>=0.02`；最大间隔 `100 ms` | `EqualEefPolicy` | 已实现、待正式数据验收 |
+| 等 EEF 位移 sample | 完整帧组反向关联 | pending | 最新 `observation_cutoff_ns <= tick_ns`；image age `<=40 ms` | `eef_selection._latest_frame_group` | 已实现、待正式数据验收 |
 | 状态构造 | 14 维 joint state | enabled | `[left J1..J6, left gripper, right J1..J6, right gripper]` | `pi05_dataset.actions.make_state` | OpenPI ARX/Aloha 适配 |
 | 夹爪构造 | raw 到 `[0,1]` | enabled | `0=open, 1=closed`；超标定容差时报错 | `pi05_dataset.actions.GripperCalibration` | OpenPI 表达 + 项目标定 |
 | 动作构造 | measured-position proxy | enabled | 当前无 command Topic，使用 `action[t] = state[t]` | `pi05_dataset.selection.build_samples` | 项目示教适配 |
@@ -138,6 +143,8 @@ cleaning、selection、LeRobot dataset 和 norm stats 的目录发布语义已�
 | RGB 导出尺寸 | `640x360` |
 | 模型 action dimension | `32` |
 
+下一版 selector 默认值：EEF 位移 `5 mm`、夹爪归一化变化 `0.02`、最大采样间隔 `100 ms`、image max age `40 ms`、arm max age `2 ms`；LeRobot 名义 fps 和 action horizon 仍为 `50`。
+
 ## 正式数据结果
 
 | 项目 | 当前结果 |
@@ -164,7 +171,7 @@ cleaning、selection、LeRobot dataset 和 norm stats 的目录发布语义已�
 | 图像或关节插值、补帧 | disabled | 只引用真实消息 |
 | Depth 模型输入 | disabled | Depth 只用于完整帧组和审计 |
 | EEF action | disabled | 当前训练固定为 joint-only |
-| 等 EEF 位移 selector | pending | 只以 EEF 平移决定轨迹采样点；不改变 joint action 契约 |
+| 等 EEF 位移 selector 正式数据集 | pending | 代码与 v2 artifact 已完成；尚未在完整数据上重跑 selector、导出和 normalization stats |
 | fail/aborted 行为克隆训练 | disabled | 只保留审计，不进入当前训练集 |
 | 自动复用 pi05_base 官方 ARX stats | disabled | 当前正式训练使用 fresh stats |
 | 原始 MCAP 重写 | disabled | 所有处理均为只读派生 |

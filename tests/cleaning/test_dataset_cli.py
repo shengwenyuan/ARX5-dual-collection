@@ -25,6 +25,17 @@ class DatasetCliTest(unittest.TestCase):
                 "--right-gripper-closed", "0",
             ],
             [
+                "select-pi05-eef",
+                "--input-root", "/input",
+                "--audit-root", "/audit",
+                "--output-root", "/output",
+                "--task", "task",
+                "--left-gripper-open", "-1",
+                "--left-gripper-closed", "0",
+                "--right-gripper-open", "-1",
+                "--right-gripper-closed", "0",
+            ],
+            [
                 "to-lerobot",
                 "--input-root", "/input",
                 "--selection-dir", "/selection",

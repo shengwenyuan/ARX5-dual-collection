@@ -42,10 +42,13 @@ class ArmSample:
     ref: MessageRef
     joint_positions: tuple[float, ...]
     gripper_position: float
+    eef_xyzrpy: tuple[float, ...] = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
 
     def __post_init__(self) -> None:
         if len(self.joint_positions) != 6:
             raise ValueError("joint_positions must contain six values")
+        if len(self.eef_xyzrpy) != 6:
+            raise ValueError("eef_xyzrpy must contain six values")
 
 
 @dataclass(frozen=True, slots=True)
