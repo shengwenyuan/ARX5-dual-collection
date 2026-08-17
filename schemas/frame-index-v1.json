@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://arx5.local/schemas/frame-index-v1.json",
+  "title": "ARX5 model-independent causal frame group",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "episode_id", "frame_group_id", "observation_cutoff_ns", "images", "arms"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "episode_id": { "type": "string", "minLength": 1 },
+    "frame_group_id": { "type": "integer", "minimum": 0 },
+    "observation_cutoff_ns": { "type": "integer", "minimum": 0 },
+    "images": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["overview", "left", "right"],
+      "properties": {
+        "overview": { "$ref": "#/$defs/image_pair" },
+        "left": { "$ref": "#/$defs/image_pair" },
+        "right": { "$ref": "#/$defs/image_pair" }
+      }
+    },
+    "arms": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["left", "right"],
+      "properties": {
+        "left": { "$ref": "#/$defs/arm" },
+        "right": { "$ref": "#/$defs/arm" }
+      }
+    }
+  },
+  "$defs": {
+    "ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["topic", "sequence", "header_stamp_ns", "bag_timestamp_ns"],
+      "properties": {
+        "topic": { "type": "string", "minLength": 1 },
+        "sequence": { "type": "integer", "minimum": 0 },
+        "header_stamp_ns": { "type": "integer", "minimum": 0 },
+        "bag_timestamp_ns": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "image_pair": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stamp_ns", "color", "depth"],
+      "properties": {
+        "stamp_ns": { "type": "integer", "minimum": 0 },
+        "color": { "$ref": "#/$defs/ref" },
+        "depth": { "$ref": "#/$defs/ref" }
+      }
+    },
+    "arm": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ref", "age_ns"],
+      "properties": {
+        "ref": { "$ref": "#/$defs/ref" },
+        "age_ns": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

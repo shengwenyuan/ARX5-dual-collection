@@ -1,0 +1,33 @@
+FROM arx5-dual-collection:production
+
+ARG LEROBOT_COMMIT=0cf864870cf29f4738d3ade893e6fd13fbd7cdb5
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ffmpeg git python3-venv \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN python3 -m venv --system-site-packages /opt/dataset-venv \
+    && /opt/dataset-venv/bin/python -m pip install --no-cache-dir \
+        av==17.0.0 \
+        datasets==3.6.0 \
+        deepdiff==8.5.0 \
+        draccus==0.10.0 \
+        imageio==2.37.0 \
+        jsonlines==4.0.0 \
+        numpy==1.26.4 \
+        packaging==25.0 \
+        Pillow==11.2.1 \
+    && /opt/dataset-venv/bin/python -m pip install --no-cache-dir \
+        --extra-index-url https://download.pytorch.org/whl/cpu \
+        torch==2.7.1+cpu \
+        torchvision==0.22.1+cpu \
+    && /opt/dataset-venv/bin/python -m pip install --no-cache-dir --no-deps \
+        "lerobot @ git+https://github.com/huggingface/lerobot.git@${LEROBOT_COMMIT}"
+
+COPY pyproject.toml /opt/arx5-dataset/
+COPY src /opt/arx5-dataset/src
+RUN /opt/dataset-venv/bin/python -m pip install --no-cache-dir --no-deps /opt/arx5-dataset
+
+ENV PATH="/opt/dataset-venv/bin:${PATH}"
+ENV PYTHONPATH="/opt/arx5-dataset/src:${PYTHONPATH}"
+WORKDIR /workspace

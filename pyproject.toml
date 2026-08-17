@@ -9,9 +9,15 @@ requires-python = ">=3.10"
 
 [project.scripts]
 arx5-collect = "arx5_collection.production.cli:main"
+arx5-dataset = "arx5_collection.dataset_cli:main"
 
 [project.optional-dependencies]
 test = ["jsonschema>=4.26,<5", "pytest>=8,<9"]
+dataset = [
+  "numpy>=1.26,<3",
+  "Pillow>=11,<12",
+  "lerobot @ git+https://github.com/huggingface/lerobot.git@0cf864870cf29f4738d3ade893e6fd13fbd7cdb5",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
