@@ -14,6 +14,7 @@ export type WindowName =
   | "calibration"
   | "devices"
   | "data-check"
+  | "dagger"
   | "logs"
   | "demo"
   | null;

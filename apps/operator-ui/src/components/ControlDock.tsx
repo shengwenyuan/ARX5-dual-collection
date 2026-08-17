@@ -29,7 +29,16 @@ export function ControlDock({ state, dispatch }: ControlDockProps) {
       </div>
 
       <div className="control-group primary-group">
-        <span className="control-label">Episode 主操作</span>
+        <div className="control-heading-row">
+          <span className="control-label">Episode 主操作 · 示教录制</span>
+          <button
+            className="mode-entry"
+            onClick={() => dispatch({ type: "window.open", window: "dagger" })}
+            type="button"
+          >
+            DAgger 模式 <span>PLANNED</span>
+          </button>
+        </div>
         <div className="primary-actions">
           <button
             className="session-button"

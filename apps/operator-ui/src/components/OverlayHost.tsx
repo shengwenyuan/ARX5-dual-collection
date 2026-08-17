@@ -63,6 +63,12 @@ export function OverlayHost({ state, devices, dispatch }: OverlayHostProps) {
         />
         {state.activeWindow === "station" && <StationTerminal />}
         {state.activeWindow === "calibration" && <PlaceholderPanel label="Calibration" />}
+        {state.activeWindow === "dagger" && (
+          <PlaceholderPanel
+            label="DAgger 采集模式"
+            detail="该模式将拥有独立的采集动作与状态契约。当前入口仅用于固定主界面位置，不启动 Session。"
+          />
+        )}
         {state.activeWindow === "data-check" && <PlaceholderPanel label="数据检查 / 清洗" />}
         {state.activeWindow === "devices" && (
           <DevicePanel devices={devices} healthy={state.devicesHealthy} />
@@ -101,13 +107,13 @@ function StationTerminal() {
   );
 }
 
-function PlaceholderPanel({ label }: { label: string }) {
+function PlaceholderPanel({ label, detail }: { label: string; detail?: string }) {
   return (
     <div className="placeholder-panel">
       <span className="placeholder-symbol">◇</span>
       <h3>{label}</h3>
-      <p>该功能在 beta1 中明确占位，不执行真实逻辑。</p>
-      <span className="stub-mark">BETA 2 对齐</span>
+      <p>{detail ?? "该功能当前明确占位，不执行真实逻辑。"}</p>
+      <span className="stub-mark">NOT IMPLEMENTED</span>
     </div>
   );
 }
@@ -188,6 +194,7 @@ function modalTitle(windowName: NonNullable<OperatorState["activeWindow"]>): str
     station: "Station 初始化终端",
     calibration: "Calibration",
     devices: "七设备身份检查",
+    dagger: "DAgger 采集模式",
     "data-check": "数据检查",
     logs: "运行日志",
     demo: "Simulation Controls",

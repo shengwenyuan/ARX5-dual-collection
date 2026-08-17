@@ -169,6 +169,11 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--blue); outl
 .control-dock { display: grid; grid-template-columns: 1.05fr 1.75fr 1.1fr; gap: 1px; min-width: 0; border-top: 1px solid var(--border); background: var(--border); }
 .control-group { min-width: 0; padding: 14px 16px; background: #0c1118; }
 .control-label { display: block; margin-bottom: 10px; color: var(--muted-2); font: 700 9px ui-monospace, monospace; letter-spacing: 0.14em; text-transform: uppercase; }
+.control-heading-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.control-heading-row .control-label { margin-bottom: 0; }
+.mode-entry { display: flex; align-items: center; gap: 7px; padding: 4px 7px; border: 1px solid rgba(169,139,255,0.36); border-radius: 5px; background: rgba(169,139,255,0.07); color: var(--violet); font: 700 8px ui-monospace, monospace; cursor: pointer; }
+.mode-entry:hover { border-color: rgba(169,139,255,0.7); background: rgba(169,139,255,0.13); }
+.mode-entry span { color: var(--muted-2); font-size: 7px; letter-spacing: 0.08em; }
 .button-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
 .control-button { display: flex; min-height: 68px; flex-direction: column; align-items: flex-start; justify-content: space-between; padding: 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: #c6ced8; font-size: 10px; cursor: pointer; }
 .control-button:hover { border-color: #465365; background: var(--surface-2); }
