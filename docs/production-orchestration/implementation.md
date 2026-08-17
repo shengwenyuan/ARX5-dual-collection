@@ -1,20 +1,20 @@
 # 生产编排与完整 Episode 集成计划
 
-- Status: `in-progress`
+- Status: `w4-success-path-accepted-stability-pending`
 - Parent: `meta_plan.md`
 - Branch: `main`
-- Target: `w3-arx5`、ROS 2 Jazzy、单一 Privileged Docker Image
+- Target: `w3-arx5`、`w4-arx5`、ROS 2 Jazzy、单一 Privileged Docker Image
 
 ## 目标
 
-提供唯一生产可执行入口 `arx5-collect`，用结构化 Python 工程代码完成设备核对、长生命周期采集 Session、八路就绪、键盘 Episode、MCAP + JSON 原子提交和顺序关闭。临时 `/tmp` Shell 编排只作为实验依据，不进入生产实现。
+提供唯一生产可执行入口 `arx5-collect`，用结构化 Python 工程代码完成设备核对、长生命周期采集 Session、八路就绪、双踏板/键盘 Episode、MCAP + JSON 原子提交和顺序关闭。临时 `/tmp` Shell 编排只作为实验依据，不进入生产实现。
 
-## 已有基线
+## 当前基线
 
-- Episode Models、Ports、Store、metadata、Runtime、键盘 Trigger 和 CLI Core 已在 main。
-- `RosbagRecordingBackend`、`RosStreamMonitor`、三路 D405 Source、双臂 Adapter 与 telemetry 已分别验收。
-- 八路数据面已完成 43.925 秒联合 MCAP 里程碑；逐台启动 D405 后三机可稳定同时出帧。
-- 当前缺少真实 Runtime factory、生产进程管理、统一设备身份命令、任务配置和 Docker 生产命令。
+- Episode Models、Ports、Store、metadata、Runtime、双踏板/键盘 Trigger 和 CLI Core 均已进入 main。
+- `RosbagRecordingBackend`、`RosStreamMonitor`、三路 D405 Source、双臂 Adapter、telemetry 与归位前置检查均已接入生产 Session。
+- Station schema v2、统一 `station configure`/`devices`、真实 Runtime factory、进程管理、八路任务配置和 Docker 生产入口均已实现。
+- W3 完成分模块与异常路径回归，W4 完成从零 Station 初始化和生产 success 链路验收。
 
 ## 冻结架构
 
@@ -70,7 +70,8 @@ preflight
 
 ### Episode 与退出语义
 
-- READY 时按 `SPACE` 开始；录制时再次按 `SPACE` 正常结束并提交 `success`，随后回到 READY。
+- READY 时触发 activate，先完成双臂 GO_HOME 和恢复重力补偿，再启动 Recorder；录制时再次触发 activate，正常结束并提交 `success`，随后回到 READY。
+- abort 触发器中止当前 Episode 并回到 READY；正式双踏板不可用时自动回退到键盘 `SPACE/A`。
 - 录制时 `Ctrl+C` 关闭当前 MCAP、提交 `aborted`，随后退出生产程序并顺序停止 Source。
 - 空闲时 `Ctrl+C` 直接顺序停止 Source；不创建空 Episode。
 - 正式 Episode 目录只含 `episode.mcap` 与 `metadata.json`；失败提交保留 `.partial`，不覆盖、不自动删除。
@@ -91,7 +92,7 @@ src/arx5_collection/production/
 ```
 
 - Station 配置统一解析一次，Source、metadata 与设备核对共享同一模型，修复当前相机字符串/对象语义分叉。
-- 提供冻结的 w3 八路 Task 配置；任务描述仍由采集任务文件决定，不写死在代码中。
+- 提供冻结的八路 Task 配置；任务描述仍由采集任务文件决定，不写死在代码中。
 - 自有 Adapter 的关闭必须无 traceback；Vendor Controller 若在完成内部关闭后返回异常码，记录为明确 Vendor shutdown warning，不伪装为运行期成功。
 
 ### 统一查验边界
@@ -109,7 +110,7 @@ src/arx5_collection/production/
 
 ### 1. 配置与设备身份
 
-1. 冻结 Station v1 解析模型和八路 Task 配置。
+1. 冻结 Station v2 解析模型和八路 Task 配置。
 2. 实现统一 `devices` 命令，并覆盖缺失、重复、错配、非 USB3 与 CAN 未就绪。
 3. metadata 改用统一模型，保证序列号正确写入 JSON。
 
@@ -123,7 +124,7 @@ src/arx5_collection/production/
 ### 3. 完整 Episode 接线
 
 1. 实现真实 Runtime factory：`EpisodeStore + RosbagRecordingBackend + RosStreamMonitor`。
-2. 接入键盘开始/结束、连续 Episode、`Ctrl+C` aborted 后退出和遗留 `.partial` 报告。
+2. 接入双踏板/键盘开始结束、连续 Episode、`Ctrl+C` aborted 后退出和遗留 `.partial` 报告。
 3. 生成且校验恰好两个文件；metadata 指标必须来自最终 MCAP。
 
 ### 4. Docker 生产部署
@@ -141,9 +142,9 @@ src/arx5_collection/production/
 - Fake ROS Source 覆盖八路就绪、缺一路、低频和停流。
 - 连续十条 Episode、success、aborted、Ctrl+C、提交失败与 `.partial` 保留。
 
-### w3 真机
+### w3 / w4 真机
 
-1. `devices` 一条命令完成五个设备逻辑身份与链路核对。
+1. `devices` 一条命令完成双臂、三相机和双踏板七个设备逻辑身份与链路核对。
 2. 单一生产入口启动全部 Source；未满足八路真实出帧时禁止录制。
 3. 短 Episode 验证 `episode.mcap + metadata.json`、八路指标和顺序关闭。
 4. 90～150 秒正式 Episode 验证六路 30 Hz、双臂原生频率、无持续资源泄漏。
@@ -162,11 +163,12 @@ src/arx5_collection/production/
 - 2026-08-16：完成统一 devices 核对、常驻 telemetry 就绪门、逐颗 D405 放行、真实 Runtime 装配、SPACE/SPACE 与 Ctrl+C 语义，以及 Production Docker target/Compose；全量测试为 107 passed、16 subtests passed。
 - 2026-08-16：production image、PID 1、独立进程组、五设备、八路 READY、连续两条短 Episode 和完整回收已在 w3 通过；详见 `docs/milestones/production-session.md`。
 - 2026-08-16：重复 Ctrl+C 清理问题已修复并以连续双 INT、`EXIT=0` 真机复验；全量无硬件测试更新为 109 passed、16 subtests passed。
-- 待验收：90～150 秒正式 Episode 与必需 Source 停止后的 aborted 链路；完成前计划保持 `in-progress`。
+- 2026-08-17：W4 从标准 Docker Engine 和空 Station 配置完成部署，七设备身份复核全部匹配；多次生产启动成功，两条代表性 success Episode 的八路 MCAP、metadata、频率、单机 RGB-D 配对和统一退出均通过，详见 `docs/milestones/w4-production-session.md`。
+- success 主路径已允许批量采集。待验收：90～150 秒正式八路 Episode、必需 Source 停止后的 aborted 链路和长期压力；完成前不标记整体 `verified`。
 
 ## 已对齐决策
 
 - `arx5-collect` 全权管理 usbfs、USB2CAN、CAN 和 ROS 子进程；内部保持清晰模块边界。
 - 一次 `run` 是一个长生命周期采集 Session，硬件不会在 Episode 之间重启。
 - 每条 Episode 默认要求至少 80 GiB 可用空间。
-- `SPACE` 是正常开始/结束信号；录制中 `Ctrl+C` 提交 `aborted` 后退出整个 Session。
+- activate 是正常开始/结束信号，abort 中止当前 Episode 并继续 Session；双踏板缺失时分别回退到 `SPACE/A`，录制中 `Ctrl+C` 提交 `aborted` 后退出整个 Session。

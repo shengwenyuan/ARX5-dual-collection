@@ -1,6 +1,6 @@
 # Station Initialization 实施计划
 
-- Status: `w4-station-configure-accepted-production-session-pending`
+- Status: `w4-accepted`
 - Parent: `meta_plan.md`
 - Final validation station: `w4-arx5`
 - Dependency: 双踏板 Trigger 已在 W3 验收
@@ -189,4 +189,5 @@ src/arx5_collection/production/
 - W4 已在全新工作站完成标准 Docker Engine、production 镜像、固定持久化目录和容器运行时部署；Station/踏板相关测试 `28 passed`。
 - W4 初始化前只读盘点确认 2 个 USB2CAN、3 个 USB 3.2 D405 和 2 个稳定 hidraw 踏板，且无遗留容器或 CAN 接口。
 - W4 `station configure` 已完成左臂移动识别、三颗 D405 真实 720p RGB-D 验证和双踏板顺序绑定；相机 left=`261122270159`、overview=`261022274835`、right=`261022277068`，踏板 activate=`BF6EABE6`、abort=`BF6EA0CA`，最终配置原子提交至 `/var/lib/arx5-collection/station.json`。
-- W4 容器重启后的 `arx5-collect devices` 七项全部 `matched=true`。Station 初始化验收通过；尚待以 production Session 完成八路 Episode 链路验收。
+- W4 容器重启后的 `arx5-collect devices` 七项全部 `matched=true`。
+- W4 已多次成功启动 production Session；两条代表性 success Episode 均完成双踏板控制、八路 MCAP、metadata、原子目录和统一退出，Station 初始化与生产消费链路验收通过。90～150 秒压力与必需流故障注入继续由生产编排计划跟踪。

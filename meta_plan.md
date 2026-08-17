@@ -10,7 +10,7 @@
 - 除重力补偿外，控制白名单只包含 `docs/post-episode-reset/requirements.md` 定义的 Episode 开始前 `GO_HOME`：Recorder 必须尚未启动，归位完成后必须恢复重力补偿。任何其他模块不得复用或扩展该运动控制权限。
 - 左右手腕各安装一颗 RealSense D405；第三颗位于桌面正中上方约 50 cm，俯视桌面。
 - 三颗摄像机通过 USB 接入采集主机。第三视角允许采集者手臂入镜。
-- 录制开始与结束使用统一触发接口。当前没有脚踏板设备和驱动，v0.1 使用键盘信号替代，并预留脚踏板适配器。
+- 录制开始与结束使用统一触发接口。v0.1 默认使用两只独立 USB 踏板：activate 控制开始与 success 结束，abort 控制中止当前 Episode；踏板不可用时自动回退到键盘 `SPACE/A`。
 - CAN 口及设备映射以真机上电结果为准，写入站点配置，不硬编码在业务代码中。
 - 提供一个统一设备身份命令，同时读取站点配置并探测 ARX5 与 RealSense；按逻辑角色输出期望序列号、实测序列号和匹配结果，任何缺失、重复或错配都明确失败。
 
@@ -20,7 +20,7 @@
 
 - 官方驱动集成与设备启动。
 - 固定 ROS 2 Topic、Episode 状态机和命令行入口。
-- 键盘触发录制，预留脚踏板输入接口。
+- 双踏板 Trigger、键盘自动回退和长生命周期采集 Session。
 - MCAP 与 JSON 录制、临时写入、完整关闭和原子提交。
 - 实际频率监督、录制结果检查和基础回放验证。
 - 典型 90～150 秒 Episode，以及长时间连续开机采集。
@@ -39,7 +39,7 @@
 - 全部核心功能集成在一个 Docker Container 中，Docker Image 是 v0.1 的部署单位。
 - v0.1 使用 `privileged container + host network`，优先保证 CAN、摄像机及后续 USB 输入设备可见和真机调试效率。
 - 设备权限最小化属于后续部署优化，不作为首版验收条件。
-- 本地 Mac 用于代码同步与提交；`w3-arx5` 用于容器部署、真机调试和最终验收。
+- 本地 Mac 用于代码同步与提交；`w3-arx5` 用于持续开发与回归，`w4-arx5` 用于全新工作站部署和最终生产链路验收。
 
 ## 驱动边界
 
@@ -47,7 +47,7 @@
 
 1. `ARXroboticsX/ARX_X5` 官方 SDK 及其 ROS 2 配置；明确排除 `ARX5_beta`。
 2. RealSense D405 官方稳定 SDK。版本按现有固件的官方兼容矩阵选择，不追逐 beta 或不匹配的新版本。
-3. 录制触发输入：v0.1 使用键盘，后续接入脚踏板及其他 USB 输入设备驱动。
+3. 录制触发输入：LinkStone A096H 双踏板使用已验收的 hidraw 报告和稳定 USB 序列号，键盘作为自动回退。
 
 驱动先以子仓或源码依赖集成，再封装成项目内部稳定接口。接口成熟后按实际语言形态整理为 ROS 2 Package、Python Package 或共享库，不要求所有驱动采用同一种打包方式。
 
@@ -102,12 +102,15 @@ v0.1 每颗 D405 只发布彩色图与对齐 Depth，不发布 `CameraInfo`。�
 
 ## Episode
 
-状态机保持简单：
+状态机保持简单；每条 Episode 开始前先执行冻结的归位白名单，Recorder 在归位期间不得运行：
 
 ```text
-READY --录制触发--> RECORDING --录制触发--> FINALIZING --> COMPLETE --> READY
-                         \--设备异常--> ABORTED -------> READY
+READY --activate/GO_HOME + G_COMPENSATION--> RECORDING
+RECORDING --activate--> FINALIZING --> COMPLETE --> READY
+RECORDING --abort/设备异常--> ABORTED --> READY
 ```
+
+`arx5-collect run` 是长生命周期采集 Session：usbfs、CAN、ARX5 和三颗 D405 只启动一次，多条 Episode 之间不反复重启硬件；在 READY 按 `Ctrl+C` 才统一顺序回收。
 
 录制时持续写入临时目录，不在内存中缓存整条 Episode：
 
@@ -163,11 +166,19 @@ Schema 必须可扩展，新增字段不得改变已有字段语义。
 ## 首版验收重点
 
 - 容器能够同时访问双臂和三颗 D405。
-- 键盘信号可以连续控制多条 Episode 的开始与结束；脚踏板只验收接口预留。
+- 双踏板可以连续控制多条 Episode 的开始、success 结束和 abort；踏板缺失时键盘自动回退。
 - 三路 1280×720 RGB-D @ 30 Hz 能够连续录制至少 150 秒，并记录 USB、实际频率和磁盘吞吐表现。
 - 90～150 秒录制可完整关闭，MCAP 可读取，JSON 与 MCAP 一一对应。
 - 长时间运行期间无持续资源泄漏，实际频率和异常中断可被观察。
 - 必需 Topic 停止时生成 `aborted` Episode，不生成表面成功的坏数据。
+
+## 当前验收结论
+
+- W3 已通过三路 D405 720p RGB-D 150 秒并发基线、双臂约 1000 Hz、八路联合 MCAP、长生命周期 Session、双踏板和异常结束回归。
+- W4 已从标准 Docker Engine 和空 Station 配置开始完成 production image 部署、2 个 USB2CAN、3 个 USB 3.2 D405、2 个踏板的角色绑定；容器重启后七项身份复核全部匹配。
+- W4 已多次成功启动生产 Session。两条代表性 success Episode 为 27.54 秒/9.10 GB 与 46.13 秒/15.27 GB：八路完整，双臂约 1000 Hz，三相机约 30 Hz，单机 RGB/Aligned Depth 全部逐帧同时间戳配对，metadata 与 MCAP 计数一致。
+- 三颗 D405 仍是独立采样：本轮相机间最近帧中位偏差约 10～15 ms，并有孤立的约 66.7 ms 帧间隔；原始写入约 331 MB/s。系统保留真实数据，不插值、不伪造同步。
+- Station 初始化与生产 success 路径已允许进入批量采集；90～150 秒完整八路 Episode、必需流故障注入和长期压力仍是最终稳定性验收项。
 
 ## 开发前置确认
 
