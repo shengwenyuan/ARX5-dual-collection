@@ -12,13 +12,16 @@ from arx5_collection.episode.models import EpisodeRequest
 from arx5_collection.episode.ports import RecordTrigger
 from arx5_collection.episode.runtime import EpisodeRuntime
 from arx5_collection.episode.store import EpisodeStore
+from arx5_collection.reset import ResetCoordinator, ResetState
 from arx5_collection.ros2_adapters.monitor import RosStreamMonitor
 from arx5_collection.ros2_adapters.recording import RosbagRecordingBackend
+from arx5_collection.ros2_adapters.reset import RosDualArmResetController
 
 from .checks import CheckPhase, CheckResult, require_passed
 from .config import StationConfig
 from .devices import DeviceIdentityVerifier
 from .processes import RosCommandSet, RosProcessSupervisor
+from .ports import SessionArmController, SessionStreamMonitor
 from .readiness import RosReadinessGate
 from .system import SystemBringup
 
@@ -26,6 +29,8 @@ from .system import SystemBringup
 GIB = 1024**3
 CheckSink = Callable[[CheckResult], None]
 WarningSink = Callable[[str], None]
+ResetStateSink = Callable[[ResetState], None]
+HomeTimingSink = Callable[[str, float], None]
 
 
 class ProductionSession:
@@ -44,6 +49,11 @@ class ProductionSession:
         supervisor: RosProcessSupervisor | None = None,
         readiness: RosReadinessGate | None = None,
         commands: RosCommandSet | None = None,
+        backend: RosbagRecordingBackend | None = None,
+        monitor: SessionStreamMonitor | None = None,
+        home_controller: SessionArmController | None = None,
+        home_state_sink: ResetStateSink | None = None,
+        home_timing_sink: HomeTimingSink | None = None,
         check_sink: CheckSink | None = None,
         warning_sink: WarningSink | None = None,
     ) -> None:
@@ -60,10 +70,21 @@ class ProductionSession:
         self.supervisor = supervisor or RosProcessSupervisor()
         self.readiness = readiness or RosReadinessGate()
         self.commands = commands or RosCommandSet(log_dir)
+        self.backend = backend or RosbagRecordingBackend()
+        self.monitor = monitor or RosStreamMonitor(self.backend)
+        self.home_controller = home_controller or RosDualArmResetController(
+            timing_sink=home_timing_sink
+        )
+        self.home = ResetCoordinator(
+            self.home_controller,
+            state_sink=home_state_sink,
+        )
         self.check_sink = check_sink or (lambda result: None)
         self.warning_sink = warning_sink or (lambda warning: None)
         self._system_started = False
         self._readiness_started = False
+        self._monitor_open = False
+        self._home_open = False
         self._started = False
 
     def __enter__(self) -> ProductionSession:
@@ -94,6 +115,8 @@ class ProductionSession:
             self._system_started = True
             self.readiness.start()
             self._readiness_started = True
+            self.monitor.open()
+            self._monitor_open = True
 
             self.supervisor.start(self.commands.arx5_v2_collect())
             self.supervisor.start(self.commands.arm_state_adapter())
@@ -104,6 +127,8 @@ class ProductionSession:
                     self.supervisor.require_running,
                 )
             )
+            self.home_controller.open()
+            self._home_open = True
 
             for camera in self.station.cameras:
                 self.supervisor.start(self.commands.d405_source(camera))
@@ -117,6 +142,11 @@ class ProductionSession:
                         self.supervisor.require_running,
                     )
                 )
+            self.monitor.wait_until_ready(
+                self._stream_ids(),
+                self.readiness_timeout_s,
+                self.supervisor.require_running,
+            )
             self.pre_episode_check()
             self._started = True
         except BaseException:
@@ -134,19 +164,16 @@ class ProductionSession:
         self,
         request: EpisodeRequest,
         trigger: RecordTrigger,
-        pre_recording_action: Callable[[], None] | None = None,
     ) -> EpisodeRuntime:
         def prepare_episode() -> None:
             self.pre_episode_check()
-            if pre_recording_action is not None:
-                pre_recording_action()
+            self.home.run()
 
-        backend = RosbagRecordingBackend()
         return EpisodeRuntime(
             store=EpisodeStore(request.output_root, min_free_bytes=self.min_free_bytes),
             trigger=trigger,
-            backend=backend,
-            monitor=RosStreamMonitor(backend),
+            backend=self.backend,
+            monitor=self.monitor,
             software_version=self.software_version,
             pre_episode_check=prepare_episode,
         )
@@ -157,6 +184,18 @@ class ProductionSession:
 
     def _stop_owned_resources(self) -> None:
         errors: list[BaseException] = []
+        if self._monitor_open:
+            try:
+                self.monitor.close()
+            except BaseException as error:
+                errors.append(error)
+            self._monitor_open = False
+        if self._home_open:
+            try:
+                self.home_controller.close()
+            except BaseException as error:
+                errors.append(error)
+            self._home_open = False
         if self.supervisor.names:
             try:
                 exits = self.supervisor.stop_all()

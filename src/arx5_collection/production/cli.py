@@ -17,8 +17,7 @@ from arx5_collection.episode.cli import (
     one_character,
     run_episode_loop,
 )
-from arx5_collection.reset import ResetCoordinator, ResetState
-from arx5_collection.ros2_adapters.reset import RosDualArmResetController
+from arx5_collection.reset import ResetState
 
 from .checks import CheckFailure, CheckResult
 from .config import load_station_config, validate_task_streams
@@ -107,22 +106,17 @@ def run_session(args: argparse.Namespace) -> int:
         software_version=_software_version(),
         min_free_bytes=args.min_free_gib * GIB,
         readiness_timeout_s=args.readiness_timeout_s,
+        home_state_sink=lambda state: render_reset_state(state, sys.stderr),
+        home_timing_sink=lambda phase, elapsed_s: render_home_timing(
+            phase, elapsed_s, sys.stderr
+        ),
         check_sink=check_sink,
         warning_sink=lambda message: print(f"WARNING {message}", file=sys.stderr),
     )
     with termination_as_interrupt(), session:
         print(f"SESSION READY logs={session_log_dir}", flush=True)
         with KeyboardTrigger(key=args.trigger_key) as trigger:
-            reset = ResetCoordinator(
-                RosDualArmResetController(),
-                delay_s=0,
-                state_sink=lambda state: render_reset_state(state, sys.stderr),
-            )
-            runtime = session.create_runtime(
-                request,
-                trigger,
-                pre_recording_action=reset.run,
-            )
+            runtime = session.create_runtime(request, trigger)
             return run_episode_loop(
                 runtime,
                 request,
@@ -138,13 +132,15 @@ def render_check(result: CheckResult, output: TextIO) -> None:
 
 
 def render_reset_state(state: ResetState, output: TextIO) -> None:
-    if state is ResetState.WAITING:
-        message = "RESET_WAITING: reset starts in 5 seconds"
-    elif state is ResetState.RESETTING:
+    if state is ResetState.RESETTING:
         message = "RESETTING: moving both arms to Vendor home"
     else:
         message = "RESET_COMPLETE: gravity compensation restored"
     print(message, file=output, flush=True)
+
+
+def render_home_timing(phase: str, elapsed_s: float, output: TextIO) -> None:
+    print(f"HOME_TIMING {phase}={elapsed_s:.3f}s", file=output, flush=True)
 
 
 @contextmanager

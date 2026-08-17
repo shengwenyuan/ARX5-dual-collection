@@ -116,6 +116,45 @@ class FakeCommands:
         return NamedProcess(f"d405-{camera.role}")
 
 
+class FakeSessionMonitor:
+    def __init__(self, events: list[str]) -> None:
+        self.events = events
+
+    def open(self) -> None:
+        self.events.append("monitor:open")
+
+    def wait_until_ready(self, stream_ids, timeout_s, process_check) -> None:
+        process_check()
+        self.events.append("monitor:ready")
+
+    def start(self, streams) -> None:
+        self.events.append("monitor:episode-start")
+
+    def required_failure(self):
+        return None
+
+    def stop(self):
+        self.events.append("monitor:episode-stop")
+        return ()
+
+    def close(self) -> None:
+        self.events.append("monitor:close")
+
+
+class FakeHomeController:
+    def __init__(self, events: list[str]) -> None:
+        self.events = events
+
+    def open(self) -> None:
+        self.events.append("home:open")
+
+    def reset_both(self) -> None:
+        self.events.append("home:reset")
+
+    def close(self) -> None:
+        self.events.append("home:close")
+
+
 class ProductionSessionTest(unittest.TestCase):
     def test_one_session_starts_sources_once_and_stops_in_reverse(self) -> None:
         events: list[str] = []
@@ -132,6 +171,8 @@ class ProductionSessionTest(unittest.TestCase):
                 supervisor=FakeSupervisor(events),  # type: ignore[arg-type]
                 readiness=FakeReadiness(events),  # type: ignore[arg-type]
                 commands=FakeCommands(),  # type: ignore[arg-type]
+                monitor=FakeSessionMonitor(events),
+                home_controller=FakeHomeController(events),
             )
             session.start()
             session.pre_episode_check()
@@ -160,6 +201,8 @@ class ProductionSessionTest(unittest.TestCase):
             ],
         )
         self.assertEqual(events[-2:], ["gate:stop", "system:stop"])
+        self.assertLess(events.index("monitor:close"), events.index("home:close"))
+        self.assertLess(events.index("home:close"), events.index("ros:stop:d405-overview"))
 
     def test_repeated_signals_do_not_interrupt_owned_cleanup(self) -> None:
         events: list[str] = []
@@ -176,6 +219,8 @@ class ProductionSessionTest(unittest.TestCase):
                 supervisor=RepeatedInterruptSupervisor(events),  # type: ignore[arg-type]
                 readiness=FakeReadiness(events),  # type: ignore[arg-type]
                 commands=FakeCommands(),  # type: ignore[arg-type]
+                monitor=FakeSessionMonitor(events),
+                home_controller=FakeHomeController(events),
             )
             session.start()
             session.stop()
@@ -197,6 +242,8 @@ class ProductionSessionTest(unittest.TestCase):
                 supervisor=FakeSupervisor(events),  # type: ignore[arg-type]
                 readiness=FakeReadiness(events),  # type: ignore[arg-type]
                 commands=FakeCommands(),  # type: ignore[arg-type]
+                monitor=FakeSessionMonitor(events),
+                home_controller=FakeHomeController(events),
             )
             session.start()
             request = EpisodeRequest(
@@ -206,16 +253,12 @@ class ProductionSessionTest(unittest.TestCase):
                 ROOT / "config" / "station.w3.json",
                 (),
             )
-            runtime = session.create_runtime(
-                request,
-                object(),  # type: ignore[arg-type]
-                pre_recording_action=lambda: events.append("go-home"),
-            )
+            runtime = session.create_runtime(request, object())  # type: ignore[arg-type]
             assert runtime.pre_episode_check is not None
             runtime.pre_episode_check()
             session.stop()
 
-        self.assertLess(events.index("gate:require"), events.index("go-home"))
+        self.assertLess(events.index("gate:require"), events.index("home:reset"))
 
 
 if __name__ == "__main__":

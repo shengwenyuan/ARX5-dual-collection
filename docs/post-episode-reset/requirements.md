@@ -22,6 +22,8 @@ SPACE
 - 只有左右臂均确认进入重力补偿后才允许启动 Recorder，避免机械臂保持或掉落。
 - Episode 由 `SPACE`、`A`、必需流异常或录制中 `Ctrl+C` 结束后均不自动归位。
 - 空闲 `Ctrl+C` 只关闭 Session；录制中 `Ctrl+C` 先提交 aborted Episode，再关闭 Session。
+- 该功能默认属于 production 采集入口；用户只设置 `ARX5_OUTPUT_ROOT`，不需要归位相关参数或开关。
+- Home Controller 与 Stream Monitor 均由 `ProductionSession` 启动一次并在全部 Episode 间复用。
 
 ## 控制边界
 
@@ -46,13 +48,14 @@ docker/patches/arx-x5-go-home-services.patch
 
 ProductionSession.create_runtime
   pre_episode_check
-  -> pre_recording_action
+  -> default Home Coordinator
   -> EpisodeRuntime 启动 Recorder
 ```
 
 - CLI 只渲染复位状态，不承载运动步骤。
 - Episode Runtime 不 import Vendor SDK。
 - 复位逻辑与离线数据清洗无关。
+- 标准入口保持 `ARX5_OUTPUT_ROOT=<path> docker compose -f docker/compose.production.yaml run --rm --name arx5-collect-w3 collector`。
 
 ## 验收
 
@@ -72,3 +75,8 @@ ProductionSession.create_runtime
 - 本轮纯软件验收为 `117 passed, 16 subtests passed`；顺序测试确认归位与重力补偿完成早于 Recorder start。
 - w3 独立 feature 镜像 `arx5-dual-collection:post-reset-df012c1` 构建成功；无设备静态检查确认生产入口不存在结束后归位回调。
 - 下一步由用户监督真机复验 SPACE 前置归位、重力补偿保持和 Ctrl+C 单纯退出。
+- Session 生命周期重构软件验收为 `119 passed`，8 个 installed-code link scripts 通过。
+- w3 镜像 `arx5-dual-collection:post-reset-session-20260817` 已构建并同时部署为 `arx5-dual-collection:production`；旧 production 镜像保留为 `production-before-session-lifecycle`。
+- 2026-08-17 真机 smoke 连续完成两条 Episode：第一条 `success` 7.36 秒，第二条由录制中 `Ctrl+C` 按预期提交 `recording interrupted`/`aborted` 5.55 秒；两条均为八路完整且频率正常。
+- 本轮没有 telemetry startup false positive，GO_HOME、重力补偿、第二条 Episode 复用与统一关闭行为符合预期，允许合入 main。
+- 原计划的连续 20 条真机压力验收未执行；由 20 次软件生命周期测试覆盖，后续批量采集继续观察。
