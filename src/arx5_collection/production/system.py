@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import subprocess
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from time import monotonic, sleep
 from typing import Any
@@ -13,6 +14,14 @@ from .processes import ManagedProcess, ProcessExit, ProcessSpec
 
 
 CommandRunner = Callable[..., subprocess.CompletedProcess[str]]
+
+
+@dataclass(frozen=True, slots=True)
+class Usb2CanDevice:
+    path: Path
+    serial_number: str
+    vendor_id: str | None
+    product_id: str | None
 
 
 def default_runner(argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
@@ -79,7 +88,19 @@ class Usb2CanResolver:
         self.runner = runner
 
     def resolve(self, serial_number: str) -> Path:
-        matches = []
+        matches = [
+            device.path
+            for device in self.discover()
+            if device.serial_number == serial_number
+        ]
+        if len(matches) != 1:
+            raise RuntimeError(
+                f"USB2CAN serial {serial_number} resolved to {len(matches)} devices"
+            )
+        return matches[0]
+
+    def discover(self) -> tuple[Usb2CanDevice, ...]:
+        devices = []
         for path in sorted(self.device_root.glob("ttyACM*")):
             result = self.runner(
                 ["udevadm", "info", "--query=property", f"--name={path}"],
@@ -88,13 +109,22 @@ class Usb2CanResolver:
                 text=True,
             )
             properties = _properties(result.stdout) if result.returncode == 0 else {}
-            if properties.get("ID_SERIAL_SHORT") == serial_number:
-                matches.append(path)
-        if len(matches) != 1:
-            raise RuntimeError(
-                f"USB2CAN serial {serial_number} resolved to {len(matches)} devices"
-            )
-        return matches[0]
+            serial_number = properties.get("ID_SERIAL_SHORT", "").strip()
+            if (
+                serial_number
+                and properties.get("ID_VENDOR") == "ARX"
+                and properties.get("ID_MODEL") == "USB2CAN"
+                and properties.get("ID_USB_DRIVER") == "cdc_acm"
+            ):
+                devices.append(
+                    Usb2CanDevice(
+                        path=path,
+                        serial_number=serial_number,
+                        vendor_id=properties.get("ID_VENDOR_ID"),
+                        product_id=properties.get("ID_MODEL_ID"),
+                    )
+                )
+        return tuple(devices)
 
 
 class CanInterfaceManager:

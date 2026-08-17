@@ -24,7 +24,7 @@ from .fakes import FakeBackend, FakeMonitor, FakeTrigger
 
 
 ROOT = Path(__file__).parents[2]
-STATION_PATH = ROOT / "config" / "station.w3.json"
+STATION_PATH = ROOT / "config" / "station.example.json"
 SCHEMA_PATH = ROOT / "schemas" / "episode-metadata-v1.json"
 STREAM = StreamSpec("left_arm", "/embodiments/left_arm/state", True, 60.0)
 METRICS = (StreamMetrics(STREAM.id, 5_400, 90.0, 60.0, 18.0),)

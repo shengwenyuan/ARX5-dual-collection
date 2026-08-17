@@ -38,6 +38,7 @@ class DeviceIdentityVerifier:
         arx_devices = inventory.get("arx_usb", [])
         realsense = inventory.get("realsense", {})
         camera_devices = realsense.get("devices", [])
+        pedal_devices = inventory.get("pedals", [])
 
         identities: list[DeviceIdentity] = []
         for arm in self.station.arms:
@@ -86,6 +87,33 @@ class DeviceIdentityVerifier:
                     ),
                 )
             )
+        if self.station.triggers is not None:
+            for pedal in (self.station.triggers.activate, self.station.triggers.abort):
+                matches = [
+                    device
+                    for device in pedal_devices
+                    if device.get("vendor_id") == pedal.vendor_id
+                    and device.get("product_id") == pedal.product_id
+                    and device.get("serial_number") == pedal.serial_number
+                ]
+                detected = matches[0] if len(matches) == 1 else None
+                identities.append(
+                    DeviceIdentity(
+                        id=f"trigger_{pedal.role}",
+                        kind="pedal",
+                        configured_serial=pedal.serial_number,
+                        detected_serial=(
+                            None if detected is None else detected.get("serial_number")
+                        ),
+                        link=None if detected is None else detected.get("path"),
+                        matched=len(matches) == 1,
+                        detail=(
+                            f"matched {matches[0].get('path')}"
+                            if len(matches) == 1
+                            else f"expected one hidraw pedal, found {len(matches)}"
+                        ),
+                    )
+                )
         return tuple(identities)
 
     def checks(self) -> tuple[CheckResult, ...]:
@@ -108,4 +136,3 @@ def _camera_failure(
     if match_count != 1:
         return f"expected one RealSense, found {match_count}"
     return f"RealSense is not on USB3: usb_type={usb_type}"
-

@@ -22,12 +22,12 @@ class CameraSpec:
 def _camera_serial(role: str, value: Any) -> str:
     if isinstance(value, str):
         serial = value
-    elif isinstance(value, dict):
-        serial = value.get("serial", "")
+    elif isinstance(value, dict) and set(value) == {"serial_number"}:
+        serial = value["serial_number"]
     else:
         serial = ""
     if not isinstance(serial, str) or not serial.strip():
-        raise ValueError(f"camera {role!r} must define a non-empty serial")
+        raise ValueError(f"camera {role!r} must define a non-empty serial_number")
     return serial.strip()
 
 

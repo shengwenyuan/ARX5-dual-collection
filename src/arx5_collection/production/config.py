@@ -79,6 +79,19 @@ class StationConfig:
             }
             for camera in self.cameras
         )
+        if self.triggers is not None:
+            devices.extend(
+                {
+                    "id": f"trigger_{pedal.role}",
+                    "kind": "pedal",
+                    "serial_number": pedal.serial_number,
+                    "configuration": {
+                        "vendor_id": pedal.vendor_id,
+                        "product_id": pedal.product_id,
+                    },
+                }
+                for pedal in (self.triggers.activate, self.triggers.abort)
+            )
         return {
             "id": self.station_id,
             "config_schema_version": self.schema_version,

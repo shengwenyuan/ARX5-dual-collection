@@ -35,12 +35,42 @@ class Usb2CanResolverTest(unittest.TestCase):
 
             def runner(argv, **kwargs):
                 serial = "LEFT" if argv[-1].endswith("ttyACM0") else "RIGHT"
-                return subprocess.CompletedProcess(argv, 0, f"ID_SERIAL_SHORT={serial}\n", "")
+                return subprocess.CompletedProcess(
+                    argv,
+                    0,
+                    f"ID_SERIAL_SHORT={serial}\n"
+                    "ID_VENDOR=ARX\n"
+                    "ID_MODEL=USB2CAN\n"
+                    "ID_USB_DRIVER=cdc_acm\n",
+                    "",
+                )
 
             resolver = Usb2CanResolver(root, runner)
+            self.assertEqual(
+                [device.serial_number for device in resolver.discover()],
+                ["LEFT", "RIGHT"],
+            )
             self.assertEqual(resolver.resolve("RIGHT"), root / "ttyACM1")
             with self.assertRaisesRegex(RuntimeError, "resolved to 0"):
                 resolver.resolve("MISSING")
+
+    def test_ignores_arx_key_tty(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "ttyACM0").touch()
+
+            def runner(argv, **kwargs):
+                return subprocess.CompletedProcess(
+                    argv,
+                    0,
+                    "ID_SERIAL_SHORT=KEY\n"
+                    "ID_VENDOR=ARX\n"
+                    "ID_MODEL=ARX_KEY\n"
+                    "ID_USB_DRIVER=cdc_acm\n",
+                    "",
+                )
+
+            self.assertEqual(Usb2CanResolver(root, runner).discover(), ())
 
 
 class FakeResolver:
@@ -72,7 +102,7 @@ class SystemBringupTest(unittest.TestCase):
             root = Path(directory)
             usbfs_path = root / "usbfs_memory_mb"
             usbfs_path.write_text("16\n")
-            station = load_station_config(ROOT / "config" / "station.w3.json")
+            station = load_station_config(ROOT / "config" / "station.example.json")
             system = SystemBringup(
                 station,
                 root / "logs",

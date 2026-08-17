@@ -1,6 +1,6 @@
 # Station Initialization 实施计划
 
-- Status: `ready-for-implementation`
+- Status: `w3-accepted-awaiting-w4-zero-deployment`
 - Parent: `meta_plan.md`
 - Final validation station: `w4-arx5`
 - Dependency: 双踏板 Trigger 已在 W3 验收
@@ -176,4 +176,13 @@ src/arx5_collection/production/
 
 ## 实施记录
 
-- 等待双踏板 W3 验收后开始开发。
+- 双踏板 W3 验收已通过，Station Initialization 已开始实现。
+- 已实现 schema v2 原子 Store、统一 Inventory、踏板顺序绑定、D405 顺序绑定与真实 720p RGB-D 验证、左臂移动识别、统一 CLI 和运行期七设备身份复核。
+- 仓库真实 W3 配置已替换为无真实编号的 `station.example.json`；Compose 已移除 W3 容器名和报告路径，主机配置挂载允许 configure 原子写入。
+- W3 实测发现 `/dev/ttyACM1` 是 `ARX_KEY` 而非 USB2CAN；统一发现规则固定校验 `ARX + USB2CAN + cdc_acm`，不按 ttyACM 编号猜测。
+- 本地相关测试 `152 passed`；W3 production image `arx5-dual-collection:station-init-20260817` 构建成功，容器内新增模块测试 `13 passed`。
+- W3 只读 Inventory 已确认：2 个 USB2CAN、3 个 D405、2 个稳定 hidraw 踏板，并已进入完整 configure 真机流程。
+- W3 首次 configure 在右相机被枚举为 USB 2.1 时明确拒绝提交；用户修复上行接线后重试，三颗 D405 均以 USB 3.2 通过真实 RGB-D 启动验证。
+- W3 左臂移动识别得到 left=`0045002B5330530320323656`、right=`004E002E5330530320323656`；相机角色与既有实物标记一致。
+- W3 双踏板按本次实际踩动顺序绑定 activate=`BF554981`、abort=`BF6D54C4`。最终配置原子写入 `/var/lib/arx5-collection/station.json`，随后 `arx5-collect devices` 七项全部 matched。
+- W3 验收结论：失败保护、重试、真实链路验证、角色绑定、原子提交和运行期身份复核均符合计划；代码逻辑无需针对本轮优化，进入 W4 从零部署验收。

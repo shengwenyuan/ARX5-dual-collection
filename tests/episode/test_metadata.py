@@ -23,7 +23,7 @@ from arx5_collection.episode.models import (
 
 
 ROOT = Path(__file__).parents[2]
-STATION_PATH = ROOT / "config" / "station.w3.json"
+STATION_PATH = ROOT / "config" / "station.example.json"
 SCHEMA_PATH = ROOT / "schemas" / "episode-metadata-v1.json"
 
 
@@ -61,14 +61,14 @@ def result() -> EpisodeResult:
 class MetadataWriterTest(unittest.TestCase):
     def test_load_station_maps_current_devices(self) -> None:
         station = load_station(STATION_PATH)
-        self.assertEqual(station["id"], "w3-arx5")
-        self.assertEqual(station["config_schema_version"], 1)
-        self.assertEqual(len(station["devices"]), 5)
+        self.assertEqual(station["id"], "station-example")
+        self.assertEqual(station["config_schema_version"], 2)
+        self.assertEqual(len(station["devices"]), 7)
         self.assertEqual(
             station["devices"][0]["configuration"],
             {"can_interface": "can1", "sdk_type": 2},
         )
-        self.assertEqual(station["devices"][2]["serial_number"], "261122270960")
+        self.assertEqual(station["devices"][2]["serial_number"], "camera-left-serial")
 
     def test_build_metadata_maps_time_and_streams(self) -> None:
         metadata = build_metadata(request(), result(), load_station(STATION_PATH), "0.1.0")

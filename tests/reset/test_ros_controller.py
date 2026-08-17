@@ -34,3 +34,15 @@ def test_reset_reuses_open_controller_and_reports_phase_timings(monkeypatch) -> 
         "gravity_compensation",
         "total",
     ] * 20
+
+
+def test_gravity_only_never_commands_home(monkeypatch) -> None:
+    controller = RosDualArmResetController()
+    controller._context = object()
+    controller._gravity_clients = [object(), object()]
+    calls = []
+    monkeypatch.setattr(controller, "_call_all", lambda clients, label: calls.append(label))
+
+    controller.enable_gravity_compensation()
+
+    assert calls == ["G_COMPENSATION"]

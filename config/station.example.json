@@ -1,0 +1,34 @@
+{
+  "schema_version": 2,
+  "station_id": "station-example",
+  "sdk_type": 2,
+  "arms": [
+    {
+      "name": "left",
+      "usb_serial": "arm-left-serial",
+      "can_interface": "can1"
+    },
+    {
+      "name": "right",
+      "usb_serial": "arm-right-serial",
+      "can_interface": "can3"
+    }
+  ],
+  "cameras": {
+    "left": {"serial_number": "camera-left-serial"},
+    "right": {"serial_number": "camera-right-serial"},
+    "overview": {"serial_number": "camera-overview-serial"}
+  },
+  "triggers": {
+    "activate": {
+      "vendor_id": "0000",
+      "product_id": "0000",
+      "serial_number": "pedal-activate-serial"
+    },
+    "abort": {
+      "vendor_id": "0000",
+      "product_id": "0000",
+      "serial_number": "pedal-abort-serial"
+    }
+  }
+}

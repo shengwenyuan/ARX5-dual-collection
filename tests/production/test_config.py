@@ -31,24 +31,24 @@ def trigger_payload() -> dict[str, dict[str, object]]:
 
 
 class ProductionConfigTest(unittest.TestCase):
-    def test_w3_station_has_fixed_logical_identity(self) -> None:
-        station = load_station_config(ROOT / "config" / "station.w3.json")
-        self.assertEqual(station.station_id, "w3-arx5")
+    def test_example_station_has_fixed_logical_identity(self) -> None:
+        station = load_station_config(ROOT / "config" / "station.example.json")
+        self.assertEqual(station.station_id, "station-example")
         self.assertEqual([arm.role for arm in station.arms], ["left", "right"])
         self.assertEqual(
             [camera.serial_number for camera in station.cameras],
-            ["261122270960", "261022274824", "261122270651"],
+            ["camera-left-serial", "camera-right-serial", "camera-overview-serial"],
         )
-        self.assertEqual(station.metadata()["devices"][2]["serial_number"], "261122270960")
+        self.assertEqual(station.metadata()["devices"][2]["serial_number"], "camera-left-serial")
 
     def test_station_rejects_duplicate_identity(self) -> None:
-        payload = json.loads((ROOT / "config" / "station.w3.json").read_text())
+        payload = json.loads((ROOT / "config" / "station.example.json").read_text())
         payload["cameras"]["right"] = payload["cameras"]["left"]
         with self.assertRaisesRegex(ValueError, "serial numbers must be unique"):
             load_station_config(self.write_json(payload))
 
     def test_station_v2_loads_two_distinct_pedal_bindings(self) -> None:
-        payload = json.loads((ROOT / "config" / "station.w3.json").read_text())
+        payload = json.loads((ROOT / "config" / "station.example.json").read_text())
         payload["schema_version"] = 2
         payload["triggers"] = trigger_payload()
         station = load_station_config(self.write_json(payload))
@@ -57,7 +57,7 @@ class ProductionConfigTest(unittest.TestCase):
         self.assertEqual(station.triggers.abort.serial_number, "pedal-two")
 
     def test_station_v2_rejects_same_pedal_for_both_roles(self) -> None:
-        payload = json.loads((ROOT / "config" / "station.w3.json").read_text())
+        payload = json.loads((ROOT / "config" / "station.example.json").read_text())
         payload["schema_version"] = 2
         payload["triggers"] = trigger_payload()
         payload["triggers"]["abort"]["serial_number"] = "pedal-one"
@@ -65,7 +65,7 @@ class ProductionConfigTest(unittest.TestCase):
             load_station_config(self.write_json(payload))
 
     def test_station_v2_rejects_obsolete_event_code(self) -> None:
-        payload = json.loads((ROOT / "config" / "station.w3.json").read_text())
+        payload = json.loads((ROOT / "config" / "station.example.json").read_text())
         payload["schema_version"] = 2
         payload["triggers"] = trigger_payload()
         payload["triggers"]["activate"]["event_code"] = 57

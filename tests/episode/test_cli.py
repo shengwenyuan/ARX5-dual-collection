@@ -17,7 +17,7 @@ from arx5_collection.episode.ports import TriggerEvent
 
 
 ROOT = Path(__file__).parents[2]
-STATION_PATH = ROOT / "config" / "station.w3.json"
+STATION_PATH = ROOT / "config" / "station.example.json"
 
 
 class ContextTrigger(FakeTrigger):

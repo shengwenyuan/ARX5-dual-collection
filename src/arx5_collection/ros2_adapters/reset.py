@@ -145,6 +145,32 @@ class RosDualArmResetController:
         self.timing_sink("gravity_compensation", self.clock() - phase_started_s)
         self.timing_sink("total", self.clock() - total_started_s)
 
+    def enable_gravity_compensation(self) -> None:
+        """Put both arms in the user-movable mode without commanding a pose."""
+        if self._context is None:
+            raise RuntimeError("dual-arm reset controller is not open")
+        self._call_all(self._gravity_clients, "G_COMPENSATION")
+
+    def wait_for_samples(self, timeout_s: float | None = None) -> None:
+        if self._context is None:
+            raise RuntimeError("dual-arm reset controller is not open")
+        deadline = self.clock() + (timeout_s or self.timeout_s)
+        while self.clock() < deadline:
+            self._require_spin()
+            with self._samples_lock:
+                ready = set(self._samples) == {arm.name for arm in self.arms}
+            if ready:
+                return
+            self.sleep_fn(0.01)
+        raise TimeoutError("dual-arm status samples are not ready")
+
+    def sample_positions(self) -> dict[str, tuple[float, ...]]:
+        with self._samples_lock:
+            return {
+                name: sample[0]
+                for name, sample in self._samples.items()
+            }
+
     def close(self) -> None:
         if self._executor is not None:
             self._executor.shutdown(timeout_sec=5.0)

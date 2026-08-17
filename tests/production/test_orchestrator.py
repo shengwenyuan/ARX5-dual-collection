@@ -158,7 +158,7 @@ class FakeHomeController:
 class ProductionSessionTest(unittest.TestCase):
     def test_one_session_starts_sources_once_and_stops_in_reverse(self) -> None:
         events: list[str] = []
-        station = load_station_config(ROOT / "config" / "station.w3.json")
+        station = load_station_config(ROOT / "config" / "station.example.json")
         with tempfile.TemporaryDirectory() as directory:
             session = ProductionSession(
                 station,
@@ -206,7 +206,7 @@ class ProductionSessionTest(unittest.TestCase):
 
     def test_repeated_signals_do_not_interrupt_owned_cleanup(self) -> None:
         events: list[str] = []
-        station = load_station_config(ROOT / "config" / "station.w3.json")
+        station = load_station_config(ROOT / "config" / "station.example.json")
         with tempfile.TemporaryDirectory() as directory:
             session = ProductionSession(
                 station,
@@ -228,7 +228,7 @@ class ProductionSessionTest(unittest.TestCase):
 
     def test_pre_recording_action_runs_after_session_checks(self) -> None:
         events: list[str] = []
-        station = load_station_config(ROOT / "config" / "station.w3.json")
+        station = load_station_config(ROOT / "config" / "station.example.json")
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             session = ProductionSession(
@@ -250,7 +250,7 @@ class ProductionSessionTest(unittest.TestCase):
                 "test",
                 "test",
                 root / "episodes",
-                ROOT / "config" / "station.w3.json",
+                ROOT / "config" / "station.example.json",
                 (),
             )
             runtime = session.create_runtime(request, object())  # type: ignore[arg-type]

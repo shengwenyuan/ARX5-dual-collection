@@ -33,6 +33,14 @@ class HidrawPedal:
     file_descriptor: int
 
 
+@dataclass(frozen=True, slots=True)
+class HidrawPedalIdentity:
+    path: Path
+    vendor_id: str
+    product_id: str
+    serial_number: str
+
+
 SelectFunction = Callable[
     [Sequence[int], Sequence[int], Sequence[int], float],
     tuple[Sequence[int], Sequence[int], Sequence[int]],
@@ -78,19 +86,13 @@ class PedalDeviceResolver:
         return opened
 
     def _match(self, config: PedalBinding) -> Path:
-        matches = []
-        try:
-            for node in sorted(self.sysfs_root.glob("hidraw*")):
-                properties = _properties(node / "device" / "uevent")
-                descriptor = (node / "device" / "report_descriptor").read_bytes()
-                if (
-                    properties.get("HID_ID") == _hid_id(config)
-                    and properties.get("HID_UNIQ") == config.serial_number
-                    and descriptor.startswith(VENDOR_REPORT_DESCRIPTOR_PREFIX)
-                ):
-                    matches.append(self.device_root / node.name)
-        except OSError as error:
-            raise PedalUnavailable(f"cannot inspect hidraw pedals: {error}") from error
+        matches = [
+            identity.path
+            for identity in discover_hidraw_pedals(self.sysfs_root, self.device_root)
+            if identity.vendor_id == config.vendor_id.lower()
+            and identity.product_id == config.product_id.lower()
+            and identity.serial_number == config.serial_number
+        ]
         if len(matches) != 1:
             raise PedalUnavailable(
                 f"trigger {config.role} expected one hidraw pedal "
@@ -98,6 +100,37 @@ class PedalDeviceResolver:
                 f"found {len(matches)}"
             )
         return matches[0]
+
+
+def discover_hidraw_pedals(
+    sysfs_root: Path = Path("/sys/class/hidraw"),
+    device_root: Path = Path("/dev"),
+) -> tuple[HidrawPedalIdentity, ...]:
+    identities = []
+    try:
+        for node in sorted(sysfs_root.glob("hidraw*")):
+            properties = _properties(node / "device" / "uevent")
+            descriptor = (node / "device" / "report_descriptor").read_bytes()
+            hid_id = properties.get("HID_ID", "")
+            serial_number = properties.get("HID_UNIQ", "").strip()
+            parsed = _parse_hid_id(hid_id)
+            if (
+                parsed is not None
+                and serial_number
+                and descriptor.startswith(VENDOR_REPORT_DESCRIPTOR_PREFIX)
+            ):
+                vendor_id, product_id = parsed
+                identities.append(
+                    HidrawPedalIdentity(
+                        path=device_root / node.name,
+                        vendor_id=vendor_id,
+                        product_id=product_id,
+                        serial_number=serial_number,
+                    )
+                )
+    except OSError as error:
+        raise PedalUnavailable(f"cannot inspect hidraw pedals: {error}") from error
+    return tuple(identities)
 
 
 class PedalTrigger:
@@ -196,8 +229,11 @@ def _properties(path: Path) -> dict[str, str]:
     return properties
 
 
-def _hid_id(config: PedalBinding) -> str:
-    return (
-        f"0003:0000{config.vendor_id.upper()}:"
-        f"0000{config.product_id.upper()}"
-    )
+def _parse_hid_id(value: str) -> tuple[str, str] | None:
+    fields = value.split(":")
+    if len(fields) != 3 or fields[0] != "0003":
+        return None
+    vendor, product = fields[1].lower(), fields[2].lower()
+    if len(vendor) != 8 or len(product) != 8:
+        return None
+    return vendor[-4:], product[-4:]

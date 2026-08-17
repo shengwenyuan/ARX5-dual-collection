@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ros_distro=${ROS_DISTRO:-jazzy}
-station_config=${1:-/workspace/config/station.w3.json}
+station_config=${1:-/var/lib/arx5-collection/station.json}
 color_format=${ARX5_CAMERA_COLOR_FORMAT:-yuyv}
 reliability=${ARX5_CAMERA_RELIABILITY:-reliable}
 frame_timeout_ms=${ARX5_CAMERA_FRAME_TIMEOUT_MS:-5000}

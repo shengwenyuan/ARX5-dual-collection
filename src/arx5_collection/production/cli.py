@@ -22,6 +22,12 @@ from .config import load_station_config, validate_task_streams
 from .devices import DeviceIdentityVerifier
 from .orchestrator import GIB, ProductionSession
 from .triggers import AutoTriggerFactory
+from arx5_collection.station.inventory import D405Device
+from arx5_collection.station.service import (
+    StationInitializationService,
+    StationInteraction,
+)
+from arx5_collection.station.store import StationConfigStore
 
 
 DEFAULT_STATION_CONFIG = Path("/var/lib/arx5-collection/station.json")
@@ -30,6 +36,18 @@ DEFAULT_STATION_CONFIG = Path("/var/lib/arx5-collection/station.json")
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="arx5-collect")
     subcommands = parser.add_subparsers(dest="command", required=True)
+
+    station = subcommands.add_parser("station", help="initialize station hardware")
+    station_commands = station.add_subparsers(dest="station_command", required=True)
+    configure = station_commands.add_parser(
+        "configure", help="discover, validate, and bind all station devices"
+    )
+    configure.add_argument(
+        "--station-config", type=Path, default=DEFAULT_STATION_CONFIG
+    )
+    configure.add_argument(
+        "--log-dir", type=Path, default=Path("/tmp/arx5-station-configure")
+    )
 
     devices = subcommands.add_parser("devices", help="verify configured device identities")
     devices.add_argument(
@@ -54,13 +72,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         if args.command == "devices":
             return run_devices(args.station_config)
+        if args.command == "station":
+            return run_station_configure(args.station_config, args.log_dir)
         return run_session(args)
     except CheckFailure as error:
         for result in error.results:
             render_check(result, sys.stderr)
         print(str(error), file=sys.stderr)
         return 2
-    except (OSError, RuntimeError, ValueError) as error:
+    except (EOFError, OSError, RuntimeError, ValueError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 2
     except KeyboardInterrupt:
@@ -70,7 +90,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 def run_devices(station_path: Path, stdout: TextIO | None = None) -> int:
     output = stdout or sys.stdout
-    station = load_station_config(station_path)
+    station = load_configured_station(station_path)
     identities = DeviceIdentityVerifier(station).inspect()
     print(
         json.dumps(
@@ -93,8 +113,81 @@ def run_devices(station_path: Path, stdout: TextIO | None = None) -> int:
     return 0 if all(identity.matched for identity in identities) else 2
 
 
+class ConsoleStationInteraction(StationInteraction):
+    def __init__(
+        self,
+        stdin: TextIO | None = None,
+        stdout: TextIO | None = None,
+    ) -> None:
+        self.stdin = stdin or sys.stdin
+        self.stdout = stdout or sys.stdout
+
+    def choose_station_id(self, default: str) -> str:
+        return self._input(f"Station ID [{default}]: ") or default
+
+    def prompt_left_arm_movement(self) -> None:
+        self._input(
+            "Both arms are in gravity compensation. Press ENTER, then gently move "
+            "only the physical LEFT arm: "
+        )
+
+    def choose_camera(
+        self,
+        role: str,
+        candidates: Sequence[D405Device],
+        used_serials: frozenset[str],
+    ) -> str:
+        available = [
+            camera for camera in candidates if camera.serial_number not in used_serials
+        ]
+        print(f"Bind D405 role={role}", file=self.stdout)
+        for index, camera in enumerate(available, start=1):
+            print(
+                f"  {index}. serial={camera.serial_number} "
+                f"model={camera.name} usb={camera.usb_type}",
+                file=self.stdout,
+            )
+        value = self._input("Select number or enter sticker serial: ")
+        try:
+            index = int(value)
+        except ValueError:
+            return value
+        if index < 1 or index > len(available):
+            raise ValueError(f"camera selection index out of range: {index}")
+        return available[index - 1].serial_number
+
+    def prompt_pedal(self, role: str) -> None:
+        semantic = "SPACE / activate" if role == "activate" else "A / abort"
+        print(f"Press pedal for {semantic} once", file=self.stdout, flush=True)
+
+    def report(self, message: str) -> None:
+        print(message, file=self.stdout, flush=True)
+
+    def _input(self, prompt: str) -> str:
+        print(prompt, end="", file=self.stdout, flush=True)
+        line = self.stdin.readline()
+        if line == "":
+            raise EOFError("station configure input closed")
+        return line.strip()
+
+
+def run_station_configure(
+    station_path: Path,
+    log_dir: Path,
+    stdin: TextIO | None = None,
+    stdout: TextIO | None = None,
+) -> int:
+    interaction = ConsoleStationInteraction(stdin, stdout)
+    service = StationInitializationService(
+        store=StationConfigStore(station_path),
+        log_dir=log_dir,
+    )
+    service.configure(interaction)
+    return 0
+
+
 def run_session(args: argparse.Namespace) -> int:
-    station = load_station_config(args.station_config)
+    station = load_configured_station(args.station_config)
     validate_task_streams(args.task_config)
     request = load_request(args.task_config, args.output_root, args.station_config)
     session_log_dir = args.session_log_root / _session_id()
@@ -135,6 +228,15 @@ def run_session(args: argparse.Namespace) -> int:
 def render_check(result: CheckResult, output: TextIO) -> None:
     state = "PASS" if result.passed else "FAIL"
     print(f"{state} [{result.phase.value}] {result.name}: {result.detail}", file=output)
+
+
+def load_configured_station(path: Path):
+    if not path.is_file():
+        raise ValueError(
+            f"station configuration is missing: {path}; "
+            "run 'arx5-collect station configure' first"
+        )
+    return load_station_config(path)
 
 
 def render_reset_state(state: ResetState, output: TextIO) -> None:

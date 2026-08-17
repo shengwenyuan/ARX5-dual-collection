@@ -8,9 +8,11 @@ from pathlib import Path
 from arx5_collection.episode.adapters.pedal import (
     PRESS_REPORT,
     HidrawPedal,
+    HidrawPedalIdentity,
     PedalDeviceResolver,
     PedalTrigger,
     PedalUnavailable,
+    discover_hidraw_pedals,
 )
 from arx5_collection.episode.ports import RecordTrigger, TriggerEvent
 from arx5_collection.production.config import PedalConfig
@@ -78,6 +80,13 @@ class PedalDeviceResolverTest(unittest.TestCase):
 
         self.assertEqual(result[TriggerEvent.ACTIVATE].path.name, "hidraw-a")
         self.assertEqual(result[TriggerEvent.ABORT].path.name, "hidraw-b")
+
+    def test_inventory_exposes_stable_identity_not_runtime_event_code(self) -> None:
+        self.add_hidraw("hidraw-a", "one")
+        self.assertEqual(
+            discover_hidraw_pedals(self.sysfs, self.devices),
+            (HidrawPedalIdentity(self.devices / "hidraw-a", "8088", "0015", "one"),),
+        )
 
     def test_missing_member_is_unavailable(self) -> None:
         self.add_hidraw("hidraw-a", "one")

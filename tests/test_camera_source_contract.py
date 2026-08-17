@@ -31,9 +31,9 @@ class CameraConfigTest(unittest.TestCase):
     def test_loads_fixed_roles_in_logical_order(self) -> None:
         path = self.write_config(
             {
-                "overview": {"serial": "300"},
+                "overview": {"serial_number": "300"},
                 "right": "200",
-                "left": {"serial": "100"},
+                "left": {"serial_number": "100"},
             }
         )
         specs = load_station_cameras(path)

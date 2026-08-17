@@ -127,6 +127,22 @@ def sensor_capabilities(rs: Any, sensor: Any) -> dict[str, Any]:
 def collect() -> dict[str, Any]:
     disk = shutil.disk_usage("/")
     usb = usb_inventory()
+    pedals: list[dict[str, str]] = []
+    pedal_error = None
+    try:
+        from arx5_collection.episode.adapters.pedal import discover_hidraw_pedals
+
+        pedals = [
+            {
+                "path": str(pedal.path),
+                "vendor_id": pedal.vendor_id,
+                "product_id": pedal.product_id,
+                "serial_number": pedal.serial_number,
+            }
+            for pedal in discover_hidraw_pedals()
+        ]
+    except RuntimeError as error:
+        pedal_error = str(error)
     return {
         "host": {
             "platform": platform.platform(),
@@ -137,4 +153,6 @@ def collect() -> dict[str, Any]:
         "usb": usb,
         "arx_usb": [device for device in usb if device["manufacturer"] == "ARX"],
         "realsense": realsense_inventory(),
+        "pedals": pedals,
+        "pedal_error": pedal_error,
     }
