@@ -1,6 +1,6 @@
 # Operator UI 实施计划
 
-- Status: `alignment-round-2-beta1-visual-prototype`
+- Status: `beta1-accepted`
 - Branch: `codex/operator-ui`
 - Parent: `meta_plan.md`
 - Scope: 本地轻量网页界面，不改变采集与落盘契约
@@ -171,11 +171,27 @@ arx5-collect / ROS 2 / Station / Episode Store
 
 ## 仍待对齐
 
-- beta1 是默认深色工作台，还是需要同时提供浅色版本供选择。
-- 三块相机卡严格等高，还是允许 overview 略宽但保持同一行。
-- Session 启动与 Station 初始化是否使用同一个底部区域，还是 Station 初始化放到顶部设置入口。
-- Demo Controls 在 beta1 页面常驻、抽屉隐藏，还是只通过 `?demo=1` 显示。
-- beta1 是否要求浏览器自动进入全屏/Kiosk；默认建议普通 Chromium 窗口，便于调试和截图。
+- beta2 的 CLI Bridge 进程拓扑、结构化事件协议和统一 Trigger 适配层，在 beta1 视觉验收后单独对齐。
+- 真实三路低带宽 RGB 预览协议与资源预算，在 beta1 视觉验收后用真机数据决定。
+
+## beta1 最终视觉决策
+
+- 只提供深色工作台，不实现浅色主题。
+- UI 文案中文优先，保留 `READY / RECORDING / ERROR` 等关键状态英文标识。
+- 三块相机卡严格等宽、等高、同一行排列，顺序为 left、overview、right。
+- 所有辅助窗口使用页面内模态框、抽屉和终端面板，不创建独立浏览器弹窗。
+- Mock 状态固定为 `OFFLINE -> STARTING -> READY -> HOMING -> RECORDING -> FINALIZING -> READY`；abort 追加一条假 aborted Episode 后回 READY。
+- Demo Controls 隐藏在右侧抽屉，由顶部 `SIMULATION` 标签打开。
+- beta1 使用普通 Chromium 窗口，不自动进入全屏或 Kiosk，便于调试和截图。
+
+## beta1 验收结论
+
+- React/TypeScript/Vite 原型、Mock 状态机、三路测试卡、任务与 Episode 列表、操作区及页面内窗口均已实现。
+- reducer 单元测试、TypeScript 静态检查、Vite 生产构建和静态服务语法检查通过。
+- Chromium 1920×1080 下完成 OFFLINE、READY、RECORDING、abort、相机离线、Station 假终端和 Demo Controls 交互验收；控制台无错误，页面无横向溢出。
+- W3 使用独立目录和独立 Docker Compose project 验收通过；容器以非 root 用户运行，`privileged=false`、只读根文件系统、`cap_drop=ALL`、零挂载，仅绑定宿主机 `127.0.0.1:4173`。
+- W3 外网构建不可用时采用预构建 `dist/` 的离线镜像 target 完成页面验收；正式发布仍保留从锁文件和源码构建的 production target。
+- beta1 未接触采集容器、CAN、D405、踏板、Station 配置或 Reports；真实 Bridge、统一 Trigger 和低带宽预览继续留在 beta2 对齐。
 
 ## 参考依据
 

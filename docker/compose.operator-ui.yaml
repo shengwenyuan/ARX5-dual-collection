@@ -1,0 +1,23 @@
+name: arx5-operator-ui-beta1
+
+services:
+  operator-ui:
+    build:
+      context: ../apps/operator-ui
+      dockerfile: Dockerfile
+      target: production
+    image: arx5-operator-ui:beta1
+    init: true
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    ports:
+      - "127.0.0.1:${ARX5_UI_PORT:-4173}:4173"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:4173/"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
