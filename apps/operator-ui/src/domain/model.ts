@@ -31,7 +31,7 @@ export interface EpisodeItem {
   id: string;
   startedAt: string;
   durationSeconds: number;
-  outcome: "success" | "aborted";
+  outcome: "success" | "fail" | "aborted";
   sizeGb: number;
   warning: string | null;
   path: string;
@@ -47,6 +47,10 @@ export interface DeviceItem {
 export type CameraRole = "left" | "overview" | "right";
 
 export interface OperatorState {
+  runtimeMode: "simulation" | "real";
+  controlConnected: boolean;
+  controlError: string | null;
+  authoritativeTask: TaskItem | null;
   status: RuntimeStatus;
   selectedTaskId: string;
   episodes: EpisodeItem[];
@@ -73,4 +77,6 @@ export type OperatorAction =
   | { type: "demo.status"; status: RuntimeStatus; now: number }
   | { type: "demo.camera"; role: CameraRole }
   | { type: "demo.devices" }
-  | { type: "demo.disk"; diskFreeGb: number };
+  | { type: "demo.disk"; diskFreeGb: number }
+  | { type: "real.sync"; patch: Partial<OperatorState> }
+  | { type: "real.error"; message: string };

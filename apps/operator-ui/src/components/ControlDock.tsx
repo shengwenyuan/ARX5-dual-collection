@@ -7,8 +7,10 @@ interface ControlDockProps {
 
 export function ControlDock({ state, dispatch }: ControlDockProps) {
   const now = () => Date.now();
-  const sessionActive = state.status !== "OFFLINE";
-  const canRecord = state.status === "READY" || state.status === "RECORDING";
+  const sessionActive = !["OFFLINE", "ERROR"].includes(state.status);
+  const canControl = state.runtimeMode === "simulation" || state.controlConnected;
+  const canRecord = canControl && (state.status === "READY" || state.status === "RECORDING");
+  const canInspect = canControl && ["OFFLINE", "ERROR"].includes(state.status);
   const estimatedMinutes = Math.floor(state.diskFreeGb / 0.331 / 60);
 
   return (
@@ -19,10 +21,10 @@ export function ControlDock({ state, dispatch }: ControlDockProps) {
           <button className="control-button" onClick={() => dispatch({ type: "window.open", window: "calibration" })} type="button">
             <span>CAL</span> Calibration
           </button>
-          <button className="control-button" onClick={() => dispatch({ type: "window.open", window: "station" })} type="button">
+          <button className="control-button" disabled={!canInspect} onClick={() => dispatch({ type: "window.open", window: "station" })} type="button">
             <span>CFG</span> Station 初始化
           </button>
-          <button className="control-button" onClick={() => dispatch({ type: "window.open", window: "devices" })} type="button">
+          <button className="control-button" disabled={!canInspect} onClick={() => dispatch({ type: "window.open", window: "devices" })} type="button">
             <span>CHK</span> 设备检查
           </button>
         </div>
@@ -42,7 +44,7 @@ export function ControlDock({ state, dispatch }: ControlDockProps) {
         <div className="primary-actions">
           <button
             className="session-button"
-            disabled={state.status !== "OFFLINE"}
+            disabled={!canControl || state.status !== "OFFLINE"}
             onClick={() => dispatch({ type: "session.start", now: now() })}
             type="button"
           >
@@ -67,7 +69,7 @@ export function ControlDock({ state, dispatch }: ControlDockProps) {
           </button>
           <button
             className="abort-button"
-            disabled={state.status !== "RECORDING"}
+            disabled={!canControl || state.status !== "RECORDING"}
             onClick={() => dispatch({ type: "episode.abort", now: now() })}
             type="button"
           >
@@ -89,7 +91,7 @@ export function ControlDock({ state, dispatch }: ControlDockProps) {
           <button onClick={() => dispatch({ type: "window.open", window: "logs" })} type="button">运行日志</button>
           <button
             className="exit-button"
-            disabled={state.status !== "READY"}
+            disabled={!canControl || state.status !== "READY"}
             onClick={() => dispatch({ type: "session.exit", now: now() })}
             type="button"
           >

@@ -1,14 +1,16 @@
 {
   "name": "@arx5/operator-ui",
   "private": true,
-  "version": "0.1.0-beta.1",
+  "version": "0.1.0-beta.2",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "tsc --noEmit && vite build",
+    "build:real": "VITE_OPERATOR_MODE=real npm run build",
     "preview": "vite preview --host 0.0.0.0 --port 4173",
     "test": "vitest run",
-    "check": "npm run test && npm run build"
+    "check": "npm run test && npm run build",
+    "check:real": "npm run test && npm run build:real"
   },
   "dependencies": {
     "react": "19.2.8",

@@ -1,0 +1,65 @@
+name: arx5-operator-control
+
+services:
+  collector-control:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.operator-control
+      args:
+        BASE_IMAGE: ${ARX5_COLLECTION_BASE_IMAGE:-arx5-dual-collection:production}
+    image: arx5-dual-collection:operator-control
+    privileged: true
+    network_mode: host
+    shm_size: "1gb"
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 50s
+    environment:
+      ARX5_USBFS_MEMORY_MB: "256"
+    volumes:
+      - /run/udev:/run/udev:ro
+      - /var/lib/arx5-collection:/var/lib/arx5-collection
+      - ..:/workspace:ro
+      - ../reports:/reports
+      - operator-control-runtime:/run/arx5-control
+    command:
+      - arx5-collector-control
+      - --task-config
+      - /workspace/${ARX5_TASK_CONFIG:-config/task.eight-stream.json}
+      - --output-root
+      - ${ARX5_OUTPUT_ROOT:-/reports/episodes}
+      - --session-log-root
+      - /reports/session-logs
+
+  operator-ui:
+    build:
+      context: ../apps/operator-ui
+      dockerfile: Dockerfile
+      target: production
+      args:
+        VITE_OPERATOR_MODE: real
+    image: arx5-operator-ui:beta2
+    init: true
+    restart: unless-stopped
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    environment:
+      ARX5_CONTROL_SOCKET: /run/arx5-control/api.sock
+    volumes:
+      - operator-control-runtime:/run/arx5-control:ro
+    ports:
+      - "127.0.0.1:${ARX5_UI_PORT:-4173}:4173"
+    depends_on:
+      - collector-control
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:4173/"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+volumes:
+  operator-control-runtime:

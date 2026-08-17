@@ -7,7 +7,7 @@ import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 
-from arx5_collection.episode.cli import load_request, run_cli
+from arx5_collection.episode.cli import load_request, run_cli, run_episode_loop
 from arx5_collection.episode.runtime import EpisodeRuntime
 from arx5_collection.episode.store import EpisodeStore
 
@@ -26,6 +26,14 @@ class ContextTrigger(FakeTrigger):
 
     def __exit__(self, exception_type, exception, traceback) -> None:
         self.closed = True
+
+
+class CapturingEventSink:
+    def __init__(self) -> None:
+        self.events: list[tuple[str, dict]] = []
+
+    def emit(self, event_type: str, payload: dict | None = None) -> None:
+        self.events.append((event_type, payload or {}))
 
 
 class EpisodeCliTest(unittest.TestCase):
@@ -125,6 +133,30 @@ class EpisodeCliTest(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertEqual([row["outcome"] for row in rows], ["aborted", "success"])
         self.assertIn("/aborted/", rows[0]["mcap_path"])
+
+    def test_structured_events_follow_episode_lifecycle(self) -> None:
+        request = load_request(self.task_config, self.output_root, STATION_PATH)
+        runtime = self.runtime_factory()(request, ContextTrigger([True, True]))
+        sink = CapturingEventSink()
+
+        exit_code = run_episode_loop(
+            runtime,
+            request,
+            episodes=1,
+            stdout=io.StringIO(),
+            stderr=io.StringIO(),
+            event_sink=sink,
+        )
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(
+            [event_type for event_type, _ in sink.events],
+            ["episode.state", "episode.state", "episode.result", "episode.state"],
+        )
+        self.assertEqual(sink.events[0][1], {"state": "recording"})
+        self.assertEqual(sink.events[1][1], {"state": "finalizing"})
+        self.assertEqual(sink.events[2][1]["outcome"], "success")
+        self.assertEqual(sink.events[3][1], {"state": "ready"})
 
     def runtime_factory(self):
         ids = iter(["episode-001", "episode-002"])

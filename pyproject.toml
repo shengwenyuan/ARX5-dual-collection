@@ -10,6 +10,7 @@ requires-python = ">=3.10"
 [project.scripts]
 arx5-collect = "arx5_collection.production.cli:main"
 arx5-dataset = "arx5_collection.dataset_cli:main"
+arx5-collector-control = "arx5_collection.control.server:main"
 
 [project.optional-dependencies]
 test = ["jsonschema>=4.26,<5", "pytest>=8,<9"]

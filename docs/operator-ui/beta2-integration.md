@@ -1,6 +1,6 @@
 # Operator UI beta2 真实逻辑集成计划
 
-- Status: `alignment-required`
+- Status: `W3 partial acceptance`
 - Branch: `codex/operator-ui`
 - v1 baseline: `2c9e5d4`
 - Parent: `docs/operator-ui/implementation.md`
@@ -19,7 +19,7 @@ Browser
        ├─ 静态页面
        ├─ 白名单 HTTP API
        └─ 状态与日志流
-              │ Docker 内部网络
+              │ 私有 Unix Socket 共享卷
               ▼
      Collector Control（privileged，容器主进程）
        ├─ station configure 子进程 / PTY
@@ -32,7 +32,9 @@ Browser
 
 - UI 容器继续无特权，不挂 Docker Socket，不访问 CAN、USB、udev 或 Station 配置。
 - Collector Control 是唯一硬件权限边界，也是 collector 容器主进程；它用显式 argv 管理 CLI 子进程和完整进程组。
-- 两个服务只通过 Compose 内部网络交换结构化命令、权威状态与日志；只有 UI 的 `127.0.0.1` 端口暴露到宿主机。
+- beta2 开发镜像在已验收的 production SDK 镜像上叠加 Python 控制包，避免每次重编 librealsense/ARX5；正式发布仍由完整 Dockerfile 从固定 SDK 基线构建单一版本镜像。
+- W3 轻量 prebuilt UI 调试镜像必须先执行 `npm run check:real`；默认 `npm run check` 只验证 Mock 构建，不可作为真实控制页面产物。
+- Collector 仍需 `host network` 承载 ROS，因此两个服务使用私有 Unix Socket 共享卷交换结构化命令、权威状态与日志；不暴露 Collector TCP 端口，只有 UI 的 `127.0.0.1` 端口暴露到宿主机。
 - 不通过解析普通 stdout 推断权威状态。Python 核心输出结构化 Session/Episode 事件；stdout/stderr 仅作为日志展示。
 - UI 刷新后从 Collector Control 获取当前快照，不能把 Session 错误重置为 OFFLINE。
 
@@ -84,8 +86,19 @@ beta2 增加统一组合 Trigger：
 - Collector Control 退出时按现有生产顺序回收 Recorder、ROS、CAN 与 usbfs。
 - 真实结果只来自已提交的 `episode.mcap + metadata.json`。
 
-## 待本轮对齐
+## 已对齐
 
-1. 是否采用“无特权 UI + privileged Collector Control”双服务，不向 UI 暴露 Docker Socket。
-2. beta2 首版的 Task config 与 output root 是由 Compose/启动参数固定，还是允许 UI 选择；建议首版固定，TODO 列表暂不下发真实 Task。
-3. 是否先接入 devices、Session/Episode、日志，真机通过后再接 Station PTY；建议如此，避免同时调试交互终端和采集生命周期。
+- 采用“无特权 UI + privileged Collector Control”双服务，不向 UI 暴露 Docker Socket。
+- beta2 首版的 Task config 与 output root 由 Compose/环境变量固定，TODO 列表暂不下发真实 Task。
+- 首批接入 devices、Session/Episode 与日志；真机通过后再接 Station PTY。
+- DAgger 继续只保留明确的打桩入口。
+
+## W3 验收记录（2026-08-18）
+
+- PASS：无特权 UI 与 privileged Collector Control 通过私有 Unix Socket 协作；UI 未挂 Docker Socket、udev、CAN、USB 或 Station 配置。
+- PASS：网页设备检查真实返回 7/7；双臂、三颗 D405 与双踏板身份全部匹配。
+- PASS：网页启动 Session 后进入 READY；双臂状态与三路 RGB-D 共八路均通过 readiness。
+- PASS：网页退出空 Session 后，ROS/CAN/usbfs 有序回收，`arx5-collect run` 子进程退出且返回码为 0。
+- PASS：JS 测试与 real build；Collector/Trigger/Episode 结构化事件相关 21 个 Python 测试。
+- PENDING：网页触发 success 与 abort 的真实 Episode。该步骤会执行 GO_HOME，需要操作员在真机旁确认后验收。
+- PENDING：Station PTY、低资源 RGB 预览、数据检查与 DAgger 真实逻辑，均保持后续批次边界。

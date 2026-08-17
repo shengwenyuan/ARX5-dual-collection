@@ -65,6 +65,10 @@ export const devices: DeviceItem[] = [
 ];
 
 export const initialState: OperatorState = {
+  runtimeMode: "simulation",
+  controlConnected: true,
+  controlError: null,
+  authoritativeTask: null,
   status: "OFFLINE",
   selectedTaskId: tasks[0].id,
   episodes: initialEpisodes,

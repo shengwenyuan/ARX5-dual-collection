@@ -4,6 +4,7 @@ interface OverlayHostProps {
   state: OperatorState;
   devices: DeviceItem[];
   dispatch: React.Dispatch<OperatorAction>;
+  simulation?: boolean;
 }
 
 const demoStatuses: RuntimeStatus[] = [
@@ -18,7 +19,7 @@ const demoStatuses: RuntimeStatus[] = [
   "SHUTTING_DOWN",
 ];
 
-export function OverlayHost({ state, devices, dispatch }: OverlayHostProps) {
+export function OverlayHost({ state, devices, dispatch, simulation = true }: OverlayHostProps) {
   const close = () => dispatch({ type: "window.close" });
 
   if (state.activeWindow === "logs" || state.activeWindow === "demo") {
@@ -57,11 +58,11 @@ export function OverlayHost({ state, devices, dispatch }: OverlayHostProps) {
         onMouseDown={(event) => event.stopPropagation()}
       >
         <DrawerHeader
-          eyebrow="SIMULATION"
+          eyebrow={simulation ? "SIMULATION" : "COLLECTOR"}
           title={modalTitle(state.activeWindow)}
           onClose={close}
         />
-        {state.activeWindow === "station" && <StationTerminal />}
+        {state.activeWindow === "station" && (simulation ? <StationTerminal /> : <PlaceholderPanel label="Station 初始化终端" detail="真实 PTY 接入按已确认顺序放在下一实现批次。" />)}
         {state.activeWindow === "calibration" && <PlaceholderPanel label="Calibration" />}
         {state.activeWindow === "dagger" && (
           <PlaceholderPanel
@@ -71,7 +72,7 @@ export function OverlayHost({ state, devices, dispatch }: OverlayHostProps) {
         )}
         {state.activeWindow === "data-check" && <PlaceholderPanel label="数据检查 / 清洗" />}
         {state.activeWindow === "devices" && (
-          <DevicePanel devices={devices} healthy={state.devicesHealthy} />
+          <DevicePanel devices={devices} healthy={state.devicesHealthy} simulation={simulation} />
         )}
       </section>
     </div>
@@ -118,12 +119,12 @@ function PlaceholderPanel({ label, detail }: { label: string; detail?: string })
   );
 }
 
-function DevicePanel({ devices, healthy }: { devices: DeviceItem[]; healthy: boolean }) {
+function DevicePanel({ devices, healthy, simulation }: { devices: DeviceItem[]; healthy: boolean; simulation: boolean }) {
   return (
     <div className="device-panel">
       <div className={`device-summary ${healthy ? "healthy" : "failed"}`}>
         <strong>{healthy ? "7 / 7 MATCHED" : "6 / 7 MATCHED"}</strong>
-        <span>{healthy ? "所有 Mock 设备身份一致" : "俯视相机 Mock 身份不匹配"}</span>
+        <span>{healthy ? (simulation ? "所有 Mock 设备身份一致" : "所有设备身份一致") : "存在设备缺失或身份不匹配"}</span>
       </div>
       <div className="device-grid">
         {devices.map((device, index) => {
@@ -137,7 +138,7 @@ function DevicePanel({ devices, healthy }: { devices: DeviceItem[]; healthy: boo
           );
         })}
       </div>
-      <p className="mock-disclaimer">模拟结果，不会调用 <code>arx5-collect devices</code>。</p>
+      <p className="mock-disclaimer">{simulation ? <>模拟结果，不会调用 <code>arx5-collect devices</code>。</> : <>结果来自 <code>arx5-collect devices</code>。</>}</p>
     </div>
   );
 }

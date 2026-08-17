@@ -20,6 +20,7 @@ from arx5_collection.reset import ResetState
 from .checks import CheckFailure, CheckResult
 from .config import load_station_config, validate_task_streams
 from .devices import DeviceIdentityVerifier
+from .events import NullEventEmitter, UnixDatagramEventEmitter
 from .orchestrator import GIB, ProductionSession
 from .triggers import AutoTriggerFactory
 from arx5_collection.station.inventory import D405Device
@@ -64,6 +65,8 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--episodes", type=non_negative_int, default=0)
     run.add_argument("--min-free-gib", type=positive_int, default=80)
     run.add_argument("--readiness-timeout-s", type=positive_float, default=30.0)
+    run.add_argument("--control-socket", type=Path)
+    run.add_argument("--event-socket", type=Path)
     return parser
 
 
@@ -191,9 +194,24 @@ def run_session(args: argparse.Namespace) -> int:
     validate_task_streams(args.task_config)
     request = load_request(args.task_config, args.output_root, args.station_config)
     session_log_dir = args.session_log_root / _session_id()
+    event_sink = (
+        UnixDatagramEventEmitter(
+            args.event_socket,
+            warning_sink=lambda message: print(
+                f"WARNING {message}", file=sys.stderr, flush=True
+            ),
+        )
+        if args.event_socket is not None
+        else NullEventEmitter()
+    )
 
     def check_sink(result: CheckResult) -> None:
         render_check(result, sys.stdout)
+
+    def home_state_sink(state: ResetState) -> None:
+        render_reset_state(state, sys.stderr)
+        if state is ResetState.RESETTING:
+            event_sink.emit("episode.state", {"state": "homing"})
 
     session = ProductionSession(
         station=station,
@@ -202,27 +220,36 @@ def run_session(args: argparse.Namespace) -> int:
         software_version=_software_version(),
         min_free_bytes=args.min_free_gib * GIB,
         readiness_timeout_s=args.readiness_timeout_s,
-        home_state_sink=lambda state: render_reset_state(state, sys.stderr),
+        home_state_sink=home_state_sink,
         home_timing_sink=lambda phase, elapsed_s: render_home_timing(
             phase, elapsed_s, sys.stderr
         ),
         check_sink=check_sink,
         warning_sink=lambda message: print(f"WARNING {message}", file=sys.stderr),
     )
-    with termination_as_interrupt(), session:
-        print(f"SESSION READY logs={session_log_dir}", flush=True)
-        trigger_factory = AutoTriggerFactory(
-            status_sink=lambda message: print(message, file=sys.stderr, flush=True)
-        )
-        with trigger_factory.open(station) as trigger:
-            runtime = session.create_runtime(request, trigger)
-            return run_episode_loop(
-                runtime,
-                request,
-                episodes=args.episodes,
-                stdout=sys.stdout,
-                stderr=sys.stderr,
+    try:
+        with termination_as_interrupt(), session:
+            print(f"SESSION READY logs={session_log_dir}", flush=True)
+            trigger_factory = AutoTriggerFactory(
+                status_sink=lambda message: print(message, file=sys.stderr, flush=True),
+                remote_socket=args.control_socket,
             )
+            with trigger_factory.open(station) as trigger:
+                event_sink.emit(
+                    "session.ready",
+                    {"session_log_dir": str(session_log_dir)},
+                )
+                runtime = session.create_runtime(request, trigger)
+                return run_episode_loop(
+                    runtime,
+                    request,
+                    episodes=args.episodes,
+                    stdout=sys.stdout,
+                    stderr=sys.stderr,
+                    event_sink=event_sink,
+                )
+    finally:
+        event_sink.emit("session.stopped")
 
 
 def render_check(result: CheckResult, output: TextIO) -> None:

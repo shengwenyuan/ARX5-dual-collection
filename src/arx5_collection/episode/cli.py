@@ -6,7 +6,7 @@ import sys
 from collections.abc import Callable, Sequence
 from contextlib import AbstractContextManager
 from pathlib import Path
-from typing import TextIO
+from typing import Any, Protocol, TextIO
 
 from .adapters.keyboard import KeyboardTrigger
 from .models import EpisodeOutcome, EpisodeRequest, EpisodeState, StreamSpec
@@ -16,6 +16,11 @@ from .runtime import EpisodeRuntime
 
 RuntimeFactory = Callable[[EpisodeRequest, RecordTrigger], EpisodeRuntime]
 TriggerFactory = Callable[[str], AbstractContextManager[RecordTrigger]]
+
+
+class RuntimeEventSink(Protocol):
+    def emit(self, event_type: str, payload: dict[str, Any] | None = None) -> None:
+        ...
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -93,6 +98,7 @@ def run_episode_loop(
     episodes: int = 0,
     stdout: TextIO | None = None,
     stderr: TextIO | None = None,
+    event_sink: RuntimeEventSink | None = None,
 ) -> int:
     output = stdout or sys.stdout
     error_output = stderr or sys.stderr
@@ -105,6 +111,8 @@ def run_episode_loop(
         if previous_sink is not None:
             previous_sink(state)
         if state is EpisodeState.RECORDING:
+            if event_sink is not None:
+                event_sink.emit("episode.state", {"state": "recording"})
             print(
                 "RECORDING: activate=success, abort=abort and continue, "
                 "Ctrl+C=abort and exit",
@@ -112,6 +120,8 @@ def run_episode_loop(
                 flush=True,
             )
         elif state is EpisodeState.FINALIZING:
+            if event_sink is not None:
+                event_sink.emit("episode.state", {"state": "finalizing"})
             print("FINALIZING", file=error_output, flush=True)
 
     runtime.state_sink = state_sink
@@ -124,14 +134,25 @@ def run_episode_loop(
                 flush=True,
             )
             result = runtime.run_once(request)
+            event_payload = {
+                "episode_id": result.episode_id,
+                "outcome": result.outcome.value,
+                "duration_s": result.duration_s,
+                "mcap_path": str(result.mcap_path),
+                "metadata_path": str(result.metadata_path),
+                "errors": list(result.errors),
+            }
+            if event_sink is not None:
+                event_sink.emit("episode.result", event_payload)
+                event_sink.emit("episode.state", {"state": "ready"})
             print(
                 json.dumps(
-                    {
-                        "episode_id": result.episode_id,
-                        "outcome": result.outcome.value,
-                        "mcap_path": str(result.mcap_path),
-                        "metadata_path": str(result.metadata_path),
-                    }
+                    {key: event_payload[key] for key in (
+                        "episode_id",
+                        "outcome",
+                        "mcap_path",
+                        "metadata_path",
+                    )}
                 ),
                 file=output,
                 flush=True,

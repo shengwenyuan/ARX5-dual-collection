@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -113,6 +114,18 @@ class AutoTriggerFactoryTest(unittest.TestCase):
             with factory.open(station()):
                 raise RuntimeError("disconnected")
         self.assertEqual(self.messages, ["TRIGGER_MODE=pedal"])
+
+    def test_remote_control_is_composed_with_available_pedals(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            factory = AutoTriggerFactory(
+                resolver=FakeResolver(),  # type: ignore[arg-type]
+                keyboard_stream=self.stream,
+                status_sink=self.messages.append,
+                remote_socket=Path(directory) / "trigger.sock",
+            )
+            with factory.open(station()) as trigger:
+                self.assertIsNotNone(trigger)
+        self.assertEqual(self.messages, ["TRIGGER_MODE=pedal+remote"])
 
     def test_production_cli_has_only_auto_and_defaults_station_path(self) -> None:
         parser = build_parser()

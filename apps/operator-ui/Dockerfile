@@ -10,6 +10,8 @@ CMD ["node", "server.mjs"]
 
 FROM node:24-alpine AS build
 
+ARG VITE_OPERATOR_MODE=simulation
+ENV VITE_OPERATOR_MODE=${VITE_OPERATOR_MODE}
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci

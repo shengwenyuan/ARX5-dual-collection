@@ -6,6 +6,9 @@ interface StatusHeaderProps {
   elapsedSeconds: number;
   activeEpisodeId: string | null;
   onOpenDemo: () => void;
+  runtimeMode: "simulation" | "real";
+  connected: boolean;
+  error: string | null;
 }
 
 const statusCopy: Record<RuntimeStatus, string> = {
@@ -26,17 +29,27 @@ export function StatusHeader({
   elapsedSeconds,
   activeEpisodeId,
   onOpenDemo,
+  runtimeMode,
+  connected,
+  error,
 }: StatusHeaderProps) {
   return (
     <header className="status-header">
       <div className="task-context">
-        <button className="simulation-flag" onClick={onOpenDemo} type="button">
-          <span aria-hidden="true" /> SIMULATION
+        <button
+          className={`simulation-flag ${runtimeMode === "real" ? "control-flag" : ""}`}
+          disabled={runtimeMode === "real"}
+          onClick={onOpenDemo}
+          type="button"
+        >
+          <span aria-hidden="true" />
+          {runtimeMode === "simulation" ? "SIMULATION" : connected ? "CONTROL ONLINE" : "CONTROL OFFLINE"}
         </button>
         <div>
           <span className="eyebrow">CURRENT TASK</span>
           <h1>{task.title}</h1>
           <p>{task.description}</p>
+          {error && <p className="control-error">{error}</p>}
         </div>
       </div>
       <div className="runtime-readout">
@@ -50,7 +63,7 @@ export function StatusHeader({
         <div className="timer-block" aria-label="录制计时">
           <span>REC TIME</span>
           <strong>{formatDuration(elapsedSeconds)}</strong>
-          <small>{activeEpisodeId ?? "NO ACTIVE EPISODE"}</small>
+          <small>{activeEpisodeId ?? (status === "RECORDING" ? "ACTIVE EPISODE" : "NO ACTIVE EPISODE")}</small>
         </div>
       </div>
     </header>

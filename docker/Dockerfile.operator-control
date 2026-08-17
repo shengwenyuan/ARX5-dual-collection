@@ -1,0 +1,16 @@
+ARG BASE_IMAGE=arx5-dual-collection:production
+FROM ${BASE_IMAGE}
+
+ENV PYTHONPATH="/opt/arx5-control-overlay/src:${PYTHONPATH}"
+
+COPY src/ /opt/arx5-control-overlay/src/
+COPY pyproject.toml /opt/arx5-control-overlay/pyproject.toml
+
+RUN python3 -m pip install \
+        --break-system-packages \
+        --no-build-isolation \
+        --no-deps \
+        --force-reinstall \
+        /opt/arx5-control-overlay
+
+CMD ["arx5-collector-control", "--help"]

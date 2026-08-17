@@ -8,9 +8,10 @@ const cameras: Array<{ role: CameraRole; title: string; detail: string }> = [
 
 interface CameraGridProps {
   online: Record<CameraRole, boolean>;
+  simulated?: boolean;
 }
 
-export function CameraGrid({ online }: CameraGridProps) {
+export function CameraGrid({ online, simulated = true }: CameraGridProps) {
   return (
     <section className="camera-grid" aria-label="三路相机预览">
       {cameras.map((camera, index) => (
@@ -22,7 +23,7 @@ export function CameraGrid({ online }: CameraGridProps) {
             </div>
             <span className={`signal-pill ${online[camera.role] ? "online" : "offline"}`}>
               <span aria-hidden="true" />
-              {online[camera.role] ? "SIM 10 FPS" : "NO SIGNAL"}
+              {simulated ? (online[camera.role] ? "SIM 10 FPS" : "NO SIGNAL") : "PREVIEW PENDING"}
             </span>
           </header>
           <div className={`camera-viewport ${online[camera.role] ? "" : "is-offline"}`}>
@@ -30,7 +31,7 @@ export function CameraGrid({ online }: CameraGridProps) {
             <div className="camera-reticle" aria-hidden="true"><span /></div>
             <div className="camera-watermark">
               <strong>{camera.role.toUpperCase()}</strong>
-              <span>640 × 360 · MOCK RGB</span>
+              <span>{simulated ? "640 × 360 · MOCK RGB" : "RGB PREVIEW · NEXT ITERATION"}</span>
             </div>
           </div>
           <footer>

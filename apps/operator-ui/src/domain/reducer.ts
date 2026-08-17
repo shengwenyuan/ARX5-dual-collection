@@ -17,6 +17,10 @@ export function operatorReducer(
   action: OperatorAction,
 ): OperatorState {
   switch (action.type) {
+    case "real.sync":
+      return { ...state, ...action.patch };
+    case "real.error":
+      return { ...state, controlConnected: false, controlError: action.message };
     case "task.select":
       return { ...state, selectedTaskId: action.taskId };
     case "window.open":
