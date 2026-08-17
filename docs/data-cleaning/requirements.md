@@ -1,7 +1,8 @@
 # 数据质量与轻量清洗需求
 
-- Status: `alignment-round-2`
+- Status: `implemented-v1`
 - Parent: `meta_plan.md`
+- Downstream: `docs/data-cleaning/pi05-mcap-to-lerobot.md`
 - Input: Episode `episode.mcap + metadata.json`
 - Immediate target: 对一个路径下的 Episode 批次离线检查与轻量清洗，支持小批过拟合验证
 
@@ -41,6 +42,8 @@ cleaned/<batch_id>/<episode_id>/
 - `quality.json`：输入身份、Policy 版本、逐 Topic 统计、问题清单、有效时间范围、配对覆盖率和最终 `A / B / C` 档次。
 - `frame_index.jsonl`：每行一个模型无关帧组，只引用真实消息的 Topic、Header 时间戳、序号及时间差；不定义 action/label，不复制图像或机械臂载荷。
 - v0.1 不生成 cleaned MCAP；若模型加载器无法消费索引，再独立对齐导出格式。
+
+`frame_index.jsonl` 是各训练链路共享的模型无关边界。π0.5 等下游可生成自己的 sample index、action、筛选片段和导出格式，但不得把模型、outcome 或 action-horizon 语义写回通用清洗产物。
 
 ## 建议流水线
 
@@ -147,10 +150,10 @@ src/arx5_collection/cleaning/
 - Episode 使用 `A / B / C` 质量档次，不因局部问题简单整体 reject 或删除。
 - 原始 MCAP 和 metadata 不修改；清洗输出是独立派生数据。
 
-## 待对齐决策
+## v1 已冻结决策
 
-1. 是否确认用 `observation_cutoff` 和“只取过去 2 ms 内最新 ArmState”替代对称最近邻，以满足无 leakage/oracle。
-2. `A / B / C` 的覆盖率与异常阈值；建议 A `>=99%`、B `>=95%`、C `<95%` 或结构异常。
-3. 完全重复消息、同时间戳不同载荷、逆序时间戳、内部大 gap 分别如何影响档次和帧组索引。
-4. 是否确认清洗层只输出模型无关 `frame_index.jsonl`，action/label 留给后续训练数据层。
-5. 派生输出目录与已存在结果的覆盖/重跑语义。
+1. 使用 `observation_cutoff`，双臂只取过去 `2 ms` 内最新 ArmState，禁止未来值和插值。
+2. A 为覆盖率 `>=99%` 且无时间线 warning；B 为覆盖率 `>=95%` 或存在 gap warning；C 为 `<95%`、无有效帧组或结构异常。
+3. 重复/逆序 Header 产生质量 issue 并降为 B；相机 `>67 ms`、机械臂 `>3 ms` gap 降为 B。无法满足配组或 arm age 的帧不进入索引。
+4. 清洗层只输出模型无关 `quality.json + frame_index.jsonl`；action、task、success 和 50 Hz 筛选只存在于独立 π0.5 层。
+5. 派生输出使用临时目录原子提交；目标已存在时失败，不覆盖。新策略或重跑必须使用新输出根或 dataset version。

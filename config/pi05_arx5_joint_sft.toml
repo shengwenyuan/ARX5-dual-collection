@@ -1,0 +1,62 @@
+[dataset]
+repo_id = "local/stacking_five_paper_cups_pi05_v1"
+frames = 37355
+episodes = 50
+fps = 50
+task = "stacking five paper cups"
+normalization = "fresh"
+action_space = "joint"
+delta_joint_actions = true
+
+[run]
+config_name = "pi05_arx5_joint_sft"
+exp_name = "stacking_five_paper_cups_pi05_v1"
+project_name = "pi05_arx5"
+seed = 42
+
+[model]
+model_type = "pi05"
+base_checkpoint = "gs://openpi-assets/checkpoints/pi05_base/params"
+finetune = "full"
+action_dim = 32
+action_horizon = 50
+max_token_len = 200
+discrete_state_input = true
+
+[train]
+batch_size = 8
+fsdp_devices = 8
+num_workers = 8
+num_train_steps = 10000
+log_interval = 10
+ema_decay = 0.999
+wandb_enabled = true
+
+[lr_schedule]
+type = "cosine"
+warmup_steps = 1000
+peak_lr = 2.5e-5
+decay_steps = 10000
+decay_lr = 2.5e-6
+
+[optimizer]
+type = "adamw"
+b1 = 0.9
+b2 = 0.95
+eps = 1e-8
+weight_decay = 1e-10
+clip_gradient_norm = 1.0
+
+[checkpoint]
+save_interval = 1000
+keep_period = 5000
+overwrite = false
+resume = false
+
+[smoke]
+exp_name_suffix = "_smoke"
+num_train_steps = 5
+log_interval = 1
+wandb_enabled = false
+save_checkpoints = false
+overwrite = true

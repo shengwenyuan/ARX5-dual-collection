@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://arx5.local/schemas/pi05-segment-v2.json",
+  "title": "ARX5 equal-EEF-distance π0.5 motion segment",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "filter_version", "segment_id", "source_episode_id",
+    "source_start_sample_index", "source_end_sample_index_exclusive",
+    "start_tick_ns", "end_tick_ns", "frame_count", "task"
+  ],
+  "properties": {
+    "schema_version": { "const": 2 },
+    "filter_version": { "const": "pi05-arx-filter-v2-equal-eef-distance" },
+    "segment_id": { "type": "string", "minLength": 1 },
+    "source_episode_id": { "type": "string", "minLength": 1 },
+    "source_start_sample_index": { "type": "integer", "minimum": 0 },
+    "source_end_sample_index_exclusive": { "type": "integer", "minimum": 1 },
+    "start_tick_ns": { "type": "integer", "minimum": 0 },
+    "end_tick_ns": { "type": "integer", "minimum": 0 },
+    "frame_count": { "type": "integer", "minimum": 1 },
+    "task": { "type": "string", "minLength": 1 }
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://arx5.local/schemas/quality-v1.json",
+  "title": "ARX5 model-independent episode quality report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "policy_version",
+    "episode_id",
+    "source",
+    "outcome",
+    "task",
+    "timeline",
+    "camera_pairing",
+    "common_interval",
+    "frame_grouping",
+    "arm_values",
+    "issues",
+    "grade"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "policy_version": { "type": "string" },
+    "episode_id": { "type": "string", "minLength": 1 },
+    "source": { "type": "object" },
+    "outcome": { "enum": ["success", "fail", "aborted"] },
+    "task": { "type": "object" },
+    "timeline": { "type": "object", "minProperties": 8 },
+    "camera_pairing": { "type": "object", "required": ["left", "right", "overview"] },
+    "common_interval": { "type": "object", "required": ["start_ns", "end_ns"] },
+    "frame_grouping": {
+      "type": "object",
+      "required": ["eligible_overview_pairs", "valid_frame_groups", "coverage", "rejected_cross_camera", "rejected_arm_age"]
+    },
+    "arm_values": { "type": "object", "required": ["left", "right", "discarded_nonfinite"] },
+    "issues": { "type": "array", "items": { "type": "string" } },
+    "grade": { "enum": ["A", "B", "C"] }
+  }
+}
