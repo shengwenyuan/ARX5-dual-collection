@@ -15,6 +15,21 @@ from arx5_collection.production.config import (
 ROOT = Path(__file__).parents[2]
 
 
+def trigger_payload() -> dict[str, dict[str, object]]:
+    return {
+        "activate": {
+            "vendor_id": "8088",
+            "product_id": "0015",
+            "serial_number": "pedal-one",
+        },
+        "abort": {
+            "vendor_id": "8088",
+            "product_id": "0015",
+            "serial_number": "pedal-two",
+        },
+    }
+
+
 class ProductionConfigTest(unittest.TestCase):
     def test_w3_station_has_fixed_logical_identity(self) -> None:
         station = load_station_config(ROOT / "config" / "station.w3.json")
@@ -30,6 +45,31 @@ class ProductionConfigTest(unittest.TestCase):
         payload = json.loads((ROOT / "config" / "station.w3.json").read_text())
         payload["cameras"]["right"] = payload["cameras"]["left"]
         with self.assertRaisesRegex(ValueError, "serial numbers must be unique"):
+            load_station_config(self.write_json(payload))
+
+    def test_station_v2_loads_two_distinct_pedal_bindings(self) -> None:
+        payload = json.loads((ROOT / "config" / "station.w3.json").read_text())
+        payload["schema_version"] = 2
+        payload["triggers"] = trigger_payload()
+        station = load_station_config(self.write_json(payload))
+        assert station.triggers is not None
+        self.assertEqual(station.triggers.activate.serial_number, "pedal-one")
+        self.assertEqual(station.triggers.abort.serial_number, "pedal-two")
+
+    def test_station_v2_rejects_same_pedal_for_both_roles(self) -> None:
+        payload = json.loads((ROOT / "config" / "station.w3.json").read_text())
+        payload["schema_version"] = 2
+        payload["triggers"] = trigger_payload()
+        payload["triggers"]["abort"]["serial_number"] = "pedal-one"
+        with self.assertRaisesRegex(ValueError, "different serial numbers"):
+            load_station_config(self.write_json(payload))
+
+    def test_station_v2_rejects_obsolete_event_code(self) -> None:
+        payload = json.loads((ROOT / "config" / "station.w3.json").read_text())
+        payload["schema_version"] = 2
+        payload["triggers"] = trigger_payload()
+        payload["triggers"]["activate"]["event_code"] = 57
+        with self.assertRaisesRegex(ValueError, "keys must be exactly"):
             load_station_config(self.write_json(payload))
 
     def test_production_task_is_exactly_eight_required_streams(self) -> None:
@@ -66,4 +106,3 @@ class ProductionConfigTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

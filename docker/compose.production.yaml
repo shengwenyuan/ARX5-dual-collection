@@ -18,13 +18,12 @@ services:
       ARX5_USBFS_MEMORY_MB: "256"
     volumes:
       - /run/udev:/run/udev:ro
+      - /var/lib/arx5-collection:/var/lib/arx5-collection:ro
       - ..:/workspace:ro
       - ../reports:/reports
     command:
       - arx5-collect
       - run
-      - --station-config
-      - /workspace/config/station.w3.json
       - --task-config
       - /workspace/config/task.eight-stream.json
       - --output-root

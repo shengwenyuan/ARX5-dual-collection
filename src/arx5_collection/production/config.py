@@ -8,6 +8,7 @@ from typing import Any
 
 ARM_ROLES = ("left", "right")
 CAMERA_ROLES = ("left", "right", "overview")
+TRIGGER_ROLES = ("activate", "abort")
 EXPECTED_STREAMS = {
     "left_arm_state": "/embodiments/left_arm/state",
     "right_arm_state": "/embodiments/right_arm/state",
@@ -34,12 +35,27 @@ class CameraConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class PedalConfig:
+    role: str
+    vendor_id: str
+    product_id: str
+    serial_number: str
+
+
+@dataclass(frozen=True, slots=True)
+class TriggerConfig:
+    activate: PedalConfig
+    abort: PedalConfig
+
+
+@dataclass(frozen=True, slots=True)
 class StationConfig:
     schema_version: int
     station_id: str
     sdk_type: int
     arms: tuple[ArmConfig, ...]
     cameras: tuple[CameraConfig, ...]
+    triggers: TriggerConfig | None = None
 
     def metadata(self) -> dict[str, Any]:
         devices = [
@@ -72,13 +88,28 @@ class StationConfig:
 
 def load_station_config(path: Path) -> StationConfig:
     payload = _load_object(path, "station")
-    _require_exact_keys(
-        payload,
-        {"schema_version", "station_id", "sdk_type", "arms", "cameras"},
-        "station",
-    )
-    if payload["schema_version"] != 1:
-        raise ValueError("station schema_version must be 1")
+    schema_version = payload.get("schema_version")
+    if schema_version == 1:
+        _require_exact_keys(
+            payload,
+            {"schema_version", "station_id", "sdk_type", "arms", "cameras"},
+            "station",
+        )
+    elif schema_version == 2:
+        _require_exact_keys(
+            payload,
+            {
+                "schema_version",
+                "station_id",
+                "sdk_type",
+                "arms",
+                "cameras",
+                "triggers",
+            },
+            "station",
+        )
+    else:
+        raise ValueError("station schema_version must be 1 or 2")
     station_id = _non_empty_string(payload["station_id"], "station_id")
     sdk_type = payload["sdk_type"]
     if sdk_type not in {1, 2}:
@@ -113,6 +144,10 @@ def load_station_config(path: Path) -> StationConfig:
         for role in CAMERA_ROLES
     )
 
+    triggers = None
+    if schema_version == 2:
+        triggers = _trigger_config(payload["triggers"])
+
     all_serials = [arm.usb_serial for arm in arms_by_role.values()]
     all_serials.extend(camera.serial_number for camera in cameras)
     if len(all_serials) != len(set(all_serials)):
@@ -122,11 +157,12 @@ def load_station_config(path: Path) -> StationConfig:
         raise ValueError("arm CAN interfaces must be unique")
 
     return StationConfig(
-        schema_version=1,
+        schema_version=schema_version,
         station_id=station_id,
         sdk_type=sdk_type,
         arms=tuple(arms_by_role[role] for role in ARM_ROLES),
         cameras=cameras,
+        triggers=triggers,
     )
 
 
@@ -186,3 +222,40 @@ def _camera_serial(value: object, role: str) -> str:
         )
     return _non_empty_string(serial, f"camera {role} serial_number")
 
+
+def _trigger_config(value: object) -> TriggerConfig:
+    _require_exact_keys(value, set(TRIGGER_ROLES), "triggers")
+    assert isinstance(value, dict)
+    pedals: dict[str, PedalConfig] = {}
+    for role in TRIGGER_ROLES:
+        pedal = value[role]
+        _require_exact_keys(
+            pedal,
+            {
+                "vendor_id",
+                "product_id",
+                "serial_number",
+            },
+            f"trigger {role}",
+        )
+        assert isinstance(pedal, dict)
+        pedals[role] = PedalConfig(
+            role=role,
+            vendor_id=_usb_hex_id(pedal["vendor_id"], f"trigger {role} vendor_id"),
+            product_id=_usb_hex_id(pedal["product_id"], f"trigger {role} product_id"),
+            serial_number=_non_empty_string(
+                pedal["serial_number"], f"trigger {role} serial_number"
+            ),
+        )
+    if pedals["activate"].serial_number == pedals["abort"].serial_number:
+        raise ValueError("trigger pedals must use different serial numbers")
+    return TriggerConfig(activate=pedals["activate"], abort=pedals["abort"])
+
+
+def _usb_hex_id(value: object, label: str) -> str:
+    normalized = _non_empty_string(value, label).lower()
+    if len(normalized) != 4 or any(
+        character not in "0123456789abcdef" for character in normalized
+    ):
+        raise ValueError(f"{label} must be four hexadecimal characters")
+    return normalized

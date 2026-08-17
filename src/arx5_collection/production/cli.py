@@ -10,11 +10,9 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Iterator, TextIO
 
-from arx5_collection.episode.adapters.keyboard import KeyboardTrigger
 from arx5_collection.episode.cli import (
     load_request,
     non_negative_int,
-    one_character,
     run_episode_loop,
 )
 from arx5_collection.reset import ResetState
@@ -23,6 +21,10 @@ from .checks import CheckFailure, CheckResult
 from .config import load_station_config, validate_task_streams
 from .devices import DeviceIdentityVerifier
 from .orchestrator import GIB, ProductionSession
+from .triggers import AutoTriggerFactory
+
+
+DEFAULT_STATION_CONFIG = Path("/var/lib/arx5-collection/station.json")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -30,17 +32,18 @@ def build_parser() -> argparse.ArgumentParser:
     subcommands = parser.add_subparsers(dest="command", required=True)
 
     devices = subcommands.add_parser("devices", help="verify configured device identities")
-    devices.add_argument("--station-config", type=Path, required=True)
+    devices.add_argument(
+        "--station-config", type=Path, default=DEFAULT_STATION_CONFIG
+    )
 
     run = subcommands.add_parser("run", help="run one long-lived collection Session")
-    run.add_argument("--station-config", type=Path, required=True)
+    run.add_argument("--station-config", type=Path, default=DEFAULT_STATION_CONFIG)
     run.add_argument("--task-config", type=Path, required=True)
     run.add_argument("--output-root", type=Path, required=True)
     run.add_argument(
         "--session-log-root", type=Path, default=Path("/reports/session-logs")
     )
     run.add_argument("--episodes", type=non_negative_int, default=0)
-    run.add_argument("--trigger-key", type=one_character, default=" ")
     run.add_argument("--min-free-gib", type=positive_int, default=80)
     run.add_argument("--readiness-timeout-s", type=positive_float, default=30.0)
     return parser
@@ -115,7 +118,10 @@ def run_session(args: argparse.Namespace) -> int:
     )
     with termination_as_interrupt(), session:
         print(f"SESSION READY logs={session_log_dir}", flush=True)
-        with KeyboardTrigger(key=args.trigger_key) as trigger:
+        trigger_factory = AutoTriggerFactory(
+            status_sink=lambda message: print(message, file=sys.stderr, flush=True)
+        )
+        with trigger_factory.open(station) as trigger:
             runtime = session.create_runtime(request, trigger)
             return run_episode_loop(
                 runtime,

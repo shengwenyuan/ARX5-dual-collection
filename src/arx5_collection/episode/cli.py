@@ -106,7 +106,8 @@ def run_episode_loop(
             previous_sink(state)
         if state is EpisodeState.RECORDING:
             print(
-                "RECORDING: SPACE=success, A=abort and continue, Ctrl+C=abort and exit",
+                "RECORDING: activate=success, abort=abort and continue, "
+                "Ctrl+C=abort and exit",
                 file=error_output,
                 flush=True,
             )
@@ -118,7 +119,7 @@ def run_episode_loop(
     try:
         while episodes == 0 or completed < episodes:
             print(
-                "READY: press SPACE to start; Ctrl+C exits the Session",
+                "READY: activate trigger starts; Ctrl+C exits the Session",
                 file=error_output,
                 flush=True,
             )
