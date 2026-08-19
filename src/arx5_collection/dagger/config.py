@@ -6,6 +6,11 @@ import re
 import tomllib
 
 from .observation import GripperCalibration, ObservationConstraints
+from .models import DEFAULT_PI05_EXECUTION_PROFILE, PolicyExecutionProfile
+from arx5_collection.production.profiles import (
+    ArmRuntimeProfile,
+    resolve_arm_profile,
+)
 
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
@@ -21,6 +26,8 @@ class DaggerCollectorSettings:
     grippers: GripperCalibration
     observation: ObservationConstraints
     snapshot_service_timeout_s: float
+    execution: PolicyExecutionProfile
+    arm_profile: ArmRuntimeProfile
 
     @classmethod
     def load(cls, path: str | Path) -> DaggerCollectorSettings:
@@ -30,6 +37,7 @@ class DaggerCollectorSettings:
         collector = _table(payload, "collector")
         gripper = _table(payload, "gripper")
         observation = _optional_table(payload, "observation")
+        robot = _optional_table(payload, "robot")
         settings = cls(
             server_host=str(collector.get("server_host", "127.0.0.1")),
             server_port=int(collector.get("server_port", policy.get("port", 8000))),
@@ -56,6 +64,10 @@ class DaggerCollectorSettings:
             snapshot_service_timeout_s=(
                 float(observation.get("service_timeout_ms", 250.0)) / 1000.0
             ),
+            execution=load_policy_execution_profile(payload),
+            arm_profile=resolve_arm_profile(
+                str(robot.get("profile", robot.get("arm_state_profile", "dagger")))
+            ),
         )
         if not settings.server_host or not settings.prompt:
             raise ValueError("policy server host and prompt must not be empty")
@@ -68,6 +80,24 @@ class DaggerCollectorSettings:
         if not _SHA256.fullmatch(settings.checkpoint_sha256):
             raise ValueError("checkpoint_sha256 must contain 64 hexadecimal characters")
         return settings
+
+
+def load_policy_execution_profile(
+    payload: dict[str, object],
+) -> PolicyExecutionProfile:
+    policy = _table(payload, "policy")
+    robot = _optional_table(payload, "robot")
+    defaults = DEFAULT_PI05_EXECUTION_PROFILE
+    return PolicyExecutionProfile(
+        action_chunk_size=int(
+            policy.get("action_chunk_size", defaults.action_chunk_size)
+        ),
+        action_dimension=int(
+            policy.get("action_dimension", defaults.action_dimension)
+        ),
+        execution_steps=int(policy.get("execution_steps", defaults.execution_steps)),
+        control_rate_hz=float(robot.get("rate_hz", defaults.control_rate_hz)),
+    )
 
 
 def _table(payload: dict[str, object], name: str) -> dict[str, object]:

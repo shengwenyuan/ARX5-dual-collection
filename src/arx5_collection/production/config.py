@@ -179,6 +179,15 @@ def load_station_config(path: Path) -> StationConfig:
     )
 
 
+def load_configured_station(path: Path) -> StationConfig:
+    if not path.is_file():
+        raise ValueError(
+            f"station configuration is missing: {path}; "
+            "run 'arx5-collect station configure' first"
+        )
+    return load_station_config(path)
+
+
 def validate_task_streams(path: Path) -> None:
     payload = _load_object(path, "task")
     _require_exact_keys(payload, {"task_id", "task_description", "streams"}, "task")

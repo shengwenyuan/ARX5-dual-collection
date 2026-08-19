@@ -7,7 +7,7 @@ from threading import Lock
 from typing import Protocol
 from uuid import uuid4
 
-from .models import InferenceTicket
+from .models import InferenceTicket, PolicyExecutionProfile
 from .observation import Pi05Observation, Pi05ObservationEncoder, VlaObservationStep
 
 
@@ -82,6 +82,7 @@ class AsyncPi05PolicyClient:
         observations: ObservationSource,
         encoder: Pi05ObservationEncoder,
         transport: Pi05PolicyTransport,
+        execution: PolicyExecutionProfile,
     ) -> None:
         if not session_id or not prompt:
             raise ValueError("session_id and prompt must not be empty")
@@ -94,6 +95,7 @@ class AsyncPi05PolicyClient:
         self.observations = observations
         self.encoder = encoder
         self.transport = transport
+        self.execution = execution
         self._executor = ThreadPoolExecutor(
             max_workers=1, thread_name_prefix="dagger-policy"
         )
@@ -159,6 +161,7 @@ class AsyncPi05PolicyClient:
             control_epoch=control_epoch,
             checkpoint_sha256=response.checkpoint_sha256,
             action_chunk=response.action_chunk,
+            execution=self.execution,
         )
 
     def _require_active_epoch(self, control_epoch: int) -> None:

@@ -29,6 +29,7 @@ from .processes import (
     RosProcessSupervisor,
 )
 from .ports import SessionArmController, SessionStreamMonitor
+from .profiles import ArmRuntimeProfile, TEACHING_ARM_PROFILE
 from .readiness import RosReadinessGate
 from .system import SystemBringup
 
@@ -57,6 +58,7 @@ class ProductionSession:
         readiness: RosReadinessGate | None = None,
         commands: RosCommandSet | None = None,
         camera_snapshot: CameraSnapshotConfig | None = None,
+        arm_profile: ArmRuntimeProfile = TEACHING_ARM_PROFILE,
         additional_processes: tuple[ManagedProcess, ...] = (),
         backend: RosbagRecordingBackend | None = None,
         monitor: SessionStreamMonitor | None = None,
@@ -80,6 +82,7 @@ class ProductionSession:
         self.readiness = readiness or RosReadinessGate()
         self.commands = commands or RosCommandSet(log_dir)
         self.camera_snapshot = camera_snapshot
+        self.arm_profile = arm_profile
         self.additional_processes = additional_processes
         self.backend = backend or RosbagRecordingBackend()
         self.monitor = monitor or RosStreamMonitor(self.backend)
@@ -129,8 +132,10 @@ class ProductionSession:
             self.monitor.open()
             self._monitor_open = True
 
-            self.supervisor.start(self.commands.arx5_v2_collect())
-            self.supervisor.start(self.commands.arm_state_adapter())
+            self.supervisor.start(self.commands.arx5_controller(self.arm_profile))
+            self.supervisor.start(
+                self.commands.arm_state_adapter(self.arm_profile)
+            )
             self._report(
                 self.readiness.wait_for(
                     ("left_arm_state", "right_arm_state"),
@@ -228,11 +233,11 @@ class ProductionSession:
                 exits = self.supervisor.stop_all()
                 for exit_result in exits:
                     if (
-                        exit_result.name == "arx5-v2-collect"
+                        exit_result.name == "arx5-controller"
                         and exit_result.return_code != 0
                     ):
                         self.warning_sink(
-                            "Vendor shutdown warning: arx5-v2-collect returned "
+                            "Vendor shutdown warning: arx5-controller returned "
                             f"{exit_result.return_code} after requested shutdown"
                         )
             except BaseException as error:

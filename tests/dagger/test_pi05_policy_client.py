@@ -4,6 +4,7 @@ import unittest
 from threading import Event
 
 from arx5_collection.dagger.observation import Pi05Observation, RgbFrame
+from arx5_collection.dagger.models import PolicyExecutionProfile
 from arx5_collection.dagger.policy_client import (
     AsyncPi05PolicyClient,
     Pi05PolicyRequest,
@@ -14,6 +15,7 @@ from arx5_collection.dagger.policy_client import (
 
 RGB = b"\x00" * 12
 ACTION_CHUNK = ((0.0,) * 14,) * 50
+EXECUTION = PolicyExecutionProfile(50, 14, 10, 25.0)
 
 
 class Source:
@@ -61,6 +63,7 @@ class AsyncPi05PolicyClientTest(unittest.TestCase):
             Source(),
             Encoder(),
             self.transport,
+            EXECUTION,
         )
 
     def tearDown(self) -> None:
@@ -72,6 +75,7 @@ class AsyncPi05PolicyClientTest(unittest.TestCase):
         ticket = future.result(1.0)
 
         self.assertEqual(ticket.inference_id, "request-1")
+        self.assertEqual(ticket.execution, EXECUTION)
         self.assertEqual(self.transport.requests[0].episode_id, "episode-1")
 
     def test_old_epoch_response_is_discarded(self) -> None:

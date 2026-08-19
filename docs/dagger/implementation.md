@@ -157,3 +157,12 @@ D0 真机验收回写本文件前，不实现或运行 Take-over。D1 开始前�
 - 删除已被统一 D405 Source 取代的独立 `vla_snapshot_source` Subscriber；`arx5_vla_snapshot` 仅保留被统一 Source 链接的 C++ 因果 Matcher。
 - 删除无生产调用的 Python 因果配组实现；Python 只负责调用 `/dagger/get_snapshot`、模型字段编码和策略通信。
 - 行为契约未变：Python 全量离线测试 220 passed、2 skipped；相关三个 ROS package 离线构建通过，C++ SnapshotBuffer 5 tests 全部通过。
+
+## 2026-08-19 Application 与 ArmState profile 收敛
+
+- `production/cli.py` 只保留参数适配；DAgger 资源由独立 Application Builder 组装，硬件与 ROS 生命周期由 DAgger Session Builder 组装。Take-over 不再向生产 CLI 堆叠逻辑。
+- Canonical 输出固定为 `/embodiments/left_arm/state` 和 `/embodiments/right_arm/state`。普通示教 profile 启动 `v2_collect` 并读取 `/arm_master_*_status`；DAgger profile 启动 `v2_joint_control` 并读取 `/arm_slave_*_status`。Controller launch 与 Adapter 输入必须由同一个 profile 决定。
+- action chunk size、action dimension、execution steps 和 control rate 由 DAgger TOML 配置。当前实验配置为 `50 / 14 / 10 / 25 Hz`，不把单一模型参数冻结在代码中。
+- 本地 226 tests 通过、2 skipped；W3 独立镜像完成 6 个 ROS package 构建，35 个 DAgger tests 与 9 个 production profile/orchestrator tests 通过。Adapter 无硬件 smoke 明确打印 slave 输入到 canonical 输出的两条映射；尚待用户启动 ARX 链路完成真实 Topic 验收。
+- 首轮真实 profile 测试发现 Session 仍固定启动 `v2_collect`，因此只有 master Topic，DAgger readiness 必然超时。profile 已扩展为同时选择 Controller launch 与 Adapter 输入；W3 重建后确认 DAgger 解析为 `v2_joint_control`、slave 输入和 25 Hz。
+- W3 复测通过：`v2_joint_control` 下左右 Canonical ArmState 分别观测到 439/446 条消息，age 均为 18 ms；CAN 零错误，退出后 usbfs 从 256 MB 恢复为 16 MB。Arm profile 链路收口。

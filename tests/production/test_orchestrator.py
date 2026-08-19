@@ -106,10 +106,10 @@ class RepeatedInterruptSupervisor(FakeSupervisor):
 
 
 class FakeCommands:
-    def arx5_v2_collect(self):
-        return NamedProcess("arx5-v2-collect")
+    def arx5_controller(self, profile):
+        return NamedProcess("arx5-controller")
 
-    def arm_state_adapter(self):
+    def arm_state_adapter(self, profile):
         return NamedProcess("arm-state-adapter")
 
     def d405_source(self, cameras, snapshot=None):
@@ -183,7 +183,7 @@ class ProductionSessionTest(unittest.TestCase):
         self.assertEqual(
             starts,
             [
-                "ros:start:arx5-v2-collect",
+                "ros:start:arx5-controller",
                 "ros:start:arm-state-adapter",
                 "ros:start:d405-source",
             ],
@@ -193,7 +193,7 @@ class ProductionSessionTest(unittest.TestCase):
             [
                 "ros:stop:d405-source",
                 "ros:stop:arm-state-adapter",
-                "ros:stop:arx5-v2-collect",
+                "ros:stop:arx5-controller",
             ],
         )
         self.assertEqual(events[-2:], ["gate:stop", "system:stop"])

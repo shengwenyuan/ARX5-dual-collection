@@ -2,13 +2,11 @@ from __future__ import annotations
 
 import argparse
 import json
-import signal
 import sys
 from collections.abc import Sequence
-from contextlib import contextmanager
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
-from typing import Iterator, TextIO
+from typing import TextIO
 
 from arx5_collection.episode.cli import (
     load_request,
@@ -18,8 +16,9 @@ from arx5_collection.episode.cli import (
 from arx5_collection.reset import ResetState
 
 from .checks import CheckFailure, CheckResult
-from .config import load_station_config, validate_task_streams
+from .config import load_configured_station, validate_task_streams
 from .devices import DeviceIdentityVerifier
+from .lifecycle import termination_as_interrupt
 from .orchestrator import GIB, ProductionSession
 from .triggers import AutoTriggerFactory
 from arx5_collection.station.inventory import D405Device
@@ -246,109 +245,24 @@ def run_session(args: argparse.Namespace) -> int:
 
 
 def run_dagger_shadow(args: argparse.Namespace) -> int:
-    from arx5_collection.dagger.config import DaggerCollectorSettings
-    from arx5_collection.dagger.observation import Pi05ObservationEncoder
-    from arx5_collection.dagger.openpi_transport import OpenPiDaggerTransport
-    from arx5_collection.dagger.policy_client import AsyncPi05PolicyClient
-    from arx5_collection.dagger.ros_snapshot import (
-        OpenCvYuyvConverter,
-        RosVlaSnapshotClient,
+    from arx5_collection.dagger.application import (
+        DaggerApplicationBuilder,
+        DaggerRunSpec,
     )
-    from arx5_collection.dagger.shadow import (
-        JsonlShadowLog,
-        ShadowEpisodeHooks,
-        ShadowInferenceLoop,
-        ShadowRecordTrigger,
-    )
-    from arx5_collection.dagger.triggers import DaggerAutoTriggerFactory
-    from arx5_collection.production.processes import CameraSnapshotConfig
 
-    station = load_configured_station(args.station_config)
-    validate_task_streams(args.task_config)
-    request = load_request(args.task_config, args.output_root, args.station_config)
-    settings = DaggerCollectorSettings.load(args.policy_config)
-    session_id = _session_id()
-    session_log_dir = args.session_log_root / session_id
-
-    def check_sink(result: CheckResult) -> None:
-        render_check(result, sys.stdout)
-
-    session = ProductionSession(
-        station=station,
+    spec = DaggerRunSpec(
+        station_config=args.station_config,
+        task_config=args.task_config,
+        policy_config=args.policy_config,
         output_root=args.output_root,
-        log_dir=session_log_dir,
-        software_version=_software_version(),
-        min_free_bytes=args.min_free_gib * GIB,
+        session_log_root=args.session_log_root,
+        episodes=args.episodes,
+        min_free_gib=args.min_free_gib,
         readiness_timeout_s=args.readiness_timeout_s,
-        home_state_sink=lambda state: render_reset_state(state, sys.stderr),
-        home_timing_sink=lambda phase, elapsed_s: render_home_timing(
-            phase, elapsed_s, sys.stderr
-        ),
-        check_sink=check_sink,
-        warning_sink=lambda message: print(f"WARNING {message}", file=sys.stderr),
-        camera_snapshot=CameraSnapshotConfig(
-            max_camera_span_ms=settings.observation.max_camera_span_ns / 1e6,
-            max_arm_age_ms=settings.observation.max_arm_age_ns / 1e6,
-            max_snapshot_age_ms=settings.observation.max_snapshot_age_ns / 1e6,
-        ),
+        software_version=_software_version(),
+        session_id=_session_id(),
     )
-
-    with termination_as_interrupt(), OpenPiDaggerTransport(
-        settings.server_host,
-        settings.server_port,
-        settings.checkpoint_sha256,
-        settings.inference_timeout_s,
-    ) as transport, RosVlaSnapshotClient(
-        timeout_s=settings.snapshot_service_timeout_s
-    ) as observations, JsonlShadowLog(
-        session_log_dir / "dagger-shadow.jsonl"
-    ) as shadow_log, session:
-        policy = AsyncPi05PolicyClient(
-            session_id=session_id,
-            prompt=settings.prompt,
-            checkpoint_sha256=settings.checkpoint_sha256,
-            observations=observations,
-            encoder=Pi05ObservationEncoder(
-                settings.grippers,
-                OpenCvYuyvConverter(),
-            ),
-            transport=transport,
-        )
-        shadow_loop = ShadowInferenceLoop(
-            policy,
-            attempt_sink=shadow_log,
-            status_sink=lambda message: print(message, file=sys.stderr, flush=True),
-        )
-        hooks = ShadowEpisodeHooks(shadow_loop, settings.checkpoint_sha256)
-        print(f"DAGGER SHADOW READY logs={session_log_dir}", flush=True)
-        trigger_factory = DaggerAutoTriggerFactory(
-            status_sink=lambda message: print(message, file=sys.stderr, flush=True)
-        )
-        try:
-            with trigger_factory.open(station) as trigger:
-                runtime = session.create_runtime(
-                    request,
-                    ShadowRecordTrigger(
-                        trigger,
-                        status_sink=lambda message: print(
-                            message, file=sys.stderr, flush=True
-                        ),
-                    ),
-                    metadata_context_provider=hooks.metadata_context,
-                    recording_started_hook=hooks.recording_started,
-                    recording_stopping_hook=hooks.recording_stopping,
-                )
-                return run_episode_loop(
-                    runtime,
-                    request,
-                    episodes=args.episodes,
-                    stdout=sys.stdout,
-                    stderr=sys.stderr,
-                    continue_after_failed_episode=True,
-                )
-        finally:
-            shadow_loop.stop()
-            policy.close()
+    return DaggerApplicationBuilder().build_shadow(spec).run()
 
 
 def run_checkpoint_sha(checkpoint: Path, stdout: TextIO | None = None) -> int:
@@ -363,15 +277,6 @@ def render_check(result: CheckResult, output: TextIO) -> None:
     print(f"{state} [{result.phase.value}] {result.name}: {result.detail}", file=output)
 
 
-def load_configured_station(path: Path):
-    if not path.is_file():
-        raise ValueError(
-            f"station configuration is missing: {path}; "
-            "run 'arx5-collect station configure' first"
-        )
-    return load_station_config(path)
-
-
 def render_reset_state(state: ResetState, output: TextIO) -> None:
     if state is ResetState.RESETTING:
         message = "RESETTING: moving both arms to Vendor home"
@@ -382,20 +287,6 @@ def render_reset_state(state: ResetState, output: TextIO) -> None:
 
 def render_home_timing(phase: str, elapsed_s: float, output: TextIO) -> None:
     print(f"HOME_TIMING {phase}={elapsed_s:.3f}s", file=output, flush=True)
-
-
-@contextmanager
-def termination_as_interrupt() -> Iterator[None]:
-    previous = signal.getsignal(signal.SIGTERM)
-
-    def interrupt(signum, frame) -> None:
-        raise KeyboardInterrupt
-
-    signal.signal(signal.SIGTERM, interrupt)
-    try:
-        yield
-    finally:
-        signal.signal(signal.SIGTERM, previous)
 
 
 def positive_int(value: str) -> int:

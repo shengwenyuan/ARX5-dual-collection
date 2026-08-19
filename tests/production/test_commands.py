@@ -7,6 +7,10 @@ from pathlib import Path
 from arx5_collection.production.config import CameraConfig
 from arx5_collection.production.cli import load_configured_station
 from arx5_collection.production.processes import CameraSnapshotConfig, RosCommandSet
+from arx5_collection.production.profiles import (
+    DAGGER_ARM_PROFILE,
+    TEACHING_ARM_PROFILE,
+)
 
 
 class RosCommandSetTest(unittest.TestCase):
@@ -40,9 +44,37 @@ class RosCommandSetTest(unittest.TestCase):
 
     def test_arx_uses_frozen_official_v2_launch(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            command = RosCommandSet(Path(directory)).arx5_v2_collect()
+            command = RosCommandSet(Path(directory)).arx5_controller(
+                TEACHING_ARM_PROFILE
+            )
+            dagger = RosCommandSet(Path(directory)).arx5_controller(
+                DAGGER_ARM_PROFILE
+            )
         self.assertEqual(command.spec.argv[0:2], ("ros2", "launch"))
         self.assertTrue(command.spec.argv[2].endswith("/x5_v2/v2_collect.launch.py"))
+        self.assertTrue(
+            dagger.spec.argv[2].endswith("/x5_v2/v2_joint_control.launch.py")
+        )
+
+    def test_arm_adapter_profile_changes_only_vendor_input_topics(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            commands = RosCommandSet(Path(directory))
+            teaching = commands.arm_state_adapter(TEACHING_ARM_PROFILE)
+            dagger = commands.arm_state_adapter(DAGGER_ARM_PROFILE)
+
+        self.assertIn(
+            "left_input_topic:=/arm_master_l_status", teaching.spec.argv
+        )
+        self.assertIn(
+            "right_input_topic:=/arm_master_r_status", teaching.spec.argv
+        )
+        self.assertIn(
+            "left_input_topic:=/arm_slave_l_status", dagger.spec.argv
+        )
+        self.assertIn(
+            "right_input_topic:=/arm_slave_r_status", dagger.spec.argv
+        )
+        self.assertNotIn("/embodiments/left_arm/state", dagger.spec.argv)
 
 
 if __name__ == "__main__":

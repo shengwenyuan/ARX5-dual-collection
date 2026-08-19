@@ -6,10 +6,6 @@ from dataclasses import dataclass
 from enum import Enum
 
 
-PI05_V2_ACTION_HORIZON = 50
-PI05_V2_ACTION_DIMENSION = 14
-PI05_V2_EXECUTION_STEPS = 10
-PI05_V2_CONTROL_RATE_HZ = 30.0
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
 
@@ -27,11 +23,42 @@ class ShadowFailureCode(str, Enum):
 
 
 @dataclass(frozen=True, slots=True)
+class PolicyExecutionProfile:
+    action_chunk_size: int
+    action_dimension: int
+    execution_steps: int
+    control_rate_hz: float
+
+    def __post_init__(self) -> None:
+        if self.action_chunk_size <= 0:
+            raise ValueError("action_chunk_size must be positive")
+        if self.action_dimension <= 0:
+            raise ValueError("action_dimension must be positive")
+        if not 0 < self.execution_steps <= self.action_chunk_size:
+            raise ValueError("execution_steps must be within the action chunk")
+        if not math.isfinite(self.control_rate_hz) or self.control_rate_hz <= 0:
+            raise ValueError("control_rate_hz must be positive and finite")
+
+    @property
+    def inference_period_s(self) -> float:
+        return self.execution_steps / self.control_rate_hz
+
+
+DEFAULT_PI05_EXECUTION_PROFILE = PolicyExecutionProfile(
+    action_chunk_size=50,
+    action_dimension=14,
+    execution_steps=10,
+    control_rate_hz=25.0,
+)
+
+
+@dataclass(frozen=True, slots=True)
 class InferenceTicket:
     inference_id: str
     control_epoch: int
     checkpoint_sha256: str
     action_chunk: tuple[tuple[float, ...], ...]
+    execution: PolicyExecutionProfile = DEFAULT_PI05_EXECUTION_PROFILE
 
     def __post_init__(self) -> None:
         if not self.inference_id:
@@ -42,18 +69,20 @@ class InferenceTicket:
         if not _SHA256.fullmatch(normalized):
             raise ValueError("checkpoint_sha256 must contain 64 hexadecimal characters")
         object.__setattr__(self, "checkpoint_sha256", normalized)
-        if len(self.action_chunk) != PI05_V2_ACTION_HORIZON:
+        if len(self.action_chunk) != self.execution.action_chunk_size:
             raise ValueError(
-                f"pi0.5 v2 action chunk must contain {PI05_V2_ACTION_HORIZON} steps"
+                "action chunk must contain "
+                f"{self.execution.action_chunk_size} steps"
             )
         for action in self.action_chunk:
-            if len(action) != PI05_V2_ACTION_DIMENSION:
+            if len(action) != self.execution.action_dimension:
                 raise ValueError(
-                    f"pi0.5 v2 action must contain {PI05_V2_ACTION_DIMENSION} values"
+                    "action must contain "
+                    f"{self.execution.action_dimension} values"
                 )
             if not all(math.isfinite(value) for value in action):
-                raise ValueError("pi0.5 v2 action values must be finite")
+                raise ValueError("action values must be finite")
 
     @property
     def execution_chunk(self) -> tuple[tuple[float, ...], ...]:
-        return self.action_chunk[:PI05_V2_EXECUTION_STEPS]
+        return self.action_chunk[: self.execution.execution_steps]

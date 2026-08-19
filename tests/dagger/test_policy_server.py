@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 
+from arx5_collection.dagger.models import PolicyExecutionProfile
 from arx5_collection.dagger.policy_server import warm_up_pi05_policy
 
 
@@ -33,7 +34,12 @@ class PolicyWarmupTest(unittest.TestCase):
     def test_uses_the_accepted_raw_aloha_shape_before_readiness(self) -> None:
         policy = Policy()
 
-        warm_up_pi05_policy(policy, "Stacking paper cups", Numpy)
+        warm_up_pi05_policy(
+            policy,
+            "Stacking paper cups",
+            PolicyExecutionProfile(50, 14, 10, 25.0),
+            Numpy,
+        )
 
         self.assertEqual(policy.observation["state"].shape, 14)
         self.assertEqual(

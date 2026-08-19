@@ -16,6 +16,13 @@ repo_id = "local/example"
 prompt = "Stacking paper cups"
 host = "0.0.0.0"
 port = 8000
+action_chunk_size = 50
+action_dimension = 14
+execution_steps = 10
+
+[robot]
+profile = "dagger"
+rate_hz = 25.0
 
 [collector]
 server_host = "127.0.0.1"
@@ -58,6 +65,31 @@ class DaggerConfigTest(unittest.TestCase):
         self.assertEqual(collector.observation.max_arm_age_ns, 2_000_000)
         self.assertEqual(collector.observation.max_snapshot_age_ns, 100_000_000)
         self.assertEqual(collector.snapshot_service_timeout_s, 0.25)
+        self.assertEqual(collector.execution.action_chunk_size, 50)
+        self.assertEqual(collector.execution.execution_steps, 10)
+        self.assertEqual(collector.execution.control_rate_hz, 25.0)
+        self.assertEqual(collector.arm_profile.name, "dagger")
+        self.assertTrue(
+            collector.arm_profile.controller_launch.endswith(
+                "v2_joint_control.launch.py"
+            )
+        )
+        self.assertEqual(server.execution, collector.execution)
+
+    def test_model_execution_parameters_are_configurable(self) -> None:
+        custom = CONFIG.replace(
+            "action_chunk_size = 50", "action_chunk_size = 12"
+        ).replace("execution_steps = 10", "execution_steps = 4").replace(
+            "rate_hz = 25.0", "rate_hz = 20.0"
+        )
+        self.path.write_text(custom)
+
+        settings = DaggerCollectorSettings.load(self.path)
+
+        self.assertEqual(settings.execution.action_chunk_size, 12)
+        self.assertEqual(settings.execution.execution_steps, 4)
+        self.assertEqual(settings.execution.control_rate_hz, 20.0)
+        self.assertEqual(settings.execution.inference_period_s, 0.2)
 
 
 if __name__ == "__main__":

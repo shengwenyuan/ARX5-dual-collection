@@ -10,7 +10,8 @@ import tomllib
 from typing import Any
 
 from .checkpoint import checkpoint_tree_sha256
-from .models import InferenceTicket
+from .config import load_policy_execution_profile
+from .models import InferenceTicket, PolicyExecutionProfile
 from .observation import PI05_IMAGE_HEIGHT, PI05_IMAGE_WIDTH
 from .policy_envelope import CorrelatedPolicyEnvelope
 
@@ -27,6 +28,7 @@ class PolicyServerSettings:
     host: str
     port: int
     base_checkpoint: str
+    execution: PolicyExecutionProfile
 
     @classmethod
     def load(cls, path: str | Path) -> PolicyServerSettings:
@@ -49,6 +51,7 @@ class PolicyServerSettings:
                     "gs://openpi-assets/checkpoints/pi05_base/params",
                 )
             ),
+            execution=load_policy_execution_profile(payload),
         )
         if not settings.repo_id or not settings.prompt or not settings.host:
             raise ValueError("repo_id, prompt, and host must not be empty")
@@ -91,7 +94,11 @@ def create_pi05_joint_policy(settings: PolicyServerSettings):
     )
     train = training_config.TrainConfig(
         name="pi05_arx5_joint_sft",
-        model=pi0_config.Pi0Config(pi05=True, action_dim=32, action_horizon=50),
+        model=pi0_config.Pi0Config(
+            pi05=True,
+            action_dim=32,
+            action_horizon=settings.execution.action_chunk_size,
+        ),
         data=data,
         weight_loader=weight_loaders.CheckpointWeightLoader(settings.base_checkpoint),
         assets_base_dir="./assets",
@@ -110,6 +117,7 @@ def create_pi05_joint_policy(settings: PolicyServerSettings):
 def warm_up_pi05_policy(
     policy: Any,
     prompt: str,
+    execution: PolicyExecutionProfile,
     numpy_module: Any | None = None,
 ) -> None:
     """Compile the accepted π0.5 input shape before the server becomes healthy."""
@@ -137,7 +145,13 @@ def warm_up_pi05_policy(
         )
     except (KeyError, TypeError, ValueError) as error:
         raise RuntimeError(f"π0.5 warm-up returned an invalid action: {error}") from error
-    InferenceTicket("policy-warmup", 0, "0" * 64, action_chunk)
+    InferenceTicket(
+        "policy-warmup",
+        0,
+        "0" * 64,
+        action_chunk,
+        execution,
+    )
     logging.info("Policy warm-up complete")
 
 
@@ -153,7 +167,7 @@ def serve(settings: PolicyServerSettings) -> None:
         )
     logging.info("Checkpoint identity verified: %s", actual_sha256)
     policy = create_pi05_joint_policy(settings)
-    warm_up_pi05_policy(policy, settings.prompt)
+    warm_up_pi05_policy(policy, settings.prompt, settings.execution)
     envelope = CorrelatedPolicyEnvelope(policy, actual_sha256, time.time_ns)
     WebsocketPolicyServer(
         envelope,
@@ -162,8 +176,10 @@ def serve(settings: PolicyServerSettings) -> None:
         metadata={
             "service": "arx5-dagger-policy",
             "checkpoint_sha256": actual_sha256,
-            "action_horizon": 50,
-            "action_dimension": 14,
+            "action_horizon": settings.execution.action_chunk_size,
+            "action_dimension": settings.execution.action_dimension,
+            "execution_steps": settings.execution.execution_steps,
+            "control_rate_hz": settings.execution.control_rate_hz,
         },
     ).serve_forever()
 

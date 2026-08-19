@@ -8,6 +8,7 @@ from typing import Protocol
 
 from arx5_collection.production.config import ArmConfig
 from arx5_collection.production.processes import RosCommandSet, RosProcessSupervisor
+from arx5_collection.production.profiles import TEACHING_ARM_PROFILE
 from arx5_collection.production.system import SystemBringup, Usb2CanDevice
 from arx5_collection.ros2_adapters.reset import RosDualArmResetController
 
@@ -125,7 +126,7 @@ class ArmIdentifier:
         try:
             system.start()
             system_started = True
-            supervisor.start(commands.arx5_v2_collect())
+            supervisor.start(commands.arx5_controller(TEACHING_ARM_PROFILE))
             observer.open()
             observer_open = True
             observer.wait_for_samples()

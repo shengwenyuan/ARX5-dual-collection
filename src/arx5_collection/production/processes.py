@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import IO, Any
 
 from .config import CameraConfig
+from .profiles import ArmRuntimeProfile, TEACHING_ARM_PROFILE
 
 
 @dataclass(frozen=True, slots=True)
@@ -194,20 +195,36 @@ class RosCommandSet:
     def __init__(self, log_dir: Path) -> None:
         self.log_dir = log_dir
 
-    def arx5_v2_collect(self) -> ManagedProcess:
+    def arx5_controller(
+        self,
+        profile: ArmRuntimeProfile = TEACHING_ARM_PROFILE,
+    ) -> ManagedProcess:
         return self._process(
-            "arx5-v2-collect",
+            "arx5-controller",
             (
                 "ros2",
                 "launch",
-                "/opt/arx_ws/install/share/arx_x5_controller/launch/x5_v2/v2_collect.launch.py",
+                profile.controller_launch,
             ),
         )
 
-    def arm_state_adapter(self) -> ManagedProcess:
+    def arm_state_adapter(
+        self,
+        profile: ArmRuntimeProfile = TEACHING_ARM_PROFILE,
+    ) -> ManagedProcess:
         return self._process(
             "arm-state-adapter",
-            ("ros2", "run", "arx5_arm_adapter", "arm_state_adapter"),
+            (
+                "ros2",
+                "run",
+                "arx5_arm_adapter",
+                "arm_state_adapter",
+                "--ros-args",
+                "-p",
+                f"left_input_topic:={profile.left_input_topic}",
+                "-p",
+                f"right_input_topic:={profile.right_input_topic}",
+            ),
         )
 
     def d405_source(

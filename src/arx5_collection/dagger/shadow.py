@@ -17,12 +17,7 @@ from arx5_collection.collection_metadata import (
 from arx5_collection.episode.models import EpisodeOutcome
 from arx5_collection.episode.ports import TriggerEvent
 
-from .models import (
-    DaggerTriggerEvent,
-    PI05_V2_CONTROL_RATE_HZ,
-    PI05_V2_EXECUTION_STEPS,
-    ShadowFailureCode,
-)
+from .models import DaggerTriggerEvent, ShadowFailureCode
 from .observation import ObservationUnavailableError
 from .ports import AsyncPolicyClient, DaggerTrigger
 
@@ -90,7 +85,7 @@ class ShadowInferenceLoop:
     def __init__(
         self,
         policy: AsyncPolicyClient,
-        period_s: float = PI05_V2_EXECUTION_STEPS / PI05_V2_CONTROL_RATE_HZ,
+        period_s: float,
         monotonic_clock: Callable[[], float] = monotonic,
         wall_clock_ns: Callable[[], int] = time_ns,
         inference_id_factory: Callable[[], str] | None = None,

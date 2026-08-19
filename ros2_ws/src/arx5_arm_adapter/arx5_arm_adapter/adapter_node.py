@@ -19,9 +19,19 @@ from rclpy.qos import (
 from arx5_arm_adapter.mapping import map_robot_status_values
 
 
-ARMS = (
-    ("left", "/arm_master_l_status", "/embodiments/left_arm/state"),
-    ("right", "/arm_master_r_status", "/embodiments/right_arm/state"),
+ARM_TOPICS = (
+    (
+        "left",
+        "left_input_topic",
+        "/arm_master_l_status",
+        "/embodiments/left_arm/state",
+    ),
+    (
+        "right",
+        "right_input_topic",
+        "/arm_master_r_status",
+        "/embodiments/right_arm/state",
+    ),
 )
 
 
@@ -51,7 +61,12 @@ class ArmStateAdapter(Node):
         self._arm_publishers = {}
         self._arm_subscriptions = []
         self._status_reporters = {}
-        for arm, input_topic, output_topic in ARMS:
+        for arm, parameter, default_input_topic, output_topic in ARM_TOPICS:
+            input_topic = str(
+                self.declare_parameter(parameter, default_input_topic).value
+            )
+            if not input_topic.startswith("/"):
+                raise ValueError(f"{parameter} must be an absolute ROS topic")
             publisher = self.create_publisher(ArmState, output_topic, data_qos)
             self._arm_publishers[arm] = publisher
             reporter = StreamStatusReporter(
