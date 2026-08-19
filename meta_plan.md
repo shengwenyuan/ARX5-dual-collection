@@ -5,9 +5,9 @@
 ## 场景
 
 - 使用两只 ARX5-2025 主臂，每只主臂集成夹爪和示教器，由采集者直接操作。
-- 系统不存在从臂和遥操作链路；除冻结的控制白名单外，采集程序只读取机械臂状态，不发送位置、回零、夹爪或 EEF 控制命令。
+- 系统不存在从臂和遥操作链路；普通采集除冻结的控制白名单外只读取机械臂状态，不发送位置、回零、夹爪或 EEF 控制命令。
 - 人工示教依赖 ARX5 官方 `remote_master` 重力补偿模式，允许 Vendor 节点在启动及归位后进入 `G_COMPENSATION`。
-- 除重力补偿外，控制白名单只包含 `docs/post-episode-reset/requirements.md` 定义的 Episode 开始前 `GO_HOME`：Recorder 必须尚未启动，归位完成后必须恢复重力补偿。任何其他模块不得复用或扩展该运动控制权限。
+- 普通采集的控制白名单只包含重力补偿和 `docs/post-episode-reset/requirements.md` 定义的 Episode 开始前 `GO_HOME`：Recorder 必须尚未启动，归位完成后必须恢复重力补偿。DAgger 的模型控制使用完全独立的显式白名单，任何其他模块不得复用这些权限。
 - 左右手腕各安装一颗 RealSense D405；第三颗位于桌面正中上方约 50 cm，俯视桌面。
 - 三颗摄像机通过 USB 接入采集主机。第三视角允许采集者手臂入镜。
 - 录制开始与结束使用统一触发接口。v0.1 默认使用两只独立 USB 踏板：activate 控制开始与 success 结束，abort 控制中止当前 Episode；踏板不可用时自动回退到键盘 `SPACE/A`。
@@ -29,7 +29,7 @@
 
 - UI 和人工 `fail` 标注。v0.1 正常结束记为 `success`，异常结束记为 `aborted`。
 - 云端任务平台、自动上传和复杂任务分发。任务先由本地定义传入。
-- DAgger 控制、失败回退和人工接管逻辑，只保留接口位置。
+- DAgger 不并入 v0.1 普通人工采集；按 `docs/dagger/requirements.md` 通过独立入口、白名单和分阶段真机验收推进。
 - 时间偏差分析、补偿和在线同步算法。
 - 容器设备权限收敛与软件包发行。
 
@@ -54,8 +54,8 @@
 ## 语言与进程边界
 
 - Episode 状态机、Hook、Store、metadata、CLI 和键盘输入使用 Python。
-- v0.1 三路 D405 Source 使用 `rclpy + pyrealsense2`，每颗相机独立进程，负责取帧、单机 Depth 对齐、图像发布和必要的编码转换。
-- `rclcpp + librealsense C++` 相机数据链路作为后续性能优化，不阻塞 v0.1；迁移必须保持 Topic、消息和站点配置契约不变。
+- v0.1 最初以三个 `rclpy + pyrealsense2` 进程完成真机验收；DAgger 并发证据触发 `rclcpp + librealsense C++` 优化，生产编排改为一个进程统一拥有三颗 D405。
+- 统一 C++ Source 内部仍为三条独立 Pipeline/采集线程，负责单机 Depth 对齐和六路原 Topic 发布；迁移保持 Topic、消息、时间和站点配置契约不变。
 - 双臂状态 Adapter 与频率监督先使用 Python；只有真机实测的频率、抖动或资源占用不达标时才迁移到 C++。
 - Python 只管理 `rosbag2/MCAP` 的启停和结果交接，录制与存储数据面沿用 ROS 2 的 C++ 实现。
 
@@ -63,7 +63,7 @@
 
 ### 输入信号
 
-- 三路摄像机：1280×720 彩色图像、与彩色图像对齐的 Depth，目标频率 30 Hz。
+- 三路摄像机：848×480 彩色图像、同分辨率且与彩色图像对齐的 Depth，目标频率 30 Hz。
 - 左右机械臂：六关节位置、六关节速度、`joint_currents` 原始值、夹爪状态、示教器输入状态、EEF 位姿；保留官方原生发布频率，不主动降采样，当前真机实测约 1000 Hz。
 - ARX5 SDK 当前将反馈组合为 `[J1..J6, gripper]`；对外消息必须拆分六关节与夹爪，不把夹爪命名为第七关节。
 - 不录制机械臂在线状态，不存在从臂信号。
@@ -157,11 +157,27 @@ w3 的单卡 JAX 推理环境使用隔离根 `/home/lenovo/swy/pi05-runtime`，�
 
 架构上冻结“模型无关清洗层 + 模型专用 dataset pipeline”：前者输出可复用的 `quality.json + frame_index.jsonl`，后者独立负责各模型的训练资格、采样频率、action、归一化和导出。未来其他清洗或训练链路应复用同一上游契约，新增独立 adapter/pipeline，不复制采集逻辑，也不把模型依赖带入采集运行路径。
 
+DAgger 原始 Episode 同样保持完整、连续和不可修改。主线 MCAP 继续以六路 RGB-D 和双臂 ArmState 为感知真值，不复制模型输入，也不记录普通推理使用的源消息。只有控制权变化通过稀疏 `/dagger/authority` 事件落入同一 MCAP；离线 pipeline 只生成区间、质量和 loss mask，不裁剪或覆盖原始数据，不推断模型开始出错的精确时刻。
+
+## DAgger 控制边界
+
+- 首版只支持本地 π0.5，通过独立的 `arx5-collect dagger run` 长生命周期 Session 运行；普通 `arx5-collect run` 不获得模型运动权限。
+- π0.5 Policy Server 与 Collector 使用两个独立 Container、一个 Compose：Server 只推理，Collector 独占相机、CAN、控制权和录制链路；Client 使用异步 PI 风格 request/response。
+- 模型输出只能作为 14D 双臂关节与夹爪 action proposal，经唯一 `ControlArbiter`、安全门和 command lease 后才能下发。
+- π0.5 v2 固定返回 50-step chunk，每轮执行前 10 步并以 30 Hz 控制；等 EEF 距离训练样本的名义 `fps=50` 不代表真实控制频率。
+- 人工接管必须先关闭模型 gate、丢弃待执行 chunk 并确认模型失去控制权，再进入 `G_COMPENSATION`；人工纠正后只允许显式重新武装和重新推理。
+- DAgger 不使用原始关节电流推断人工意图。原 `SPACE` 踏板负责录制起停，原 `A` 踏板负责模型/人工所有权切换；Abort 保留非踏板入口和系统异常路径。
+- 同一 Episode 支持 `模型控制 -> 人工从实际接管状态恢复或纠正 -> 模型恢复` 的多次交替；任何 action horizon 不得跨控制权或语义区间。
+- 三颗 D405 只由统一 C++ Source 打开一次。主线六路仍独立发布；DAgger 直接复用 Source 进程内 Color 小历史，并只通过 ROS 订阅轻量 ArmState，避免二次高带宽图像订阅。
+- 专家训练区间严格取 `HUMAN_ACTIVE -> RESUME_REQUESTED`；交接和重新推理区间不计算专家 action loss。
+- metadata 使用 `collection_type` 区分普通示教与 DAgger；DAgger 只额外记录权重 SHA-256、控制区间和介入次数，不记录两个 Container 版本或协议版本。这是默认不做 SHA 的必要例外。
+- 普通 inference 的状态、延迟与失败只写 Session 日志；接管前固定时间窗口只作为失败上下文，不代表错误起点。具体状态机、事件 Topic、离线区间和分阶段验收以 `docs/dagger/requirements.md` 为准。
+
 ## 延伸功能
 
 - UI：独立开发，提供任务选择、状态展示和人工 `fail` 标注。
 - Calibration：v0.2 增加内外参管理、三相机外参标定与 metadata 引用；v0.1 只使用设备内置标定完成单机 Depth 对齐。
-- DAgger：预留模型执行、失败回退、人工介入 Topic 和切换时间点，不实现控制逻辑。
+- DAgger：已冻结 π0.5 Human-Gated DAgger 的架构边界；完成 Shadow、单次交替和多次交替验收后才开放生产采集。
 - 任务分发：v0.1 使用本地任务定义，后续再扩展为远程服务。
 - 发行方式：Docker 稳定后再评估软件包或共享库交付。
 
@@ -181,7 +197,7 @@ w3 的单卡 JAX 推理环境使用隔离根 `/home/lenovo/swy/pi05-runtime`，�
 
 - 容器能够同时访问双臂和三颗 D405。
 - 双踏板可以连续控制多条 Episode 的开始、success 结束和 abort；踏板缺失时键盘自动回退。
-- 三路 1280×720 RGB-D @ 30 Hz 能够连续录制至少 150 秒，并记录 USB、实际频率和磁盘吞吐表现。
+- 三路 848×480 RGB-D @ 30 Hz 能够连续录制至少 150 秒，并记录 USB、实际频率和磁盘吞吐表现。
 - 90～150 秒录制可完整关闭，MCAP 可读取，JSON 与 MCAP 一一对应。
 - 长时间运行期间无持续资源泄漏，实际频率和异常中断可被观察。
 - 必需 Topic 停止时生成 `aborted` Episode，不生成表面成功的坏数据。
@@ -192,6 +208,7 @@ w3 的单卡 JAX 推理环境使用隔离根 `/home/lenovo/swy/pi05-runtime`，�
 - W4 已从标准 Docker Engine 和空 Station 配置开始完成 production image 部署、2 个 USB2CAN、3 个 USB 3.2 D405、2 个踏板的角色绑定；容器重启后七项身份复核全部匹配。
 - W4 已多次成功启动生产 Session。两条代表性 success Episode 为 27.54 秒/9.10 GB 与 46.13 秒/15.27 GB：八路完整，双臂约 1000 Hz，三相机约 30 Hz，单机 RGB/Aligned Depth 全部逐帧同时间戳配对，metadata 与 MCAP 计数一致。
 - 三颗 D405 仍是独立采样：本轮相机间最近帧中位偏差约 10～15 ms，并有孤立的约 66.7 ms 帧间隔；原始写入约 331 MB/s。系统保留真实数据，不插值、不伪造同步。
+- W3 统一 C++ D405 Source 已在 848×480@30 下完成 91.55 秒 DAgger Shadow 验收：八路完整、Shadow 274/274 成功、三相机 40 ms 配组 100%、无重复 Header；60 秒等效 MCAP 约 8.79 GB。
 - Station 初始化与生产 success 路径已允许进入批量采集；90～150 秒完整八路 Episode、必需流故障注入和长期压力仍是最终稳定性验收项。
 
 ## 开发前置确认

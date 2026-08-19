@@ -18,6 +18,8 @@
   ],
   "properties": {
     "schema_version": {"const": 1},
+    "collection_type": {"enum": ["demonstration", "dagger"]},
+    "dagger": {"$ref": "#/$defs/dagger"},
     "episode_id": {"type": "string", "minLength": 1},
     "task": {"$ref": "#/$defs/task"},
     "outcome": {"enum": ["success", "fail", "aborted"]},
@@ -38,7 +40,63 @@
       "additionalProperties": true
     }
   },
+  "allOf": [
+    {
+      "if": {
+        "required": ["collection_type"],
+        "properties": {"collection_type": {"const": "dagger"}}
+      },
+      "then": {"required": ["dagger"]},
+      "else": {"not": {"required": ["dagger"]}}
+    }
+  ],
   "$defs": {
+    "dagger": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["checkpoint_sha256", "intervention_count", "control_segments"],
+      "properties": {
+        "checkpoint_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "intervention_count": {"type": "integer", "minimum": 0},
+        "control_segments": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/control_segment"}
+        },
+        "shadow": {"$ref": "#/$defs/shadow"}
+      }
+    },
+    "shadow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "quality",
+        "inference_attempt_count",
+        "inference_success_count",
+        "inference_failure_count",
+        "recovery_count"
+      ],
+      "properties": {
+        "quality": {"enum": ["healthy", "degraded", "invalid"]},
+        "inference_attempt_count": {"type": "integer", "minimum": 0},
+        "inference_success_count": {"type": "integer", "minimum": 0},
+        "inference_failure_count": {"type": "integer", "minimum": 0},
+        "recovery_count": {"type": "integer", "minimum": 0}
+      }
+    },
+    "control_segment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["owner", "started_offset_s", "ended_offset_s"],
+      "properties": {
+        "owner": {"enum": ["model", "human"]},
+        "started_offset_s": {"type": "number", "minimum": 0},
+        "ended_offset_s": {"type": "number", "minimum": 0},
+        "intervention_id": {"type": "integer", "minimum": 1}
+      }
+    },
     "task": {
       "type": "object",
       "additionalProperties": false,

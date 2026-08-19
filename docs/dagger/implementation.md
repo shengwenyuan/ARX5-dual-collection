@@ -1,0 +1,153 @@
+# DAgger 实施记录
+
+- Status: `unified D405 Source deployed; live validation pending; D1 not started`
+- Updated: 2026-08-19
+- Branch: `main`
+
+## 当前迭代
+
+当前目标是以统一 C++ D405 Source 消除高带宽二次订阅，同时保持可被 Take-over 复用的最小 D0 数据路径：
+
+```text
+librealsense 三 Pipeline -> 六路 ROS Topic / MCAP
+  -> 进程内 Color Matcher + ROS ArmState
+  -> /dagger/get_snapshot
+  -> Python RosVlaSnapshotClient
+  -> AsyncPi05PolicyClient
+  -> PI-style Policy Server
+  -> Session JSONL diagnostics
+```
+
+本轮明确撤回：
+
+- C++ `Pi05ObservationAdapter` 与 `GetPi05Observation` service。
+- 逐次 `policy_inference`、`policy_action` 及 observation source stamp 的 MCAP 记录。
+- Shadow 对 command、Gateway、control authority 或 Episode outcome 的影响。
+- 把模型协议、Policy、Recorder 或控制逻辑塞入相机 Source。
+
+本轮保留：
+
+- 两 Container 的 Policy Server / Collector 部署边界。
+- checkpoint SHA-256 对齐。
+- PI 风格三相机、双臂 state、prompt request。
+- Shadow 失败隔离和 metadata 汇总。
+- 双踏板 DAgger profile；Shadow 忽略左踏板。
+- `/dagger/authority` 接口契约，供 D1 Take-over 使用。
+
+## 实施步骤
+
+1. 重写需求，冻结数据与进程边界。
+2. 删除旧 C++ Adapter、ROS service 和高频 Policy MCAP schema。
+3. 实现小型有界缓存与纯函数因果选择。
+4. 实现 Python ROS Sampler；callback 只入缓存，worker 负责转换。
+5. 将 Policy Client 改为单 worker 的异步 submit/Future 接口，支持 epoch 作废。
+6. Shadow 改为单在途调度，将逐次结果写入 Session JSONL。
+7. 完成全仓测试、ROS interface 构建和 Docker 镜像构建。
+8. 在 W3 仅部署镜像；由用户启动 45–60 秒 Shadow 真机验收。
+
+## 已知历史与结论
+
+旧 C++ Adapter 曾在合成测试和 MCAP 回放中通过，但真机与 Recorder/Policy 并发时缓存相机消息落后 0.2–2.1 秒，而同一时刻 MCAP 原始帧年龄仅 0.35–32 ms。多轮 callback group、QoS 和唤醒修正没有稳定消除该差异。
+
+这证明生产 D405/USB/原始 Topic 正常，也证明旧 Adapter 的调度结构不适合作为 Take-over 基础。本轮不继续在该实现上打补丁。
+
+旧 Shadow 已验证的故障语义继续有效：observation/policy 失败不得伪造 action，不得终止 Episode；恢复后可继续诊断。旧 Shadow 的成功 inference/action MCAP 对照不再属于新数据契约。
+
+## D0 验收条件
+
+- 单元测试覆盖三相机严格配组、因果 ArmState、freshness、无完整组失败和 YUYV 转换。
+- Async Client 保证单 worker、关联校验、旧 epoch 响应作废和有界关闭。
+- Shadow 逐次诊断只写 JSONL，metadata 汇总一致。
+- MCAP 不再包含普通 inference、action 或模型输入副本。
+- W3 90–150 秒内八路流保持既有频率；Sampler 不出现“原始 Topic 新鲜但本地 cache 秒级滞后”。
+- 左踏板无影响，右踏板正常结束，Episode outcome 与 Shadow 故障解耦。
+
+## D1 入口条件
+
+D0 真机验收回写本文件前，不实现或运行 Take-over。D1 开始前还必须冻结当前 checkpoint 的 action 语义、控制频率、执行 horizon 和 Gateway 安全阈值。
+
+## 2026-08-19 D0 重构部署结果
+
+- 已删除旧 C++ Adapter package、`GetPi05Observation` service、逐次 Policy MCAP message 和启动编排。
+- 已实现 Python `RosVlaObservationSampler`：五个短 callback、三路小型图像历史、双臂有限历史、非阻塞严格因果选择。
+- π0.5 编码与通用 Sampler 分离；YUYV→640×360 RGB 使用固定的 `opencv-python-headless 4.11.0.86`，不安装 Ubuntu GUI/GDAL/VTK OpenCV 依赖。
+- 已实现单 worker `AsyncPi05PolicyClient`、epoch 作废和 Shadow 单在途调度。
+- 普通 inference 不再增加 MCAP Topic；逐次结果写 `session-log/dagger-shadow.jsonl`，metadata 只写汇总。
+- ROS interface 只增加 `AuthorityEvent.msg`，Topic 冻结为 `/dagger/authority`；D0 Shadow 没有控制权，因此不发布该事件。
+- Mac 全仓：`222 passed, 3 skipped`；跳过项为本机缺少 ROS/OpenCV/真实 websocket 环境。
+- W3 Collector Container：35 项 DAgger/ROS/真实 websocket codec 测试通过；五 Publisher ROS 集成测试通过。
+- W3 首轮候选 Image：`arx5-dual-collection:dagger`，ID `sha256:f6b695ee5f1dc451f56579e436f235441ac548de4ec324566ce5cdef27d2adf1`，大小约 463 MB；已被下方配组修正版替代。
+- Policy Server 代码与已部署 `arx5-dual-policy:dagger` 完全一致，本轮未重复构建。
+- 旧 C++ Adapter Image 和 NumPy 转换候选均保留独立 retired tag，未删除，可用于诊断对照。
+
+合成 720p/30 Hz + 双臂 1 kHz 分进程 smoke 已证明 Python Sampler 能在并发 ROS 数据面取到真实缓存并执行三路转换；但 Python 合成 Publisher 自身不能稳定维持真机数据频率，不能替代正式 W3 验收。当前严格停在 D0 真机启动前，不启动采集或控制设备。
+
+## 2026-08-19 D0 配组故障结论与修正计划
+
+- 本轮 W3 重启后的 Shadow 仅 8/902 次推理成功；八路原始 Topic 与 Policy transport 正常。
+- 两份历史 MCAP 的三相机跨度分别主要位于 8.1 ms 和 12.1 ms，说明此前 16.7 ms 验收依赖偶然启动相位；双臂状态年龄最大约 1.48 ms，不是本轮主因。
+- D405 不支持多机硬同步，因此 16.7 ms 不是可长期成立的设备契约。
+- 将相机配组改为 overview 锚定的最近真实帧，最大跨度设为 40 ms；ArmState 2 ms 和 snapshot 100 ms 保持不变。
+- 配组失败改为结构化分类，并在 JSONL 写实际值与门槛。补充任意 30 Hz 启动相位、丢帧和时间边界测试。
+- 下一轮 W3 只从 `/home/lenovo/swy/ARX5-dual-collection-dagger-python-f6f42ad` 启动；旧部署目录暂不删除。
+
+## 2026-08-19 D0 配组修正版部署结果
+
+- `ObservationConstraints` 已改为显式配置：相机跨度 40 ms、ArmState 年龄 2 ms、snapshot 年龄 100 ms。
+- JSONL 失败状态已细分为缓存未就绪、相机跨度超限、snapshot 陈旧、左臂陈旧和右臂陈旧，并写入实际值与门槛。
+- Mac 全仓：`224 passed, 3 skipped`。
+- W3 Container：37 项 DAgger 测试通过；独立 ROS 五 Publisher 集成测试通过。
+- W3 修正版 Image：`arx5-dual-collection:dagger`，ID `sha256:0cfc3159c701f30a4792db6099f181502cd1854cf58cf1a411c30d4ff675387b`，大小约 463 MB。
+- 代码与运行配置已部署到统一目录 `/home/lenovo/swy/ARX5-dual-collection-dagger-python-f6f42ad`；尚未启动真机采集或控制。
+
+## 2026-08-19 D0 Python Sampler 真机结论
+
+- Episode `20260819T093338042926Z-fdd1bd0d` 正常 success，49.03 秒八路数据完整；双臂约 1000 Hz、三路 RGB-D 约 30 Hz，无 MCAP 告警。
+- MCAP 离线三相机跨度为 16.24–16.76 ms，40 ms 下 100% 可配组；双臂最大年龄约 1.22 ms。
+- Shadow 143 次尝试全部失败：107 次 `snapshot_stale`、35 次 `camera_span_exceeded`、1 次 `left_arm_stale`。
+- Python Sampler 缓存 snapshot 最高陈旧 1.74 秒、相机跨度最高 2.31 秒，确认高带宽 ROS callback 独立积压；阈值、D405、CAN、Recorder 和 Policy transport 不是根因。
+- D0 不再继续调整阈值或修补 Python executor。按 `plans/dagger-cpp-snapshot-optimization.md` 实现窄职责、模型无关的 C++ Snapshot Source。
+
+## 2026-08-19 D0 C++ Snapshot 部署结果
+
+- 新增通用 `GetVlaSnapshot.srv` 和 `arx5_vla_snapshot` package；service 固定为 `/dagger/get_snapshot`。
+- C++ Source 只订阅三路 Color 与双臂 ArmState；五路订阅和 service 使用六个独立 callback group，DDS depth 固定为 1。
+- C++ 只保留少量真实历史并执行 40/2/100 ms 因果选择；返回原始 YUYV 与 ArmState，不含 π0.5、Policy、Recorder 或控制逻辑。
+- Python `RosVlaSnapshotClient` 替代高带宽 Topic 订阅；YUYV→RGB、模型编码和异步推理边界不变。
+- Mac 全仓：`225 passed, 3 skipped`。W3 C++ 4 项 gtest、Container 38 项 DAgger 测试及 C++/Python ROS 端到端测试通过。
+- 对失败 Episode 的 48 秒 MCAP 原速回放中，含冷启动成功率为 139/146（95.2%）；最大相机跨度 24.24 ms，最大 ArmState 年龄 1.13 ms，未复现秒级 callback backlog。
+- W3 正式镜像：`arx5-dual-collection:dagger`，ID `sha256:32a7997fe230754c72eb170e4f938682740c237b6b669f135a74646471c8b0ca`，大小约 464 MB。
+- 代码、运行配置和镜像已部署到统一目录 `/home/lenovo/swy/ARX5-dual-collection-dagger-python-f6f42ad`；真机 Shadow 尚未启动。
+
+## 2026-08-19 独立 C++ Snapshot 真机结论
+
+- Episode `20260819T100405021883Z-2afab9f4` 正常 success，64.38 秒八路 MCAP 完整。
+- Shadow 193 次请求仅 15 次成功（7.8%）；159 次 snapshot 陈旧、19 次相机跨度超限，末尾陈旧约 1.04 秒。
+- 同一 MCAP 离线复算中，三相机 `<=40 ms` 为 1926/1927（99.95%），跨度中位数 10.32 ms；双臂年龄 99 分位均小于 1 ms。
+- 结论：独立 C++ Subscriber 仍受 ROS/DDS 图像 fan-out 与调度积压影响。40/2/100 ms 标准不放宽，该生产结构被否决。
+
+## 2026-08-19 统一 C++ D405 Source 部署结果
+
+- 新增一个 `multi_d405_source` 进程，内部包含三条独立 librealsense Pipeline、采集线程、capacity-1 SDK queue、Global Time 校验和 Depth-to-Color align。
+- 六路既有 Topic 继续独立发布；同一 Color message 同时进入进程内 Matcher，不再由 Snapshot 二次订阅图像。
+- 普通生产关闭 Snapshot service；DAgger 复用 `/dagger/get_snapshot` 与现有 Python Client，Policy/PI/Recorder/控制边界不变。
+- 本地回归 224 passed、3 skipped；W3 C++ 编译和 4 项 SnapshotBuffer gtest 通过。
+- W3 候选镜像 `arx5-dual-collection:dagger-unified-d405` 已构建并部署为 compose 的 `arx5-dual-collection:dagger`，ID `sha256:e38b36f35ab7f12b798292721b1e76f3267754da439d5af04e324456e31bf367`；尚未启动真机采集或控制。
+
+## 2026-08-19 统一 Source 720p 真机结论
+
+- 第一条 46.03 秒 Episode 为 aborted；Shadow 125/138（90.6%）成功，最长连续失败 2.81 秒。右相机出现 1.14 秒 Header 断档和 12 个重复时间戳。
+- 第二条 58.04 秒 Episode 为 success；原始 MCAP 的 40 ms 配组 100%，双臂最大年龄约 1.01 ms，但 Shadow 仅 116/174（66.7%）成功，最长连续失败 3.77 秒。
+- 第二条 58 次失败全部是 `/dagger/get_snapshot` 超过 250 ms，而非 Source 因果选择失败。完整三张 720p YUYV service response 约 5.5 MB，成为当前数据面瓶颈。
+- 当前生产分辨率按新增需求调整为 848x480@30，Color 与 aligned Depth 同时调整，理论负载为 720p 的 44.2%。先保持门槛和 service 实现复测；仍不通过才切换共享内存 transport。
+- 848x480 候选镜像已通过 C++ 构建、37 项 DAgger Container 测试和 14 项生产/Station 契约测试，并部署为 `arx5-dual-collection:dagger`，ID `sha256:a25ef01d72b8f2001b4e45b2053f4c9a8d2ae2406edb425c0d521f0c31fca9f6`；尚未启动真机。
+- 同镜像的普通采集入口已完成单 Episode 真机回归：39.01 秒八路 MCAP success，三相机 40 ms 离线配组通过率 100%，Snapshot service 关闭且 Session 资源完整回收。连续双 Episode 回归与 DAgger Shadow 仍待验收。
+
+## 2026-08-19 D0 Shadow 848x480 验收结论
+
+- Episode `20260819T121334470523Z-74ac0291` 正常 success，91.55 秒八路数据完整且 metadata 无 warning。
+- 六路图像均为 848x480；三相机约 29.98–29.99 Hz，双臂约 999.87–999.95 Hz，同相机 Color/Depth 计数一致，无非单调 Header。
+- Shadow 274/274 次 inference 成功，失败 0、恢复 0、最长连续失败 0；D0 的 95% 与 2 秒门槛通过。
+- MCAP 三相机真实跨度中位数 14.36 ms、最大 31.19 ms，40 ms 下 100% 可配组；实际请求全部满足 40/2/100 ms。
+- MCAP 为 13.411 GB / 12.49 GiB，折算 60 秒为 8.79 GB / 8.19 GiB。分辨率下降已消除本轮 service transport 瓶颈，共享内存方案不进入当前实现。
+- D0 Shadow 收口。进入 D1 前仍须单独冻结 checkpoint action 语义、控制频率、执行 horizon 与 Gateway 安全阈值。

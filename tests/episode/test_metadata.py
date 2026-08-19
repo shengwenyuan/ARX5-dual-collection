@@ -8,6 +8,14 @@ from pathlib import Path
 
 from jsonschema import Draft202012Validator, FormatChecker
 
+from arx5_collection.collection_metadata import (
+    ControlOwner,
+    ControlSegment,
+    DaggerMetadata,
+    MetadataContext,
+    ShadowMetadata,
+    ShadowQuality,
+)
 from arx5_collection.episode.metadata import (
     build_metadata,
     load_station,
@@ -78,6 +86,45 @@ class MetadataWriterTest(unittest.TestCase):
         self.assertEqual(metadata["streams"][1]["warnings"], ["late"])
         self.assertNotIn("duration_s", metadata["streams"][1])
         self.assertEqual(metadata["calibration"], {"intrinsics": None, "extrinsics": None})
+        self.assertEqual(metadata["collection_type"], "demonstration")
+        self.assertNotIn("dagger", metadata)
+
+    def test_builds_dagger_discriminator_and_summary_only(self) -> None:
+        context = MetadataContext.for_dagger(
+            DaggerMetadata(
+                checkpoint_sha256="A" * 64,
+                intervention_count=1,
+                control_segments=(
+                    ControlSegment(ControlOwner.MODEL, 0.0, 2.0),
+                    ControlSegment(ControlOwner.HUMAN, 2.1, 4.0, intervention_id=1),
+                    ControlSegment(ControlOwner.MODEL, 4.2, 8.0),
+                ),
+                shadow=ShadowMetadata(
+                    ShadowQuality.DEGRADED,
+                    inference_attempt_count=3,
+                    inference_success_count=2,
+                    inference_failure_count=1,
+                    recovery_count=1,
+                ),
+            )
+        )
+        metadata = build_metadata(
+            request(),
+            result(),
+            load_station(STATION_PATH),
+            "0.1.0",
+            metadata_context=context,
+        )
+        self.assertEqual(metadata["collection_type"], "dagger")
+        self.assertEqual(metadata["dagger"]["checkpoint_sha256"], "a" * 64)
+        self.assertEqual(metadata["dagger"]["intervention_count"], 1)
+        self.assertEqual(len(metadata["dagger"]["control_segments"]), 3)
+        self.assertEqual(metadata["dagger"]["shadow"]["quality"], "degraded")
+        self.assertNotIn("container_versions", metadata["dagger"])
+        self.assertNotIn("protocol_version", metadata["dagger"])
+
+        schema = json.loads(SCHEMA_PATH.read_text())
+        Draft202012Validator(schema, format_checker=FormatChecker()).validate(metadata)
 
     def test_metadata_matches_schema(self) -> None:
         schema = json.loads(SCHEMA_PATH.read_text())

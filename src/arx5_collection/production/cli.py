@@ -55,16 +55,32 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     run = subcommands.add_parser("run", help="run one long-lived collection Session")
-    run.add_argument("--station-config", type=Path, default=DEFAULT_STATION_CONFIG)
-    run.add_argument("--task-config", type=Path, required=True)
-    run.add_argument("--output-root", type=Path, required=True)
-    run.add_argument(
+    add_session_arguments(run)
+
+    dagger = subcommands.add_parser("dagger", help="run DAgger collection modes")
+    dagger_commands = dagger.add_subparsers(dest="dagger_command", required=True)
+    shadow = dagger_commands.add_parser(
+        "shadow", help="record policy inference without granting command authority"
+    )
+    add_session_arguments(shadow)
+    shadow.add_argument("--policy-config", type=Path, required=True)
+    checkpoint_sha = dagger_commands.add_parser(
+        "checkpoint-sha", help="compute the deterministic SHA-256 of a checkpoint tree"
+    )
+    checkpoint_sha.add_argument("checkpoint", type=Path)
+    return parser
+
+
+def add_session_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--station-config", type=Path, default=DEFAULT_STATION_CONFIG)
+    parser.add_argument("--task-config", type=Path, required=True)
+    parser.add_argument("--output-root", type=Path, required=True)
+    parser.add_argument(
         "--session-log-root", type=Path, default=Path("/reports/session-logs")
     )
-    run.add_argument("--episodes", type=non_negative_int, default=0)
-    run.add_argument("--min-free-gib", type=positive_int, default=80)
-    run.add_argument("--readiness-timeout-s", type=positive_float, default=30.0)
-    return parser
+    parser.add_argument("--episodes", type=non_negative_int, default=0)
+    parser.add_argument("--min-free-gib", type=positive_int, default=80)
+    parser.add_argument("--readiness-timeout-s", type=positive_float, default=30.0)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -74,6 +90,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             return run_devices(args.station_config)
         if args.command == "station":
             return run_station_configure(args.station_config, args.log_dir)
+        if args.command == "dagger":
+            if args.dagger_command == "checkpoint-sha":
+                return run_checkpoint_sha(args.checkpoint)
+            return run_dagger_shadow(args)
         return run_session(args)
     except CheckFailure as error:
         for result in error.results:
@@ -223,6 +243,119 @@ def run_session(args: argparse.Namespace) -> int:
                 stdout=sys.stdout,
                 stderr=sys.stderr,
             )
+
+
+def run_dagger_shadow(args: argparse.Namespace) -> int:
+    from arx5_collection.dagger.config import DaggerCollectorSettings
+    from arx5_collection.dagger.observation import Pi05ObservationEncoder
+    from arx5_collection.dagger.openpi_transport import OpenPiDaggerTransport
+    from arx5_collection.dagger.policy_client import AsyncPi05PolicyClient
+    from arx5_collection.dagger.ros_snapshot import (
+        OpenCvYuyvConverter,
+        RosVlaSnapshotClient,
+    )
+    from arx5_collection.dagger.shadow import (
+        JsonlShadowLog,
+        ShadowEpisodeHooks,
+        ShadowInferenceLoop,
+        ShadowRecordTrigger,
+    )
+    from arx5_collection.dagger.triggers import DaggerAutoTriggerFactory
+    from arx5_collection.production.processes import CameraSnapshotConfig
+
+    station = load_configured_station(args.station_config)
+    validate_task_streams(args.task_config)
+    request = load_request(args.task_config, args.output_root, args.station_config)
+    settings = DaggerCollectorSettings.load(args.policy_config)
+    session_id = _session_id()
+    session_log_dir = args.session_log_root / session_id
+
+    def check_sink(result: CheckResult) -> None:
+        render_check(result, sys.stdout)
+
+    session = ProductionSession(
+        station=station,
+        output_root=args.output_root,
+        log_dir=session_log_dir,
+        software_version=_software_version(),
+        min_free_bytes=args.min_free_gib * GIB,
+        readiness_timeout_s=args.readiness_timeout_s,
+        home_state_sink=lambda state: render_reset_state(state, sys.stderr),
+        home_timing_sink=lambda phase, elapsed_s: render_home_timing(
+            phase, elapsed_s, sys.stderr
+        ),
+        check_sink=check_sink,
+        warning_sink=lambda message: print(f"WARNING {message}", file=sys.stderr),
+        camera_snapshot=CameraSnapshotConfig(
+            max_camera_span_ms=settings.observation.max_camera_span_ns / 1e6,
+            max_arm_age_ms=settings.observation.max_arm_age_ns / 1e6,
+            max_snapshot_age_ms=settings.observation.max_snapshot_age_ns / 1e6,
+        ),
+    )
+
+    with termination_as_interrupt(), OpenPiDaggerTransport(
+        settings.server_host,
+        settings.server_port,
+        settings.checkpoint_sha256,
+        settings.inference_timeout_s,
+    ) as transport, RosVlaSnapshotClient(
+        timeout_s=settings.snapshot_service_timeout_s
+    ) as observations, JsonlShadowLog(
+        session_log_dir / "dagger-shadow.jsonl"
+    ) as shadow_log, session:
+        policy = AsyncPi05PolicyClient(
+            session_id=session_id,
+            prompt=settings.prompt,
+            checkpoint_sha256=settings.checkpoint_sha256,
+            observations=observations,
+            encoder=Pi05ObservationEncoder(
+                settings.grippers,
+                OpenCvYuyvConverter(),
+            ),
+            transport=transport,
+        )
+        shadow_loop = ShadowInferenceLoop(
+            policy,
+            attempt_sink=shadow_log,
+            status_sink=lambda message: print(message, file=sys.stderr, flush=True),
+        )
+        hooks = ShadowEpisodeHooks(shadow_loop, settings.checkpoint_sha256)
+        print(f"DAGGER SHADOW READY logs={session_log_dir}", flush=True)
+        trigger_factory = DaggerAutoTriggerFactory(
+            status_sink=lambda message: print(message, file=sys.stderr, flush=True)
+        )
+        try:
+            with trigger_factory.open(station) as trigger:
+                runtime = session.create_runtime(
+                    request,
+                    ShadowRecordTrigger(
+                        trigger,
+                        status_sink=lambda message: print(
+                            message, file=sys.stderr, flush=True
+                        ),
+                    ),
+                    metadata_context_provider=hooks.metadata_context,
+                    recording_started_hook=hooks.recording_started,
+                    recording_stopping_hook=hooks.recording_stopping,
+                )
+                return run_episode_loop(
+                    runtime,
+                    request,
+                    episodes=args.episodes,
+                    stdout=sys.stdout,
+                    stderr=sys.stderr,
+                    continue_after_failed_episode=True,
+                )
+        finally:
+            shadow_loop.stop()
+            policy.close()
+
+
+def run_checkpoint_sha(checkpoint: Path, stdout: TextIO | None = None) -> int:
+    from arx5_collection.dagger.checkpoint import checkpoint_tree_sha256
+
+    print(checkpoint_tree_sha256(checkpoint), file=stdout or sys.stdout)
+    return 0
 
 
 def render_check(result: CheckResult, output: TextIO) -> None:

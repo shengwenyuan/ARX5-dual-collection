@@ -9,6 +9,8 @@ from types import TracebackType
 from typing import Iterator
 
 from arx5_collection.episode.models import EpisodeRequest
+from arx5_collection.collection_metadata import MetadataContext
+from arx5_collection.episode.models import EpisodeOutcome
 from arx5_collection.episode.ports import RecordTrigger
 from arx5_collection.episode.runtime import EpisodeRuntime
 from arx5_collection.episode.store import EpisodeStore
@@ -20,7 +22,12 @@ from arx5_collection.ros2_adapters.reset import RosDualArmResetController
 from .checks import CheckPhase, CheckResult, require_passed
 from .config import StationConfig
 from .devices import DeviceIdentityVerifier
-from .processes import RosCommandSet, RosProcessSupervisor
+from .processes import (
+    CameraSnapshotConfig,
+    ManagedProcess,
+    RosCommandSet,
+    RosProcessSupervisor,
+)
 from .ports import SessionArmController, SessionStreamMonitor
 from .readiness import RosReadinessGate
 from .system import SystemBringup
@@ -49,6 +56,8 @@ class ProductionSession:
         supervisor: RosProcessSupervisor | None = None,
         readiness: RosReadinessGate | None = None,
         commands: RosCommandSet | None = None,
+        camera_snapshot: CameraSnapshotConfig | None = None,
+        additional_processes: tuple[ManagedProcess, ...] = (),
         backend: RosbagRecordingBackend | None = None,
         monitor: SessionStreamMonitor | None = None,
         home_controller: SessionArmController | None = None,
@@ -70,6 +79,8 @@ class ProductionSession:
         self.supervisor = supervisor or RosProcessSupervisor()
         self.readiness = readiness or RosReadinessGate()
         self.commands = commands or RosCommandSet(log_dir)
+        self.camera_snapshot = camera_snapshot
+        self.additional_processes = additional_processes
         self.backend = backend or RosbagRecordingBackend()
         self.monitor = monitor or RosStreamMonitor(self.backend)
         self.home_controller = home_controller or RosDualArmResetController(
@@ -130,18 +141,28 @@ class ProductionSession:
             self.home_controller.open()
             self._home_open = True
 
-            for camera in self.station.cameras:
-                self.supervisor.start(self.commands.d405_source(camera))
-                self._report(
-                    self.readiness.wait_for(
-                        (
-                            f"camera_{camera.role}_color",
-                            f"camera_{camera.role}_aligned_depth",
-                        ),
-                        self.readiness_timeout_s,
-                        self.supervisor.require_running,
-                    )
+            self.supervisor.start(
+                self.commands.d405_source(
+                    self.station.cameras,
+                    snapshot=self.camera_snapshot,
                 )
+            )
+            self._report(
+                self.readiness.wait_for(
+                    tuple(
+                        stream_id
+                        for role in ("left", "right", "overview")
+                        for stream_id in (
+                            f"camera_{role}_color",
+                            f"camera_{role}_aligned_depth",
+                        )
+                    ),
+                    self.readiness_timeout_s,
+                    self.supervisor.require_running,
+                )
+            )
+            for process in self.additional_processes:
+                self.supervisor.start(process)
             self.monitor.wait_until_ready(
                 self._stream_ids(),
                 self.readiness_timeout_s,
@@ -164,6 +185,9 @@ class ProductionSession:
         self,
         request: EpisodeRequest,
         trigger: RecordTrigger,
+        metadata_context_provider: Callable[[], MetadataContext] | None = None,
+        recording_started_hook: Callable[[str], None] | None = None,
+        recording_stopping_hook: Callable[[EpisodeOutcome], None] | None = None,
     ) -> EpisodeRuntime:
         def prepare_episode() -> None:
             self.pre_episode_check()
@@ -176,6 +200,9 @@ class ProductionSession:
             monitor=self.monitor,
             software_version=self.software_version,
             pre_episode_check=prepare_episode,
+            metadata_context_provider=metadata_context_provider,
+            recording_started_hook=recording_started_hook,
+            recording_stopping_hook=recording_stopping_hook,
         )
 
     def stop(self) -> None:

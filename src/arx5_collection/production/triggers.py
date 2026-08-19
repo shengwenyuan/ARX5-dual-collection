@@ -19,6 +19,21 @@ from .config import StationConfig
 StatusSink = Callable[[str], None]
 
 
+@contextmanager
+def open_configured_pedals(
+    station: StationConfig,
+    resolver: PedalDeviceResolver,
+) -> Iterator[PedalTrigger]:
+    if station.triggers is None:
+        raise PedalUnavailable("station configuration has no pedal pair")
+    devices = resolver.resolve(
+        station.triggers.activate,
+        station.triggers.abort,
+    )
+    with PedalTrigger(devices) as trigger:
+        yield trigger
+
+
 class AutoTriggerFactory:
     def __init__(
         self,
@@ -32,19 +47,13 @@ class AutoTriggerFactory:
 
     @contextmanager
     def open(self, station: StationConfig) -> Iterator[RecordTrigger]:
-        reason = "station configuration has no pedal pair"
-        if station.triggers is not None:
-            try:
-                devices = self.resolver.resolve(
-                    station.triggers.activate,
-                    station.triggers.abort,
-                )
-                with PedalTrigger(devices) as trigger:
-                    self.status_sink("TRIGGER_MODE=pedal")
-                    yield trigger
-                    return
-            except PedalUnavailable as error:
-                reason = str(error)
+        try:
+            with open_configured_pedals(station, self.resolver) as trigger:
+                self.status_sink("TRIGGER_MODE=pedal")
+                yield trigger
+                return
+        except PedalUnavailable as error:
+            reason = str(error)
 
         self.status_sink(f"TRIGGER_MODE=keyboard-fallback reason={reason}")
         with KeyboardTrigger(stream=self.keyboard_stream) as keyboard:

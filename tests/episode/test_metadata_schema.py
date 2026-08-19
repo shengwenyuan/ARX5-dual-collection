@@ -14,6 +14,7 @@ SCHEMA_PATH = Path(__file__).parents[2] / "schemas" / "episode-metadata-v1.json"
 def valid_metadata() -> dict[str, object]:
     return {
         "schema_version": 1,
+        "collection_type": "demonstration",
         "episode_id": "episode-001",
         "task": {"id": "pick", "description": "Pick the object"},
         "outcome": "success",
@@ -82,6 +83,50 @@ class MetadataSchemaTest(unittest.TestCase):
         metadata = valid_metadata()
         metadata["extensions"] = {"future_feature": {"enabled": True}}
         self.validator.validate(metadata)
+
+    def test_legacy_metadata_without_collection_type_remains_valid(self) -> None:
+        metadata = valid_metadata()
+        del metadata["collection_type"]
+        self.validator.validate(metadata)
+
+    def test_dagger_summary_is_conditional_on_collection_type(self) -> None:
+        dagger = valid_metadata()
+        dagger["collection_type"] = "dagger"
+        dagger["dagger"] = {
+            "checkpoint_sha256": "a" * 64,
+            "intervention_count": 1,
+            "control_segments": [
+                {
+                    "owner": "model",
+                    "started_offset_s": 0.0,
+                    "ended_offset_s": 1.0,
+                },
+                {
+                    "owner": "human",
+                    "started_offset_s": 1.1,
+                    "ended_offset_s": 2.0,
+                    "intervention_id": 1,
+                },
+            ],
+            "shadow": {
+                "quality": "degraded",
+                "inference_attempt_count": 3,
+                "inference_success_count": 2,
+                "inference_failure_count": 1,
+                "recovery_count": 1,
+            },
+        }
+        self.validator.validate(dagger)
+
+        missing_summary = valid_metadata()
+        missing_summary["collection_type"] = "dagger"
+        with self.assertRaises(ValidationError):
+            self.validator.validate(missing_summary)
+
+        demonstration_with_dagger = valid_metadata()
+        demonstration_with_dagger["dagger"] = dagger["dagger"]
+        with self.assertRaises(ValidationError):
+            self.validator.validate(demonstration_with_dagger)
 
     def test_invalid_core_values_are_rejected(self) -> None:
         cases: list[dict[str, object]] = []

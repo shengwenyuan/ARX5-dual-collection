@@ -128,6 +128,29 @@ class AutoTriggerFactoryTest(unittest.TestCase):
             ]
         )
         self.assertEqual(run.station_config, Path("/var/lib/arx5-collection/station.json"))
+        shadow = parser.parse_args(
+            [
+                "dagger",
+                "shadow",
+                "--task-config",
+                "task.json",
+                "--policy-config",
+                "policy.toml",
+                "--output-root",
+                "episodes",
+            ]
+        )
+        self.assertEqual(shadow.dagger_command, "shadow")
+
+        checkpoint_sha = parser.parse_args(
+            ["dagger", "checkpoint-sha", "/checkpoints/example/9999"]
+        )
+        self.assertEqual(checkpoint_sha.command, "dagger")
+        self.assertEqual(checkpoint_sha.dagger_command, "checkpoint-sha")
+        self.assertEqual(
+            checkpoint_sha.checkpoint, Path("/checkpoints/example/9999")
+        )
+        self.assertEqual(shadow.policy_config, Path("policy.toml"))
         with self.assertRaises(SystemExit):
             parser.parse_args(
                 [

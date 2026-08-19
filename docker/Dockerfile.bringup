@@ -72,7 +72,7 @@ RUN source "/opt/ros/${ROS_DISTRO}/setup.bash" \
     && cd /opt/collection_ws \
     && colcon build --merge-install
 
-FROM ros:${ROS_DISTRO}-ros-base-noble AS runtime-base
+FROM ros:${ROS_DISTRO}-ros-base-noble AS runtime-hardware
 
 ARG ROS_DISTRO
 ARG ARX_X5_REF=main
@@ -100,6 +100,19 @@ RUN apt-get update \
 COPY --from=sdk-builder /usr/local/ /usr/local/
 COPY --from=sdk-builder /opt/arx_ws/install/ /opt/arx_ws/install/
 COPY --from=sdk-builder /opt/collection_ws/install/ /opt/collection_ws/install/
+
+ENV AMENT_PREFIX_PATH="/opt/collection_ws/install:/opt/arx_ws/install" \
+    CMAKE_PREFIX_PATH="/opt/collection_ws/install:/opt/arx_ws/install" \
+    LD_LIBRARY_PATH="/usr/local/lib:/opt/collection_ws/install/lib:/opt/arx_ws/install/lib" \
+    PATH="/opt/collection_ws/install/bin:/opt/arx_ws/install/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
+    PYTHONPATH="/opt/collection_ws/install/lib/python3.12/site-packages:/opt/arx_ws/install/lib/python3.12/site-packages:/opt/arx5-runtime/src:/usr/local/OFF" \
+    RMW_IMPLEMENTATION="rmw_fastrtps_cpp" \
+    FASTDDS_DEFAULT_PROFILES_FILE="/opt/arx5-dual-collection/config/fastdds-shm.xml"
+
+WORKDIR /workspace
+
+FROM runtime-hardware AS runtime-base
+
 COPY src/ /opt/arx5-runtime/src/
 COPY pyproject.toml /opt/arx5-runtime/pyproject.toml
 COPY config/fastdds-shm.xml /opt/arx5-dual-collection/config/fastdds-shm.xml
@@ -111,19 +124,55 @@ RUN python3 -m pip install \
         --no-deps \
         /opt/arx5-runtime
 
-ENV AMENT_PREFIX_PATH="/opt/collection_ws/install:/opt/arx_ws/install:${AMENT_PREFIX_PATH}" \
-    CMAKE_PREFIX_PATH="/opt/collection_ws/install:/opt/arx_ws/install:${CMAKE_PREFIX_PATH}" \
-    LD_LIBRARY_PATH="/usr/local/lib:/opt/collection_ws/install/lib:/opt/arx_ws/install/lib:${LD_LIBRARY_PATH}" \
-    PATH="/opt/collection_ws/install/bin:/opt/arx_ws/install/bin:${PATH}" \
-    PYTHONPATH="/opt/collection_ws/install/lib/python3.12/site-packages:/opt/arx_ws/install/lib/python3.12/site-packages:/opt/arx5-runtime/src:/usr/local/OFF:${PYTHONPATH}" \
-    RMW_IMPLEMENTATION="rmw_fastrtps_cpp" \
-    FASTDDS_DEFAULT_PROFILES_FILE="/opt/arx5-dual-collection/config/fastdds-shm.xml"
-
-WORKDIR /workspace
-
 FROM runtime-base AS bringup
 ENTRYPOINT ["/opt/arx5-dual-collection/scripts/can_daemon.sh"]
 
 FROM runtime-base AS production
+ENTRYPOINT ["/ros_entrypoint.sh"]
+CMD ["arx5-collect", "--help"]
+
+FROM ros:${ROS_DISTRO}-ros-base-noble AS dagger-python-builder
+
+ARG OPENPI_COMMIT=15a9616a00943ada6c20a0f158e3adb39df2ccac
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl python3-pip \
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /tmp/openpi-client \
+    && curl --fail --location --retry 3 --retry-all-errors \
+        "https://github.com/Physical-Intelligence/openpi/archive/${OPENPI_COMMIT}.tar.gz" \
+        --output /tmp/openpi.tar.gz \
+    && tar --extract --gzip --file /tmp/openpi.tar.gz \
+        --directory /tmp/openpi-client \
+        --strip-components=3 \
+        "openpi-${OPENPI_COMMIT}/packages/openpi-client" \
+    && python3 -m pip wheel \
+        --wheel-dir /tmp/dagger-wheels \
+        /tmp/openpi-client \
+        opencv-python-headless==4.11.0.86
+
+FROM runtime-hardware AS dagger-collector
+
+COPY --from=dagger-python-builder /tmp/dagger-wheels /tmp/dagger-wheels
+
+RUN python3 -m pip install \
+        --break-system-packages \
+        --no-index \
+        --find-links /tmp/dagger-wheels \
+        openpi-client \
+        opencv-python-headless==4.11.0.86 \
+    && rm -rf /tmp/dagger-wheels
+
+COPY src/ /opt/arx5-runtime/src/
+COPY pyproject.toml /opt/arx5-runtime/pyproject.toml
+COPY config/fastdds-shm.xml /opt/arx5-dual-collection/config/fastdds-shm.xml
+COPY scripts/ /opt/arx5-dual-collection/scripts/
+
+RUN python3 -m pip install \
+        --break-system-packages \
+        --no-build-isolation \
+        --no-deps \
+        /opt/arx5-runtime
+
 ENTRYPOINT ["/ros_entrypoint.sh"]
 CMD ["arx5-collect", "--help"]

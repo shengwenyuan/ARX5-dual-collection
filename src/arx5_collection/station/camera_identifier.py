@@ -66,8 +66,8 @@ class RealSenseStreamValidator:
         pipeline = rs.pipeline()
         config = rs.config()
         config.enable_device(serial_number)
-        config.enable_stream(rs.stream.color, 1280, 720, rs.format.yuyv, 30)
-        config.enable_stream(rs.stream.depth, 1280, 720, rs.format.z16, 30)
+        config.enable_stream(rs.stream.color, 848, 480, rs.format.yuyv, 30)
+        config.enable_stream(rs.stream.depth, 848, 480, rs.format.z16, 30)
         started = False
         try:
             profile = pipeline.start(config)
@@ -89,7 +89,7 @@ class RealSenseStreamValidator:
                 )
             color_shape = (int(color.get_width()), int(color.get_height()))
             depth_shape = (int(depth.get_width()), int(depth.get_height()))
-            if color_shape != (1280, 720) or depth_shape != color_shape:
+            if color_shape != (848, 480) or depth_shape != color_shape:
                 raise CameraIdentificationError(
                     f"camera {serial_number} shape mismatch color={color_shape} depth={depth_shape}"
                 )

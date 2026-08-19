@@ -132,3 +132,39 @@ def test_backend_waits_for_subscription_readiness(tmp_path) -> None:
     assert calls[0][0] == ("/embodiments/left_arm/state",)
     assert calls[0][1].startswith("episode_recorder_")
     assert 0 < calls[0][2] <= 5.0
+
+
+def test_backend_records_additional_topics_without_monitoring_them(tmp_path) -> None:
+    created = []
+
+    def factory(output_uri, topics, node_name):
+        recorder = FakeRecorder(output_uri, topics)
+        created.append(recorder)
+        return recorder
+
+    backend = RosbagRecordingBackend(
+        recorder_factory=factory,
+        additional_topics=("/dagger/authority",),
+    )
+    target = tmp_path / "episode.mcap"
+
+    backend.start(target, STREAMS)
+    backend.stop()
+
+    assert created[0].topics == (
+        "/embodiments/left_arm/state",
+        "/dagger/authority",
+    )
+    assert target.is_file()
+
+
+def test_backend_rejects_additional_topic_that_duplicates_a_stream(tmp_path) -> None:
+    backend = RosbagRecordingBackend(
+        recorder_factory=lambda output_uri, topics, node_name: FakeRecorder(
+            output_uri, topics
+        ),
+        additional_topics=("/embodiments/left_arm/state",),
+    )
+
+    with pytest.raises(ValueError, match="duplicate monitored streams"):
+        backend.start(tmp_path / "episode.mcap", STREAMS)

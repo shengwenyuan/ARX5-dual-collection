@@ -1,0 +1,42 @@
+FROM python:3.11.9-slim-bookworm@sha256:8fb099199b9f2d70342674bd9dbccd3ed03a258f26bbd1d556822c6dfc60c317 AS python-runtime
+
+FROM nvidia/cuda:12.2.2-cudnn8-runtime-ubuntu22.04@sha256:2d913b09e6be8387e1a10976933642c73c840c0b735f0bf3c28d97fc9bc422e0
+
+COPY --from=ghcr.io/astral-sh/uv:0.5.1 /uv /uvx /bin/
+
+ARG OPENPI_COMMIT=15a9616a00943ada6c20a0f158e3adb39df2ccac
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        build-essential \
+        ca-certificates \
+        clang \
+        git \
+        git-lfs \
+        linux-headers-generic \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN git clone --filter=blob:none https://github.com/Physical-Intelligence/openpi.git /opt/openpi \
+    && git -C /opt/openpi checkout "${OPENPI_COMMIT}"
+
+COPY --from=python-runtime /usr/local/ /usr/local/
+
+WORKDIR /opt/openpi
+
+ENV UV_LINK_MODE=copy \
+    UV_PROJECT_ENVIRONMENT=/.venv \
+    UV_PYTHON_DOWNLOADS=never \
+    UV_HTTP_RETRIES=10 \
+    UV_HTTP_TIMEOUT=120
+
+RUN uv venv --python /usr/local/bin/python3.11 "${UV_PROJECT_ENVIRONMENT}"
+RUN --mount=type=cache,target=/root/.cache/uv \
+    GIT_LFS_SKIP_SMUDGE=1 uv sync --frozen --no-install-project --no-dev
+
+COPY src/arx5_collection/ /opt/arx5-policy/arx5_collection/
+
+ENV PYTHONPATH="/opt/arx5-policy:/opt/openpi/src:/opt/openpi/packages/openpi-client/src" \
+    XLA_PYTHON_CLIENT_MEM_FRACTION="0.9"
+
+ENTRYPOINT ["/.venv/bin/python", "-m", "arx5_collection.dagger.policy_server"]
+CMD ["--config", "/config/policy.toml"]

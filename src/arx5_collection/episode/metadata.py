@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from arx5_collection.collection_metadata import CollectionType, MetadataContext
 from arx5_collection.production.config import load_station_config
 
 from .models import EpisodeRequest, EpisodeResult
@@ -20,7 +21,9 @@ def build_metadata(
     station: dict[str, Any],
     software_version: str,
     extensions: dict[str, Any] | None = None,
+    metadata_context: MetadataContext | None = None,
 ) -> dict[str, Any]:
+    context = metadata_context or MetadataContext.demonstration()
     metrics_by_id = {metrics.id: metrics for metrics in result.stream_metrics}
     stream_ids = {stream.id for stream in request.streams}
     if len(metrics_by_id) != len(result.stream_metrics) or set(metrics_by_id) != stream_ids:
@@ -42,8 +45,9 @@ def build_metadata(
             }
         )
 
-    return {
+    metadata = {
         "schema_version": 1,
+        "collection_type": context.collection_type.value,
         "episode_id": result.episode_id,
         "task": {
             "id": request.task_id,
@@ -65,6 +69,10 @@ def build_metadata(
         "errors": list(result.errors),
         "extensions": extensions or {},
     }
+    if context.collection_type is CollectionType.DAGGER:
+        assert context.dagger is not None
+        metadata["dagger"] = context.dagger.to_dict()
+    return metadata
 
 
 def write_metadata(path: Path, metadata: dict[str, Any]) -> None:

@@ -109,7 +109,7 @@ def sensor_capabilities(rs: Any, sensor: Any) -> dict[str, Any]:
             video = profile.as_video_stream_profile()
         except RuntimeError:
             continue
-        if (video.width(), video.height(), profile.fps()) == (1280, 720, 30):
+        if (video.width(), video.height(), profile.fps()) == (848, 480, 30):
             profiles.append(
                 {
                     "stream": str(profile.stream_type()),
@@ -120,7 +120,7 @@ def sensor_capabilities(rs: Any, sensor: Any) -> dict[str, Any]:
     return {
         "name": sensor.get_info(rs.camera_info.name),
         "options": options,
-        "profiles_1280x720_30": profiles,
+        "profiles_848x480_30": profiles,
     }
 
 

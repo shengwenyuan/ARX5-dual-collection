@@ -12,6 +12,21 @@ from .config import CameraConfig
 
 
 @dataclass(frozen=True, slots=True)
+class CameraSnapshotConfig:
+    max_camera_span_ms: float
+    max_arm_age_ms: float
+    max_snapshot_age_ms: float
+
+    def __post_init__(self) -> None:
+        if min(
+            self.max_camera_span_ms,
+            self.max_arm_age_ms,
+            self.max_snapshot_age_ms,
+        ) <= 0:
+            raise ValueError("camera snapshot limits must be positive")
+
+
+@dataclass(frozen=True, slots=True)
 class ProcessSpec:
     name: str
     argv: tuple[str, ...]
@@ -195,35 +210,49 @@ class RosCommandSet:
             ("ros2", "run", "arx5_arm_adapter", "arm_state_adapter"),
         )
 
-    def d405_source(self, camera: CameraConfig) -> ManagedProcess:
-        return self._process(
-            f"d405-{camera.role}",
+    def d405_source(
+        self,
+        cameras: tuple[CameraConfig, ...],
+        snapshot: CameraSnapshotConfig | None = None,
+    ) -> ManagedProcess:
+        by_role = {camera.role: camera for camera in cameras}
+        if set(by_role) != {"left", "right", "overview"}:
+            raise ValueError("unified D405 source requires left, right, and overview")
+        arguments = [
+            "ros2",
+            "run",
+            "arx5_d405_source_cpp",
+            "multi_d405_source",
+            "--ros-args",
+        ]
+        for role in ("left", "overview", "right"):
+            arguments.extend(
+                ("-p", f"serial_{role}:='{by_role[role].serial_number}'")
+            )
+        arguments.extend(
             (
-                "ros2",
-                "run",
-                "arx5_camera_source",
-                "d405_source",
-                "--ros-args",
-                "-r",
-                f"__node:=d405_source_{camera.role}",
-                "-r",
-                f"__ns:=/sensors/camera_{camera.role}",
                 "-p",
-                f"camera_name:={camera.role}",
+                "width:=848",
                 "-p",
-                f"serial:='{camera.serial_number}'",
-                "-p",
-                "width:=1280",
-                "-p",
-                "height:=720",
+                "height:=480",
                 "-p",
                 "fps:=30",
                 "-p",
-                "color_format:=yuyv",
-                "-p",
-                "reliability:=reliable",
-            ),
+                "enable_snapshot_service:=" + ("true" if snapshot else "false"),
+            )
         )
+        if snapshot is not None:
+            arguments.extend(
+                (
+                    "-p",
+                    f"max_camera_span_ms:={snapshot.max_camera_span_ms}",
+                    "-p",
+                    f"max_arm_age_ms:={snapshot.max_arm_age_ms}",
+                    "-p",
+                    f"max_snapshot_age_ms:={snapshot.max_snapshot_age_ms}",
+                )
+            )
+        return self._process("d405-source", tuple(arguments))
 
     def _process(self, name: str, argv: tuple[str, ...]) -> ManagedProcess:
         return ManagedProcess(

@@ -70,11 +70,11 @@ class ImageContractTest(unittest.TestCase):
             timestamp_parts(-1.0)
 
     def test_image_buffer_contract(self) -> None:
-        validate_image_buffer(1280, 720, 2560, 1_843_200, 2)
+        validate_image_buffer(848, 480, 1696, 814_080, 2)
         with self.assertRaises(ValueError):
-            validate_image_buffer(1280, 720, 1000, 720_000, 2)
+            validate_image_buffer(848, 480, 1000, 480_000, 2)
         with self.assertRaises(ValueError):
-            validate_image_buffer(1280, 720, 2560, 10, 2)
+            validate_image_buffer(848, 480, 1696, 10, 2)
 
 
 if __name__ == "__main__":

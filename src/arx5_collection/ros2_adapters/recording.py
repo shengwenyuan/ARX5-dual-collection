@@ -101,11 +101,16 @@ class RosbagRecordingBackend:
         start_timeout_s: float = 5.0,
         stop_timeout_s: float = 15.0,
         warning_ratio: float = 0.9,
+        additional_topics: tuple[str, ...] = (),
     ) -> None:
         if start_timeout_s <= 0 or stop_timeout_s <= 0:
             raise ValueError("recorder timeouts must be positive")
         if not 0 < warning_ratio <= 1:
             raise ValueError("warning_ratio must be in (0, 1]")
+        if any(not topic for topic in additional_topics):
+            raise ValueError("additional recording topics must not be empty")
+        if len(additional_topics) != len(set(additional_topics)):
+            raise ValueError("additional recording topics must be unique")
         self.recorder_factory = recorder_factory or _make_recorder
         self.readiness_probe = (
             readiness_probe
@@ -115,6 +120,7 @@ class RosbagRecordingBackend:
         self.start_timeout_s = start_timeout_s
         self.stop_timeout_s = stop_timeout_s
         self.warning_ratio = warning_ratio
+        self.additional_topics = additional_topics
         self._recorder: Any | None = None
         self._thread: Thread | None = None
         self._thread_error: BaseException | None = None
@@ -140,7 +146,14 @@ class RosbagRecordingBackend:
         if mcap_path.exists() or temporary_uri.exists():
             raise FileExistsError(mcap_path if mcap_path.exists() else temporary_uri)
 
-        topics = tuple(stream.topic for stream in streams)
+        stream_topics = tuple(stream.topic for stream in streams)
+        overlap = set(stream_topics).intersection(self.additional_topics)
+        if overlap:
+            raise ValueError(
+                "additional recording topics duplicate monitored streams: "
+                + ", ".join(sorted(overlap))
+            )
+        topics = stream_topics + self.additional_topics
         recorder_node_name = f"episode_recorder_{uuid4().hex[:8]}"
         self._recorder = self.recorder_factory(
             temporary_uri,

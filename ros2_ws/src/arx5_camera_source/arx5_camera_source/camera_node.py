@@ -29,8 +29,8 @@ class D405Source(Node):
         super().__init__("d405_source")
         self.camera_name = str(self.declare_parameter("camera_name", "").value)
         self.serial = str(self.declare_parameter("serial", "").value)
-        self.width = int(self.declare_parameter("width", 1280).value)
-        self.height = int(self.declare_parameter("height", 720).value)
+        self.width = int(self.declare_parameter("width", 848).value)
+        self.height = int(self.declare_parameter("height", 480).value)
         self.fps = int(self.declare_parameter("fps", 30).value)
         self.frame_timeout_ms = int(
             self.declare_parameter("frame_timeout_ms", 5000).value
@@ -96,8 +96,8 @@ class D405Source(Node):
             raise ValueError("camera_name must be left, right, or overview")
         if not self.serial:
             raise ValueError("serial must not be empty")
-        if (self.width, self.height, self.fps) != (1280, 720, 30):
-            raise ValueError("v0.1 camera stream is fixed at 1280x720@30")
+        if (self.width, self.height, self.fps) != (848, 480, 30):
+            raise ValueError("camera stream is fixed at 848x480@30")
         if self.frame_timeout_ms <= 0:
             raise ValueError("frame_timeout_ms must be positive")
         if self.status_period_s <= 0:

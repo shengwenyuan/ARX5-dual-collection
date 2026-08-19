@@ -93,6 +93,7 @@ def run_episode_loop(
     episodes: int = 0,
     stdout: TextIO | None = None,
     stderr: TextIO | None = None,
+    continue_after_failed_episode: bool = False,
 ) -> int:
     output = stdout or sys.stdout
     error_output = stderr or sys.stderr
@@ -141,7 +142,14 @@ def run_episode_loop(
                 result.outcome is EpisodeOutcome.ABORTED
                 and result.errors != ("operator requested abort",)
             ):
-                return 2
+                if not continue_after_failed_episode:
+                    return 2
+                print(
+                    "WARNING: Episode failed; Session remains READY: "
+                    + "; ".join(result.errors),
+                    file=error_output,
+                    flush=True,
+                )
     except KeyboardInterrupt:
         return 0
     finally:

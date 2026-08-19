@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>arx5_d405_source_cpp</name>
+  <version>0.1.0</version>
+  <description>Unified three-camera RealSense D405 source with optional causal snapshots.</description>
+  <maintainer email="devnull@example.com">ARX5 Collection</maintainer>
+  <license>Proprietary</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <depend>arx5_collection_interfaces</depend>
+  <depend>arx5_vla_snapshot</depend>
+  <depend>rclcpp</depend>
+  <depend>sensor_msgs</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

@@ -1,0 +1,26 @@
+[policy]
+# The checkpoint is a runtime variable. Mount its host parent at /checkpoints.
+checkpoint = "/checkpoints/task_checkpoint/9999"
+checkpoint_sha256 = "0000000000000000000000000000000000000000000000000000000000000000"
+repo_id = "local/task_dataset"
+prompt = "Describe the task"
+host = "0.0.0.0"
+port = 8000
+base_checkpoint = "gs://openpi-assets/checkpoints/pi05_base/params"
+
+[collector]
+server_host = "127.0.0.1"
+server_port = 8000
+inference_timeout_s = 30.0
+
+[observation]
+max_camera_span_ms = 40.0
+max_arm_age_ms = 2.0
+max_snapshot_age_ms = 100.0
+service_timeout_ms = 250.0
+
+[gripper]
+left_open_raw = -3.0
+left_closed_raw = 0.0
+right_open_raw = -3.0
+right_closed_raw = 0.0

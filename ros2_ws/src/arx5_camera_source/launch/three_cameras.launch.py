@@ -27,8 +27,8 @@ def _launch_cameras(context: LaunchContext) -> list[Node]:
                 {
                     "camera_name": spec.role,
                     "serial": spec.serial,
-                    "width": 1280,
-                    "height": 720,
+                    "width": 848,
+                    "height": 480,
                     "fps": 30,
                     "color_format": color_format,
                     "reliability": reliability,

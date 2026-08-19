@@ -7,7 +7,7 @@ import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 
-from arx5_collection.episode.cli import load_request, run_cli
+from arx5_collection.episode.cli import load_request, run_cli, run_episode_loop
 from arx5_collection.episode.runtime import EpisodeRuntime
 from arx5_collection.episode.store import EpisodeStore
 
@@ -125,6 +125,27 @@ class EpisodeCliTest(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertEqual([row["outcome"] for row in rows], ["aborted", "success"])
         self.assertIn("/aborted/", rows[0]["mcap_path"])
+
+    def test_configured_failed_episode_keeps_the_session_ready(self) -> None:
+        trigger = ContextTrigger([True, KeyboardInterrupt(), True, True])
+        request = load_request(self.task_config, self.output_root, STATION_PATH)
+        runtime = self.runtime_factory()(request, trigger)
+        output = io.StringIO()
+        errors = io.StringIO()
+
+        exit_code = run_episode_loop(
+            runtime,
+            request,
+            episodes=2,
+            stdout=output,
+            stderr=errors,
+            continue_after_failed_episode=True,
+        )
+
+        rows = [json.loads(line) for line in output.getvalue().splitlines()]
+        self.assertEqual(exit_code, 0)
+        self.assertEqual([row["outcome"] for row in rows], ["aborted", "success"])
+        self.assertIn("Session remains READY", errors.getvalue())
 
     def runtime_factory(self):
         ids = iter(["episode-001", "episode-002"])

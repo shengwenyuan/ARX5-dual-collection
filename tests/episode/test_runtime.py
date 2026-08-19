@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
+from arx5_collection.collection_metadata import DaggerMetadata, MetadataContext
 from jsonschema import Draft202012Validator, FormatChecker
 
 from arx5_collection.episode.models import (
@@ -129,6 +130,18 @@ class EpisodeRuntimeTest(unittest.TestCase):
         self.assertEqual(result.outcome, EpisodeOutcome.SUCCESS)
         self.assertEqual(metadata["streams"][0]["warnings"], ["low rate"])
 
+    def test_runtime_accepts_typed_dagger_metadata_context(self) -> None:
+        runtime = self.runtime(
+            trigger=FakeTrigger([True, True]),
+            metadata_context_provider=lambda: MetadataContext.for_dagger(
+                DaggerMetadata("a" * 64, 0, ())
+            ),
+        )
+        result = runtime.run_once(self.request())
+        metadata = json.loads(result.metadata_path.read_text())
+        self.assertEqual(metadata["collection_type"], "dagger")
+        self.assertEqual(metadata["dagger"]["checkpoint_sha256"], "a" * 64)
+
     def test_finalization_failure_preserves_partial_and_resets_state(self) -> None:
         runtime = self.runtime(
             trigger=FakeTrigger([True, True]),
@@ -138,6 +151,40 @@ class EpisodeRuntimeTest(unittest.TestCase):
             runtime.run_once(self.request())
         self.assertEqual(runtime.state, EpisodeState.READY)
         self.assertEqual(len(EpisodeStore(self.output_root).list_partials()), 1)
+
+    def test_recording_started_hook_failure_still_closes_components(self) -> None:
+        backend = FakeBackend()
+        monitor = FakeMonitor(METRICS)
+        runtime = self.runtime(
+            trigger=FakeTrigger([True]),
+            backend=backend,
+            monitor=monitor,
+            recording_started_hook=lambda episode_id: (_ for _ in ()).throw(
+                RuntimeError("model start failed")
+            ),
+        )
+        with self.assertRaisesRegex(RuntimeError, "model start failed"):
+            runtime.run_once(self.request())
+        self.assertEqual(backend.stop_count, 1)
+        self.assertEqual(monitor.stop_count, 1)
+
+    def test_recording_stopping_hook_runs_before_backend_stop(self) -> None:
+        events: list[str] = []
+
+        class OrderedBackend(FakeBackend):
+            def stop(self) -> None:
+                events.append("backend_stop")
+                super().stop()
+
+        runtime = self.runtime(
+            trigger=FakeTrigger([True, True]),
+            backend=OrderedBackend(),
+            recording_stopping_hook=lambda outcome: events.append(
+                f"control_stop:{outcome.value}"
+            ),
+        )
+        runtime.run_once(self.request())
+        self.assertEqual(events, ["control_stop:success", "backend_stop"])
 
     def test_commit_failure_preserves_complete_partial(self) -> None:
         store = EpisodeStore(self.output_root)
@@ -185,6 +232,9 @@ class EpisodeRuntimeTest(unittest.TestCase):
         episode_id_factory=None,
         wall_clock=None,
         monotonic_clock=None,
+        metadata_context_provider=None,
+        recording_started_hook=None,
+        recording_stopping_hook=None,
     ) -> EpisodeRuntime:
         return EpisodeRuntime(
             store=store or EpisodeStore(self.output_root),
@@ -195,6 +245,9 @@ class EpisodeRuntimeTest(unittest.TestCase):
             episode_id_factory=episode_id_factory or (lambda: "episode-001"),
             wall_clock=wall_clock or (lambda: datetime.now(timezone.utc)),
             monotonic_clock=monotonic_clock or iter_clock([10.0, 100.0]),
+            metadata_context_provider=metadata_context_provider,
+            recording_started_hook=recording_started_hook,
+            recording_stopping_hook=recording_stopping_hook,
             poll_interval_s=0.01,
         )
 

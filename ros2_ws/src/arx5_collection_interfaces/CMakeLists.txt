@@ -4,12 +4,15 @@ project(arx5_collection_interfaces)
 find_package(ament_cmake REQUIRED)
 find_package(builtin_interfaces REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
+find_package(sensor_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/ArmState.msg"
+  "msg/AuthorityEvent.msg"
   "msg/StreamStatus.msg"
-  DEPENDENCIES builtin_interfaces std_msgs
+  "srv/GetVlaSnapshot.srv"
+  DEPENDENCIES builtin_interfaces sensor_msgs std_msgs
 )
 
 ament_export_dependencies(rosidl_default_runtime)

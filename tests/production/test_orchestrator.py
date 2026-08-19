@@ -112,8 +112,8 @@ class FakeCommands:
     def arm_state_adapter(self):
         return NamedProcess("arm-state-adapter")
 
-    def d405_source(self, camera):
-        return NamedProcess(f"d405-{camera.role}")
+    def d405_source(self, cameras, snapshot=None):
+        return NamedProcess("d405-source")
 
 
 class FakeSessionMonitor:
@@ -185,24 +185,20 @@ class ProductionSessionTest(unittest.TestCase):
             [
                 "ros:start:arx5-v2-collect",
                 "ros:start:arm-state-adapter",
-                "ros:start:d405-left",
-                "ros:start:d405-right",
-                "ros:start:d405-overview",
+                "ros:start:d405-source",
             ],
         )
         self.assertEqual(
             [event for event in events if event.startswith("ros:stop")],
             [
-                "ros:stop:d405-overview",
-                "ros:stop:d405-right",
-                "ros:stop:d405-left",
+                "ros:stop:d405-source",
                 "ros:stop:arm-state-adapter",
                 "ros:stop:arx5-v2-collect",
             ],
         )
         self.assertEqual(events[-2:], ["gate:stop", "system:stop"])
         self.assertLess(events.index("monitor:close"), events.index("home:close"))
-        self.assertLess(events.index("home:close"), events.index("ros:stop:d405-overview"))
+        self.assertLess(events.index("home:close"), events.index("ros:stop:d405-source"))
 
     def test_repeated_signals_do_not_interrupt_owned_cleanup(self) -> None:
         events: list[str] = []
@@ -259,7 +255,6 @@ class ProductionSessionTest(unittest.TestCase):
             session.stop()
 
         self.assertLess(events.index("gate:require"), events.index("home:reset"))
-
 
 if __name__ == "__main__":
     unittest.main()
