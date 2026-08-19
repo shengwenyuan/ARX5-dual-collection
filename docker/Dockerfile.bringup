@@ -50,6 +50,8 @@ RUN mkdir -p /opt/vendor/librealsense \
     && cmake --build /opt/vendor/librealsense/build --parallel \
     && cmake --install /opt/vendor/librealsense/build
 
+COPY docker/vendor/v2_joint_control.yaml /tmp/v2_joint_control.yaml
+
 RUN apt-get update \
     && apt-get install -y --no-install-recommends git \
     && rm -rf /var/lib/apt/lists/* \
@@ -59,6 +61,8 @@ RUN apt-get update \
     && git -C /opt/vendor/ARX_X5 sparse-checkout set ROS2/X5_ws/src \
     && patch --directory /opt/vendor/ARX_X5 --strip 1 \
         < /tmp/arx-x5-go-home-services.patch \
+    && install -m 0644 /tmp/v2_joint_control.yaml \
+        /opt/vendor/ARX_X5/ROS2/X5_ws/src/arx_x5_ros2/arx_x5_controller/config/v2_joint_control.yaml \
     && mkdir -p /opt/arx_ws/src \
     && cp -a /opt/vendor/ARX_X5/ROS2/X5_ws/src/. /opt/arx_ws/src/ \
     && source "/opt/ros/${ROS_DISTRO}/setup.bash" \

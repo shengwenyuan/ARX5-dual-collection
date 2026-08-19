@@ -16,6 +16,7 @@ from arx5_collection.production.lifecycle import termination_as_interrupt
 from arx5_collection.production.orchestrator import GIB, ProductionSession
 from arx5_collection.production.processes import CameraSnapshotConfig
 from arx5_collection.reset import ResetState
+from arx5_collection.ros2_adapters.recording import RosbagRecordingBackend
 
 from .config import DaggerCollectorSettings
 from .observation import Pi05ObservationEncoder
@@ -29,6 +30,7 @@ from .shadow import (
     ShadowRecordTrigger,
 )
 from .triggers import DaggerAutoTriggerFactory
+from .topics import DAGGER_RECORDING_TOPICS
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,6 +62,7 @@ class DaggerSessionBuilder:
         self,
         spec: DaggerRunSpec,
         settings: DaggerCollectorSettings,
+        additional_recording_topics: tuple[str, ...] = (),
     ) -> ProductionSession:
         station = load_configured_station(spec.station_config)
         return ProductionSession(
@@ -74,6 +77,13 @@ class DaggerSessionBuilder:
                 max_camera_span_ms=settings.observation.max_camera_span_ns / 1e6,
                 max_arm_age_ms=settings.observation.max_arm_age_ns / 1e6,
                 max_snapshot_age_ms=settings.observation.max_snapshot_age_ns / 1e6,
+            ),
+            backend=(
+                RosbagRecordingBackend(
+                    additional_topics=additional_recording_topics
+                )
+                if additional_recording_topics
+                else None
             ),
             home_state_sink=self._render_reset_state,
             home_timing_sink=self._render_home_timing,
@@ -186,6 +196,79 @@ class ShadowApplication:
                 policy.close()
 
 
+class TakeoverDryRunApplication:
+    """Validate Take-over authority and recording without model actions."""
+
+    def __init__(
+        self,
+        spec: DaggerRunSpec,
+        settings: DaggerCollectorSettings,
+        request: EpisodeRequest,
+        session: ProductionSession,
+        stdout: TextIO = sys.stdout,
+        stderr: TextIO = sys.stderr,
+    ) -> None:
+        self.spec = spec
+        self.settings = settings
+        self.request = request
+        self.session = session
+        self.stdout = stdout
+        self.stderr = stderr
+
+    def run(self) -> int:
+        from .authority_ros import (
+            RosAuthorityEventPublisher,
+            require_no_action_publishers,
+        )
+        from .takeover import (
+            AuthorityTimeline,
+            NoActionGateway,
+            TakeoverController,
+            TakeoverRecordTrigger,
+        )
+
+        log_dir = self.spec.session_log_root / self.spec.session_id
+        status_sink = lambda message: print(
+            message, file=self.stderr, flush=True
+        )
+        with termination_as_interrupt():
+            require_no_action_publishers()
+            with RosAuthorityEventPublisher() as events, self.session:
+                gateway = NoActionGateway()
+                controller = TakeoverController(
+                    gateway=gateway,
+                    human_mode=self.session.home_controller,
+                    timeline=AuthorityTimeline(
+                        self.settings.checkpoint_sha256,
+                        events,
+                    ),
+                    status_sink=status_sink,
+                )
+                trigger_factory = DaggerAutoTriggerFactory(status_sink=status_sink)
+                print(
+                    f"DAGGER TAKEOVER DRY-RUN READY logs={log_dir}; "
+                    "model=disabled action_output=disabled",
+                    file=self.stdout,
+                    flush=True,
+                )
+                with trigger_factory.open(self.session.station) as trigger:
+                    runtime = self.session.create_runtime(
+                        self.request,
+                        TakeoverRecordTrigger(trigger, controller, status_sink),
+                        metadata_context_provider=controller.metadata_context,
+                        recording_started_hook=controller.start_episode,
+                        recording_stopping_hook=controller.stop_episode,
+                    )
+                    return run_episode_loop(
+                        runtime,
+                        self.request,
+                        episodes=self.spec.episodes,
+                        stdout=self.stdout,
+                        stderr=self.stderr,
+                        continue_after_failed_episode=True,
+                    )
+
+
 class DaggerApplicationBuilder:
     """Validate inputs once and compose a DAgger application."""
 
@@ -200,13 +283,7 @@ class DaggerApplicationBuilder:
         self.session_builder = session_builder or DaggerSessionBuilder(stdout, stderr)
 
     def build_shadow(self, spec: DaggerRunSpec) -> ShadowApplication:
-        validate_task_streams(spec.task_config)
-        settings = DaggerCollectorSettings.load(spec.policy_config)
-        request = load_request(
-            spec.task_config,
-            spec.output_root,
-            spec.station_config,
-        )
+        settings, request = self._load(spec)
         session = self.session_builder.build(spec, settings)
         return ShadowApplication(
             spec,
@@ -216,3 +293,35 @@ class DaggerApplicationBuilder:
             stdout=self.stdout,
             stderr=self.stderr,
         )
+
+    def build_takeover_dry_run(
+        self,
+        spec: DaggerRunSpec,
+    ) -> TakeoverDryRunApplication:
+        settings, request = self._load(spec)
+        session = self.session_builder.build(
+            spec,
+            settings,
+            additional_recording_topics=DAGGER_RECORDING_TOPICS,
+        )
+        return TakeoverDryRunApplication(
+            spec,
+            settings,
+            request,
+            session,
+            stdout=self.stdout,
+            stderr=self.stderr,
+        )
+
+    @staticmethod
+    def _load(
+        spec: DaggerRunSpec,
+    ) -> tuple[DaggerCollectorSettings, EpisodeRequest]:
+        validate_task_streams(spec.task_config)
+        settings = DaggerCollectorSettings.load(spec.policy_config)
+        request = load_request(
+            spec.task_config,
+            spec.output_root,
+            spec.station_config,
+        )
+        return settings, request

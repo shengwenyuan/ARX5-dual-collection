@@ -1,6 +1,6 @@
 # DAgger 实施记录
 
-- Status: `unified D405 Source deployed; live validation pending; D1 not started`
+- Status: `D0 Shadow accepted; D1a Take-over no-action single Episode accepted`
 - Updated: 2026-08-19
 - Branch: `main`
 
@@ -65,6 +65,35 @@ librealsense 三 Pipeline -> 六路 ROS Topic / MCAP
 ## D1 入口条件
 
 D0 真机验收回写本文件前，不实现或运行 Take-over。D1 开始前还必须冻结当前 checkpoint 的 action 语义、控制频率、执行 horizon 和 Gateway 安全阈值。
+
+## D1a Take-over 无动作候选
+
+D1a 先验证控制权状态机、稀疏事件和 metadata，不连接 Policy Server，不创建 action publisher，也不执行模型 action。独立入口为 `arx5-collect dagger takeover-dry-run`；CLI 仅负责参数适配，组装逻辑位于 DAgger Application，权限逻辑位于独立 Take-over Controller。
+
+- 右踏板只负责 Episode 开始/成功结束；左踏板只负责控制权交替。键盘 fallback 为 `Space / T / A`。
+- 状态顺序固定为 `MODEL_CONTROL -> HANDOVER_PENDING -> HUMAN_ACTIVE -> RESUME_PENDING -> MODEL_CONTROL`；任何副作用失败进入不可自动恢复的 `FAULT_HOLD`。
+- 接管顺序固定为先关闭 Gateway、递增 control epoch、清空旧动作，再请求双臂重力补偿；恢复顺序必须先完成 Gateway readiness，才能产生 `POLICY_ACTIVE`。
+- `/dagger/authority` 只记录控制权边界；专家区间严格定义为 `HUMAN_ACTIVE -> RESUME_REQUESTED`，pending/fault 空隙不伪装为模型或人工控制。
+- metadata 继续只保存 DAgger 类型、checkpoint SHA-256、介入次数和不重叠控制区间。
+- D1a 使用 `NoActionGateway`，因此日志中的 `MODEL_CONTROL/POLICY_ACTIVE` 只是权限状态机状态，不代表存在模型动作输出。
+- DAgger Arm profile 原子选择 `v2_joint_control`、`/arm_slave_*_status`、Canonical ArmState Adapter 以及 slave reset/gravity service；启动时额外拒绝已有 `/arm_master_*_status` publisher，防止 dry-run 与动作进程并存。
+
+D1a 的本地纯逻辑与 Application 组装测试已通过。W3 无硬件集成确认 authority 消息字段完整往返，动作 Publisher guard 能 fail closed，真实 rosbag2/MCAP 能同时录制主流与 `/dagger/authority`。还需完成单次交替和多次交替真机验收；验收前不实现真实 Gateway。
+
+候选镜像为 `arx5-dual-collection:dagger-d1a-20260819`。本地全仓 `233 passed, 2 skipped`；W3 Container 的 42 项 DAgger 与 10 项 profile/orchestrator/trigger/reset 测试通过。该镜像未连接 Policy Server，也未发布机械臂动作。
+
+首次真机启动在 Episode 前置 GO_HOME 阶段停止。服务在 10 ms 内返回 accepted，但双臂没有到达 Vendor home；确认 CAN、Canonical telemetry 和服务发现均正常。根因是官方固定版本 `c783287` 的 `v2_collect.yaml` 配置了 Vendor home，而 `v2_joint_control.yaml` 的两个 slave 节点没有 `go_home_position`。
+
+修复使用独立、可审计的 `docker/vendor/v2_joint_control.yaml` 覆盖 Vendor DAgger 配置，左右 slave 与 teaching profile 使用同一组 home 参数；C++ 服务补丁保持不变，不修改 reset 时序、收敛阈值或超时。候选镜像 `arx5-dual-collection:dagger-d1a-homefix-20260819` 已通过 SDK 安装配置检查和 18 项 D1a/profile/reset 容器回归，镜像 ID 为 `sha256:d7100ee4efc77a9f062c3ca862599ff947f501a05078dd9289d0cbec7900f82e`。
+
+## 2026-08-19 D1a 单 Episode 验收
+
+- Episode `20260819T141622554095Z-4b29f83f` 正常 success；前置 GO_HOME 通过真实收敛检查，证明 slave Vendor home 修复有效。
+- 70.53 秒 MCAP 包含八路主线与 `/dagger/authority` 共九个 Topic、153767 条消息；双臂约 1000 Hz，三路 RGB-D 约 30 Hz，metadata 无 warning/error。
+- authority 共五条，严格为 `POLICY_ACTIVE -> TAKEOVER_REQUESTED -> HUMAN_ACTIVE -> RESUME_REQUESTED -> POLICY_ACTIVE`；sequence 为 1–5，intervention 为 1，control epoch 从 0 递增到 1，无 `FAULT_HOLD`。
+- metadata 控制区间为 model `0–14.456 s`、human `14.467–31.554 s`、model `31.555–70.482 s`；专家区间与稀疏事件一致，handover pending 未被伪装为人工或模型控制。
+- 用户在第二条 Episode 前从 READY 退出；Vendor Controller 按既有行为在 SIGINT 后返回 `-11` warning。容器、slcand、CAN 均无残留，usbfs 恢复为 16 MB，不影响本轮验收。
+- D1a 单 Episode 最小闭环通过。连续多 Episode 权限 epoch/sequence 真机验证按用户决定延期，不阻塞进入真实 Gateway 的独立设计阶段。
 
 ## 2026-08-19 D0 重构部署结果
 

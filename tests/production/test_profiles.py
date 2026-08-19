@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from arx5_collection.production.profiles import resolve_arm_profile
+from arx5_collection.production.profiles import reset_specs_for, resolve_arm_profile
 
 
 class ArmStateProfileTest(unittest.TestCase):
@@ -17,6 +17,17 @@ class ArmStateProfileTest(unittest.TestCase):
         self.assertTrue(teaching.controller_launch.endswith("v2_collect.launch.py"))
         self.assertTrue(
             dagger.controller_launch.endswith("v2_joint_control.launch.py")
+        )
+        self.assertEqual(
+            [spec.status_topic for spec in reset_specs_for(dagger)],
+            ["/arm_slave_l_status", "/arm_slave_r_status"],
+        )
+        self.assertEqual(
+            [spec.gravity_service for spec in reset_specs_for(dagger)],
+            [
+                "/arm_slave_l/gravity_compensation",
+                "/arm_slave_r/gravity_compensation",
+            ],
         )
 
     def test_rejects_unknown_profile(self) -> None:

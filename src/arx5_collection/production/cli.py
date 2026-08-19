@@ -63,6 +63,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     add_session_arguments(shadow)
     shadow.add_argument("--policy-config", type=Path, required=True)
+    takeover_dry_run = dagger_commands.add_parser(
+        "takeover-dry-run",
+        help="validate Take-over authority without model or action output",
+    )
+    add_session_arguments(takeover_dry_run)
+    takeover_dry_run.add_argument("--policy-config", type=Path, required=True)
     checkpoint_sha = dagger_commands.add_parser(
         "checkpoint-sha", help="compute the deterministic SHA-256 of a checkpoint tree"
     )
@@ -92,6 +98,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "dagger":
             if args.dagger_command == "checkpoint-sha":
                 return run_checkpoint_sha(args.checkpoint)
+            if args.dagger_command == "takeover-dry-run":
+                return run_dagger_takeover_dry_run(args)
             return run_dagger_shadow(args)
         return run_session(args)
     except CheckFailure as error:
@@ -245,12 +253,25 @@ def run_session(args: argparse.Namespace) -> int:
 
 
 def run_dagger_shadow(args: argparse.Namespace) -> int:
-    from arx5_collection.dagger.application import (
-        DaggerApplicationBuilder,
-        DaggerRunSpec,
+    from arx5_collection.dagger.application import DaggerApplicationBuilder
+
+    return DaggerApplicationBuilder().build_shadow(_dagger_run_spec(args)).run()
+
+
+def run_dagger_takeover_dry_run(args: argparse.Namespace) -> int:
+    from arx5_collection.dagger.application import DaggerApplicationBuilder
+
+    return (
+        DaggerApplicationBuilder()
+        .build_takeover_dry_run(_dagger_run_spec(args))
+        .run()
     )
 
-    spec = DaggerRunSpec(
+
+def _dagger_run_spec(args: argparse.Namespace):
+    from arx5_collection.dagger.application import DaggerRunSpec
+
+    return DaggerRunSpec(
         station_config=args.station_config,
         task_config=args.task_config,
         policy_config=args.policy_config,
@@ -262,7 +283,6 @@ def run_dagger_shadow(args: argparse.Namespace) -> int:
         software_version=_software_version(),
         session_id=_session_id(),
     )
-    return DaggerApplicationBuilder().build_shadow(spec).run()
 
 
 def run_checkpoint_sha(checkpoint: Path, stdout: TextIO | None = None) -> int:

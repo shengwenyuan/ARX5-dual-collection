@@ -215,7 +215,7 @@ DAgger 原始 Episode 同样保持完整、连续和不可修改。主线 MCAP �
 
 - `w3-arx5` 已确认左臂为 `can1`、右臂为 `can3`；业务代码仍只读取站点配置。
 - `w3-arx5` 相机映射已确认：左 `261122270960`、右 `261022274824`、中间俯视 `261122270651`。
-- 双臂使用官方 `v2_collect` 的 `remote_master` 语义，启动时必须进入重力补偿；采集侧不得发布 `/arx_joy` 或任何运动控制 Topic。
+- 双臂 runtime profile 必须原子选择官方 Controller 与状态源：普通示教使用 `v2_collect/remote_master`，DAgger 使用 `v2_joint_control/remote_slave`；两者均在人工操作阶段进入重力补偿。普通采集侧不得发布 `/arx_joy` 或任何运动控制 Topic，DAgger 模型 action 只能经唯一 Gateway 发布。
 - 已发现独立 `ARX_KEY` USB 设备；其与示教器输入的关系和字段语义需真机辨识后再冻结。
 - 已核查 RealSense 官方 SDK 与规格：D405 无多机硬件同步入口，官方多机示例不保证跨设备同步；v0.1 不再构造软件伪同步。
 - 在 `w3-arx5` 上先完成三路 720p RGB-D 的 USB 与磁盘吞吐基准，再冻结编码和 MCAP 压缩策略。

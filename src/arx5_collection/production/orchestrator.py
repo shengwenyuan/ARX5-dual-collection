@@ -29,7 +29,7 @@ from .processes import (
     RosProcessSupervisor,
 )
 from .ports import SessionArmController, SessionStreamMonitor
-from .profiles import ArmRuntimeProfile, TEACHING_ARM_PROFILE
+from .profiles import ArmRuntimeProfile, TEACHING_ARM_PROFILE, reset_specs_for
 from .readiness import RosReadinessGate
 from .system import SystemBringup
 
@@ -87,7 +87,8 @@ class ProductionSession:
         self.backend = backend or RosbagRecordingBackend()
         self.monitor = monitor or RosStreamMonitor(self.backend)
         self.home_controller = home_controller or RosDualArmResetController(
-            timing_sink=home_timing_sink
+            arms=reset_specs_for(self.arm_profile),
+            timing_sink=home_timing_sink,
         )
         self.home = ResetCoordinator(
             self.home_controller,

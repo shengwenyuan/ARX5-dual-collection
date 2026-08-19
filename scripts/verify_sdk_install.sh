@@ -56,6 +56,13 @@ controller=/opt/arx_ws/install/lib/arx_x5_controller/X5Controller
   exit 1
 }
 
+dagger_controller_config=/opt/arx_ws/install/share/arx_x5_controller/config/v2_joint_control.yaml
+vendor_home='go_home_position: [0.0, 0.948, 0.858, -0.573, 0.0, 0.0]'
+if [[ $(grep -F -c "${vendor_home}" "${dagger_controller_config}") -ne 2 ]]; then
+  echo "error: DAgger controller must configure Vendor home for both slave arms" >&2
+  exit 1
+fi
+
 if ldd "${controller}" | grep -q 'not found'; then
   echo "error: ARX5 controller has unresolved shared libraries" >&2
   ldd "${controller}" >&2

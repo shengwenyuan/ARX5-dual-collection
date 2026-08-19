@@ -141,6 +141,19 @@ class AutoTriggerFactoryTest(unittest.TestCase):
             ]
         )
         self.assertEqual(shadow.dagger_command, "shadow")
+        dry_run = parser.parse_args(
+            [
+                "dagger",
+                "takeover-dry-run",
+                "--task-config",
+                "task.json",
+                "--policy-config",
+                "policy.toml",
+                "--output-root",
+                "episodes",
+            ]
+        )
+        self.assertEqual(dry_run.dagger_command, "takeover-dry-run")
 
         checkpoint_sha = parser.parse_args(
             ["dagger", "checkpoint-sha", "/checkpoints/example/9999"]
