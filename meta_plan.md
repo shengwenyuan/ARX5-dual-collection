@@ -161,10 +161,11 @@ DAgger 原始 Episode 同样保持完整、连续和不可修改。主线 MCAP �
 
 ## DAgger 控制边界
 
-- 首版只支持本地 π0.5，通过独立的 `arx5-collect dagger run` 长生命周期 Session 运行；普通 `arx5-collect run` 不获得模型运动权限。
+- 首版只支持本地 π0.5，通过独立的 `arx5-collect dagger takeover` 长生命周期 Session 运行；普通 `arx5-collect run` 不获得模型运动权限。
 - π0.5 Policy Server 与 Collector 使用两个独立 Container、一个 Compose：Server 只推理，Collector 独占相机、CAN、控制权和录制链路；Client 使用异步 PI 风格 request/response。
-- 模型输出只能作为 14D 双臂关节与夹爪 action proposal，经唯一 `ControlArbiter`、安全门和 command lease 后才能下发。
+- 模型输出只能作为 robot-space absolute 14D 双臂关节与归一化夹爪 proposal，经唯一 `PolicyActionGateway`、安全门和 command lease 后才能下发；当前安全阈值为相邻关节 `0.25 rad`、相对当前状态 `1.5 rad`，夹爪严格限制在 `[0,1]`，越界只 reject、不 clamp。
 - 模型 action chunk、每轮执行步数和控制频率由 checkpoint 对应的运行 profile 配置；当前 π0.5 实验使用 50-step chunk、执行前 10 步、25 Hz。等 EEF 距离训练样本的名义 `fps=50` 不代表真实控制频率。
+- 首版按顺序执行 10 步，再从新 observation 请求下一 chunk；推理间隙由 Vendor 保持最后 target，超过 `0.5 s` 或命令线程超过 `0.12 s` deadline 必须关闭 gate、作废 epoch 并进入重力补偿和 `FAULT_HOLD`。
 - 人工接管必须先关闭模型 gate、丢弃待执行 chunk 并确认模型失去控制权，再进入 `G_COMPENSATION`；人工纠正后只允许显式重新武装和重新推理。
 - DAgger 不使用原始关节电流推断人工意图。原 `SPACE` 踏板负责录制起停，原 `A` 踏板负责模型/人工所有权切换；Abort 保留非踏板入口和系统异常路径。
 - 同一 Episode 支持 `模型控制 -> 人工从实际接管状态恢复或纠正 -> 模型恢复` 的多次交替；任何 action horizon 不得跨控制权或语义区间。

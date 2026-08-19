@@ -5,7 +5,7 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile.policy
-    image: arx5-dual-policy:dagger
+    image: ${ARX5_DAGGER_POLICY_IMAGE:-arx5-dual-policy:dagger}
     gpus: all
     restart: "no"
     stop_grace_period: 30s
@@ -53,7 +53,7 @@ services:
     command:
       - arx5-collect
       - dagger
-      - shadow
+      - ${ARX5_DAGGER_MODE:-shadow}
       - --policy-config
       - /config/policy.toml
       - --task-config

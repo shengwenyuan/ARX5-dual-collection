@@ -129,7 +129,15 @@ FAULT_HOLD
 
 在新 action 就绪前不能恢复模型。Observation、Policy、Gateway 或控制器确认失败必须进入 `FAULT_HOLD`；绝不继续旧 action。
 
-Gateway 是模型命令到 ARX Vendor Controller 的唯一入口，持有双臂统一 command lease、control epoch、watchdog 和安全检查。具体 action absolute/delta、关节/EEF 空间、单位、夹爪约定及安全阈值在 D1 真机控制前单独冻结。
+Gateway 是模型命令到 ARX Vendor Controller 的唯一入口，持有双臂统一 command lease、control epoch、watchdog 和安全检查。首版冻结为：
+
+- Policy response 是 robot-space absolute `14D`：左六关节 rad、左 normalized gripper、右六关节 rad、右 normalized gripper。
+- normalized gripper 只接受 `[0,1]`，再按 Station calibration 映射为 Vendor raw；越界 reject，不 clamp。
+- 相邻 action 最大 joint step 为 `0.25 rad`，相对 ticket 验证时实际状态的最大 departure 为 `1.5 rad`。
+- 当前 v2 profile 为 50-step chunk、执行前 10 步、25 Hz。10 步结束后才以新 observation 请求下一 chunk，间隙保持最后 Vendor target。
+- Gateway 只接受不超过 `0.1 s` 的 canonical 双臂实际状态；该阈值与执行参数一样由模型 profile 配置。
+- Policy 等待最多 `0.5 s`；有待执行 action 时 command deadline 为 `0.12 s`。超限与 Observation、Policy、安全检查或 Publisher 故障均 fail closed，进入 `G_COMPENSATION + FAULT_HOLD`，但不自动结束 Episode。
+- Vendor `remote_slave` command callback 默认物理锁死；只有 fresh action 完整通过后，Gateway 才同时确认双臂 `enable_policy_control`。GO_HOME、人工接管、Episode 结束和任何 fault 都重新锁死。
 
 ## metadata
 

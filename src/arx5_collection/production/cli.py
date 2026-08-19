@@ -69,6 +69,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     add_session_arguments(takeover_dry_run)
     takeover_dry_run.add_argument("--policy-config", type=Path, required=True)
+    takeover = dagger_commands.add_parser(
+        "takeover",
+        help="run policy control with explicit human Take-over",
+    )
+    add_session_arguments(takeover)
+    takeover.add_argument("--policy-config", type=Path, required=True)
     checkpoint_sha = dagger_commands.add_parser(
         "checkpoint-sha", help="compute the deterministic SHA-256 of a checkpoint tree"
     )
@@ -100,6 +106,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 return run_checkpoint_sha(args.checkpoint)
             if args.dagger_command == "takeover-dry-run":
                 return run_dagger_takeover_dry_run(args)
+            if args.dagger_command == "takeover":
+                return run_dagger_takeover(args)
             return run_dagger_shadow(args)
         return run_session(args)
     except CheckFailure as error:
@@ -266,6 +274,12 @@ def run_dagger_takeover_dry_run(args: argparse.Namespace) -> int:
         .build_takeover_dry_run(_dagger_run_spec(args))
         .run()
     )
+
+
+def run_dagger_takeover(args: argparse.Namespace) -> int:
+    from arx5_collection.dagger.application import DaggerApplicationBuilder
+
+    return DaggerApplicationBuilder().build_takeover(_dagger_run_spec(args)).run()
 
 
 def _dagger_run_spec(args: argparse.Namespace):

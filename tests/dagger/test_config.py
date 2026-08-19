@@ -69,6 +69,11 @@ class DaggerConfigTest(unittest.TestCase):
         self.assertEqual(collector.execution.execution_steps, 10)
         self.assertEqual(collector.execution.control_rate_hz, 25.0)
         self.assertEqual(collector.arm_profile.name, "dagger")
+        self.assertEqual(collector.control.safety.max_joint_step_rad, 0.25)
+        self.assertEqual(collector.control.safety.max_joint_departure_rad, 1.5)
+        self.assertEqual(collector.control.state_timeout_s, 0.1)
+        self.assertEqual(collector.control.policy_wait_timeout_s, 0.5)
+        self.assertEqual(collector.control.command_watchdog_s, 0.12)
         self.assertTrue(
             collector.arm_profile.controller_launch.endswith(
                 "v2_joint_control.launch.py"

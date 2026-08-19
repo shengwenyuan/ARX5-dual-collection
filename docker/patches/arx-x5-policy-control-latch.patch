@@ -1,0 +1,124 @@
+--- a/ROS2/X5_ws/src/arx_x5_ros2/arx_x5_controller/include/arx_x5_controller/X5Controller.hpp
++++ b/ROS2/X5_ws/src/arx_x5_ros2/arx_x5_controller/include/arx_x5_controller/X5Controller.hpp
+@@ -1,5 +1,6 @@
+ #pragma once
+ 
++#include <atomic>
+ #include <rclcpp/rclcpp.hpp>
+ #include <chrono>
+ #include <memory>
+@@ -37,6 +38,10 @@
+   void enableGravityCompensation(
+       const std::shared_ptr<std_srvs::srv::Trigger::Request> request,
+       std::shared_ptr<std_srvs::srv::Trigger::Response> response);
++  void manualTakeover(const std::shared_ptr<std_srvs::srv::Trigger::Request> request,
++                      std::shared_ptr<std_srvs::srv::Trigger::Response> response);
++  void enablePolicyControl(const std::shared_ptr<std_srvs::srv::Trigger::Request> request,
++                           std::shared_ptr<std_srvs::srv::Trigger::Response> response);
+  private:
+   std::shared_ptr<InterfacesThread> interfaces_ptr_;
+   enum class CatchControlMode {
+@@ -60,8 +65,12 @@
+   rclcpp::Subscription<std_msgs::msg::Int32MultiArray>::SharedPtr arx_joy_sub_;
+   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr go_home_service_;
+   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr gravity_compensation_service_;
++  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr manual_takeover_service_;
++  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr enable_policy_control_service_;
+ 
+   rclcpp::TimerBase::SharedPtr timer_;
++  bool policy_control_required_ = false;
++  std::atomic<bool> manual_takeover_{true};
+   bool new_version_ = false;
+   std::vector<double> go_home_positions_ = {0, 0, 0, 0, 0, 0};
+ };
+--- a/ROS2/X5_ws/src/arx_x5_ros2/arx_x5_controller/src/X5Controller.cpp
++++ b/ROS2/X5_ws/src/arx_x5_ros2/arx_x5_controller/src/X5Controller.cpp
+@@ -9,6 +9,7 @@
+   RCLCPP_INFO(this->get_logger(), "机械臂开始初始化...");
+   rclcpp::on_shutdown(std::bind(&X5Controller::cleanup, this));
+   std::string arm_control_type = this->declare_parameter("arm_control_type", "normal");
++  policy_control_required_ = arm_control_type == "remote_slave";
+   std::string package_name = "arx_x5_controller";
+   std::string package_share_dir = ament_index_cpp::get_package_share_directory(package_name);
+   int end_type = this->declare_parameter("arm_end_type", 0);
+@@ -87,9 +88,21 @@
+   gravity_compensation_service_ = this->create_service<std_srvs::srv::Trigger>(
+       "~/gravity_compensation", std::bind(&X5Controller::enableGravityCompensation,
+       this, std::placeholders::_1, std::placeholders::_2));
++  manual_takeover_service_ = this->create_service<std_srvs::srv::Trigger>(
++      "~/manual_takeover", std::bind(&X5Controller::manualTakeover, this,
++      std::placeholders::_1, std::placeholders::_2));
++  enable_policy_control_service_ = this->create_service<std_srvs::srv::Trigger>(
++      "~/enable_policy_control", std::bind(&X5Controller::enablePolicyControl,
++      this, std::placeholders::_1, std::placeholders::_2));
++  if (policy_control_required_) {
++    interfaces_ptr_->setArmStatus(InterfacesThread::state::G_COMPENSATION);
++    RCLCPP_WARN(this->get_logger(),
++                "Policy control is latched off; explicit enable_policy_control is required");
++  }
+ }
+ 
+ void X5Controller::CmdCallback(const arx5_arm_msg::msg::RobotCmd::SharedPtr msg) {
++  if (policy_control_required_ && manual_takeover_.load()) return;
+   double end_pos[6] = {
+       msg->end_pos[0], msg->end_pos[1], msg->end_pos[2], msg->end_pos[3], msg->end_pos[4], msg->end_pos[5]};
+ 
+@@ -120,6 +133,7 @@
+ void X5Controller::goHome(
+     const std::shared_ptr<std_srvs::srv::Trigger::Request>,
+     std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
++  if (policy_control_required_) manual_takeover_.store(true);
+   interfaces_ptr_->setCatch(-1.0);
+   interfaces_ptr_->setArmStatus(InterfacesThread::state::GO_HOME);
+   response->success = true;
+@@ -129,11 +143,34 @@
+ void X5Controller::enableGravityCompensation(
+     const std::shared_ptr<std_srvs::srv::Trigger::Request>,
+     std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
++  if (policy_control_required_) manual_takeover_.store(true);
+   interfaces_ptr_->setArmStatus(InterfacesThread::state::G_COMPENSATION);
+   response->success = true;
+   response->message = "G_COMPENSATION accepted";
+ }
+ 
++void X5Controller::manualTakeover(
++    const std::shared_ptr<std_srvs::srv::Trigger::Request>,
++    std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
++  manual_takeover_.store(true);
++  interfaces_ptr_->setArmStatus(InterfacesThread::state::G_COMPENSATION);
++  response->success = true;
++  response->message = "policy commands latched off; G_COMPENSATION accepted";
++}
++
++void X5Controller::enablePolicyControl(
++    const std::shared_ptr<std_srvs::srv::Trigger::Request>,
++    std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
++  if (!policy_control_required_) {
++    response->success = false;
++    response->message = "policy control is only available in remote_slave mode";
++    return;
++  }
++  manual_takeover_.store(false);
++  response->success = true;
++  response->message = "policy command callbacks enabled";
++}
++
+ void X5Controller::PubState() {
+   auto message = arx5_arm_msg::msg::RobotStatus();
+   message.header.stamp = this->get_clock()->now();
+@@ -257,6 +294,7 @@
+ }
+ 
+ void X5Controller::FollowCmdCallback(const arx5_arm_msg::msg::RobotStatus::SharedPtr msg) {
++  if (policy_control_required_ && manual_takeover_.load()) return;
+   std::vector<double> target_joint_position(6, 0.0);
+ 
+   for (int i = 0; i < 6; i++) {
+@@ -279,6 +317,7 @@
+ }
+ 
+ void X5Controller::JointControlCallback(const arm_control::msg::JointControl::SharedPtr msg) {
++  if (policy_control_required_ && manual_takeover_.load()) return;
+   std::vector<double> target_joint_position(6,0.0);
+   for (int i = 0; i < 6; i++)
+     target_joint_position[i] = msg->joint_pos[i];

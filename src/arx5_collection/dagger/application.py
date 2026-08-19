@@ -269,6 +269,133 @@ class TakeoverDryRunApplication:
                     )
 
 
+class TakeoverApplication:
+    """Run explicit Take-over with the sole validated Vendor command Gateway."""
+
+    def __init__(
+        self,
+        spec: DaggerRunSpec,
+        settings: DaggerCollectorSettings,
+        request: EpisodeRequest,
+        session: ProductionSession,
+        stdout: TextIO = sys.stdout,
+        stderr: TextIO = sys.stderr,
+    ) -> None:
+        self.spec = spec
+        self.settings = settings
+        self.request = request
+        self.session = session
+        self.stdout = stdout
+        self.stderr = stderr
+
+    def run(self) -> int:
+        from .action_gateway import (
+            FixedRateCommandExecutor,
+            Pi05JointActionContract,
+            PolicyActionGateway,
+        )
+        from .authority_ros import ACTION_OUTPUT_TOPICS, RosAuthorityEventPublisher
+        from .command_ros import RosDualArmControlPort
+        from .takeover import (
+            AuthorityTimeline,
+            TakeoverController,
+            TakeoverRecordTrigger,
+        )
+
+        log_dir = self.spec.session_log_root / self.spec.session_id
+        status_sink = lambda message: print(
+            message, file=self.stderr, flush=True
+        )
+        enable_services = tuple(
+            f"/{name}/enable_policy_control"
+            for name in (
+                self.settings.arm_profile.left_controller_name,
+                self.settings.arm_profile.right_controller_name,
+            )
+        )
+        with termination_as_interrupt(), self.session, RosDualArmControlPort(
+            ACTION_OUTPUT_TOPICS,
+            policy_enable_services=enable_services,
+            allow_vendor_commands=True,
+            state_timeout_s=self.settings.control.state_timeout_s,
+        ) as control, OpenPiDaggerTransport(
+            self.settings.server_host,
+            self.settings.server_port,
+            self.settings.checkpoint_sha256,
+            self.settings.inference_timeout_s,
+        ) as transport, RosVlaSnapshotClient(
+            timeout_s=self.settings.snapshot_service_timeout_s
+        ) as observations, RosAuthorityEventPublisher() as events:
+            policy = AsyncPi05PolicyClient(
+                session_id=self.spec.session_id,
+                prompt=self.settings.prompt,
+                checkpoint_sha256=self.settings.checkpoint_sha256,
+                observations=observations,
+                encoder=Pi05ObservationEncoder(
+                    self.settings.grippers,
+                    OpenCvYuyvConverter(),
+                ),
+                transport=transport,
+                execution=self.settings.execution,
+            )
+            gateway = PolicyActionGateway(
+                policy,
+                control,
+                Pi05JointActionContract(
+                    self.settings.checkpoint_sha256,
+                    self.settings.grippers,
+                    self.settings.control.safety,
+                ),
+                control,
+            )
+            executor = FixedRateCommandExecutor(
+                gateway,
+                control,
+                self.settings.execution.control_rate_hz,
+                self.settings.control.policy_wait_timeout_s,
+                self.settings.control.command_watchdog_s,
+            )
+            controller = TakeoverController(
+                gateway=gateway,
+                human_mode=self.session.home_controller,
+                timeline=AuthorityTimeline(
+                    self.settings.checkpoint_sha256,
+                    events,
+                ),
+                status_sink=status_sink,
+            )
+            trigger_factory = DaggerAutoTriggerFactory(status_sink=status_sink)
+            executor.start()
+            print(
+                f"DAGGER TAKEOVER READY logs={log_dir}; "
+                f"execution={self.settings.execution.execution_steps}/"
+                f"{self.settings.execution.action_chunk_size}@"
+                f"{self.settings.execution.control_rate_hz:g}Hz",
+                file=self.stdout,
+                flush=True,
+            )
+            try:
+                with trigger_factory.open(self.session.station) as trigger:
+                    runtime = self.session.create_runtime(
+                        self.request,
+                        TakeoverRecordTrigger(trigger, controller, status_sink),
+                        metadata_context_provider=controller.metadata_context,
+                        recording_started_hook=controller.start_episode,
+                        recording_stopping_hook=controller.stop_episode,
+                    )
+                    return run_episode_loop(
+                        runtime,
+                        self.request,
+                        episodes=self.spec.episodes,
+                        stdout=self.stdout,
+                        stderr=self.stderr,
+                        continue_after_failed_episode=True,
+                    )
+            finally:
+                executor.close()
+                policy.close()
+
+
 class DaggerApplicationBuilder:
     """Validate inputs once and compose a DAgger application."""
 
@@ -305,6 +432,22 @@ class DaggerApplicationBuilder:
             additional_recording_topics=DAGGER_RECORDING_TOPICS,
         )
         return TakeoverDryRunApplication(
+            spec,
+            settings,
+            request,
+            session,
+            stdout=self.stdout,
+            stderr=self.stderr,
+        )
+
+    def build_takeover(self, spec: DaggerRunSpec) -> TakeoverApplication:
+        settings, request = self._load(spec)
+        session = self.session_builder.build(
+            spec,
+            settings,
+            additional_recording_topics=DAGGER_RECORDING_TOPICS,
+        )
+        return TakeoverApplication(
             spec,
             settings,
             request,

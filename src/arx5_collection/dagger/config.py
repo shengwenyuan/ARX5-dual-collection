@@ -5,6 +5,7 @@ from pathlib import Path
 import re
 import tomllib
 
+from .action_gateway import JointActionSafety
 from .observation import GripperCalibration, ObservationConstraints
 from .models import DEFAULT_PI05_EXECUTION_PROFILE, PolicyExecutionProfile
 from arx5_collection.production.profiles import (
@@ -14,6 +15,22 @@ from arx5_collection.production.profiles import (
 
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
+
+
+@dataclass(frozen=True, slots=True)
+class DaggerControlSettings:
+    safety: JointActionSafety
+    state_timeout_s: float
+    policy_wait_timeout_s: float
+    command_watchdog_s: float
+
+    def __post_init__(self) -> None:
+        if min(
+            self.state_timeout_s,
+            self.policy_wait_timeout_s,
+            self.command_watchdog_s,
+        ) <= 0:
+            raise ValueError("DAgger control timeouts must be positive")
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,6 +45,7 @@ class DaggerCollectorSettings:
     snapshot_service_timeout_s: float
     execution: PolicyExecutionProfile
     arm_profile: ArmRuntimeProfile
+    control: DaggerControlSettings
 
     @classmethod
     def load(cls, path: str | Path) -> DaggerCollectorSettings:
@@ -38,6 +56,8 @@ class DaggerCollectorSettings:
         gripper = _table(payload, "gripper")
         observation = _optional_table(payload, "observation")
         robot = _optional_table(payload, "robot")
+        safety = _optional_table(payload, "safety")
+        gateway = _optional_table(payload, "gateway")
         settings = cls(
             server_host=str(collector.get("server_host", "127.0.0.1")),
             server_port=int(collector.get("server_port", policy.get("port", 8000))),
@@ -67,6 +87,29 @@ class DaggerCollectorSettings:
             execution=load_policy_execution_profile(payload),
             arm_profile=resolve_arm_profile(
                 str(robot.get("profile", robot.get("arm_state_profile", "dagger")))
+            ),
+            control=DaggerControlSettings(
+                safety=JointActionSafety(
+                    max_joint_step_rad=float(
+                        safety.get("max_joint_step_rad", 0.25)
+                    ),
+                    max_joint_departure_rad=float(
+                        safety.get("max_joint_departure_rad", 1.5)
+                    ),
+                    min_normalized_gripper=float(
+                        safety.get("min_normalized_gripper", 0.0)
+                    ),
+                    max_normalized_gripper=float(
+                        safety.get("max_normalized_gripper", 1.0)
+                    ),
+                ),
+                state_timeout_s=float(gateway.get("state_timeout_s", 0.1)),
+                policy_wait_timeout_s=float(
+                    gateway.get("policy_wait_timeout_s", 0.5)
+                ),
+                command_watchdog_s=float(
+                    gateway.get("command_watchdog_s", 0.12)
+                ),
             ),
         )
         if not settings.server_host or not settings.prompt:

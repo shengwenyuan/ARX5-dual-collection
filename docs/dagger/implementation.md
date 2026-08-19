@@ -95,6 +95,21 @@ D1a 的本地纯逻辑与 Application 组装测试已通过。W3 无硬件集成
 - 用户在第二条 Episode 前从 READY 退出；Vendor Controller 按既有行为在 SIGINT 后返回 `-11` warning。容器、slcand、CAN 均无残留，usbfs 恢复为 16 MB，不影响本轮验收。
 - D1a 单 Episode 最小闭环通过。连续多 Episode 权限 epoch/sequence 真机验证按用户决定延期，不阻塞进入真实 Gateway 的独立设计阶段。
 
+## 2026-08-19 D1b Gateway 候选实现
+
+- 新增模型无关的 `PolicyActionGateway`，独占 control epoch、command lease、一个在途 Policy Future 和有界 execution queue；旧 epoch 会同时关闭 gate、作废在途结果并清空 action。
+- 新增 π0.5 joint action contract：Policy response 按 robot-space absolute `14D` 解释为左右各六关节 rad 与一个 normalized gripper，只消费配置的 execution horizon，再映射为左右各 `7D` Vendor command。
+- contract 不插值、不裁剪、不静默 clamp；epoch、checkpoint、finite、joint step、joint departure 或 gripper bound 任一失败都会在 lease 打开前拒绝整个 ticket。
+- `TakeoverController` 已改为真正的异步 readiness：Episode 初始和人工恢复都先停在 `RESUME_PENDING`，只有 Future 完成且 contract 通过后才产生 `POLICY_ACTIVE`。`NoActionGateway` 作为 immediate-ready 实现保持 D1a 已验收事件序列。
+- 已冻结 v2 首版参数：robot-space absolute `14D`、`50/10/25 Hz`、joint step/departure `0.25/1.5 rad`、normalized gripper `[0,1]`、Policy wait `0.5 s`、command watchdog `0.12 s`。顺序执行 10 步后才请求 fresh observation；间隙不重复发布，只由 Vendor 保持最后 target。
+- 新增 `FixedRateCommandExecutor` 与唯一 `RosDualArmControlPort`。paired publish 在 command lease 锁内完成；takeover 与旧 epoch Future/Publisher 线程并发时，gate close 返回后不会再产生旧 action。
+- Vendor patch 将 `remote_slave` command callback 默认锁死；GO_HOME 和 gravity compensation 都再次锁死，只有 Gateway 完成 fresh action、安全检查和双臂 `enable_policy_control` 后才能开放物理控制。
+- Episode 正常结束也执行 close gate、epoch++、clear action 和 G_COMP；任何 runtime fault 执行同一 fail-closed 路径、记录 `FAULT_HOLD`，但不自动结束 Episode。
+- w3 首版模型固定为 `stacking_five_paper_cups_pi05_v2/9999`，tree SHA-256 为 `6855485b55e04707d9c0aa96ad4ca1c8374afac5919d9f4777b71023ea7021a0`；宿主机路径不进入 profile，Compose 只挂载 checkpoint root。
+- 本地全仓 `251 passed, 2 skipped`。w3 Collector 镜像 `sha256:691c9cbf462ef55cf8c3c0f8e53ec77ddf977588117d6aee80d68b369b7444f5` 已完成固定 ARX commit、Vendor patch 和六个 ROS package 编译；60 项 Container DAgger tests、CLI、ROS feedback/paired-command loopback 与重复 Publisher guard 通过。
+- w3 完整 Policy 镜像重建受当前 PyPI DNS 阻断；在旧已验收 OpenPI 镜像上只覆盖本仓 Python 层得到临时候选 `arx5-dual-policy:dagger-d1b`，ID `sha256:d71c999f247f25a26ac9bbfd8fd67c51fcd1c7f88ef21a493c754f43a78f2ca8`。双容器均已静态确认同一 checkpoint、SHA 和 `50/14/10/25 Hz`，未加载模型。
+- 当前未启动 Policy Server、CAN、相机、ARX 节点或 Recorder，未发送真机控制命令。下一步是用户启动的无模型 Vendor latch/service 验收，再进入模型 Take-over 单 Episode。
+
 ## 2026-08-19 D0 重构部署结果
 
 - 已删除旧 C++ Adapter package、`GetPi05Observation` service、逐次 Policy MCAP message 和启动编排。

@@ -47,6 +47,28 @@ class Gateway(NoActionGateway):
             raise RuntimeError(f"{name} failed")
 
 
+class PendingGateway(Gateway):
+    action_output_enabled = True
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.ready = False
+
+    def policy_ready(self, episode_id: str, control_epoch: int) -> bool:
+        self._call("poll", episode_id, control_epoch)
+        return self.ready
+
+
+class FaultGateway(PendingGateway):
+    def __init__(self, error: BaseException) -> None:
+        super().__init__()
+        self.error = error
+
+    def take_fault(self) -> BaseException | None:
+        error, self.error = self.error, None
+        return error
+
+
 class HumanMode:
     def __init__(self, fail: bool = False) -> None:
         self.calls = 0
@@ -109,12 +131,15 @@ class TakeoverControllerTest(unittest.TestCase):
         self.assertEqual(
             gateway.calls,
             [
+                ("prepare", "episode-1", 0),
                 ("close", 0),
                 ("clear", 1),
                 ("prepare", "episode-1", 1),
+                ("close", 1),
+                ("clear", 2),
             ],
         )
-        self.assertEqual(human.calls, 1)
+        self.assertEqual(human.calls, 2)
         context = controller.metadata_context()
         assert context.dagger is not None
         self.assertEqual(context.dagger.intervention_count, 1)
@@ -127,6 +152,23 @@ class TakeoverControllerTest(unittest.TestCase):
             1,
         )
 
+    def test_policy_authority_waits_for_asynchronous_gateway_readiness(self) -> None:
+        gateway = PendingGateway()
+        controller, clock, events = self.make_controller(gateway)
+
+        controller.start_episode("episode-1")
+
+        self.assertIs(controller.state, TakeoverState.RESUME_PENDING)
+        self.assertEqual(events, [])
+        gateway.ready = True
+        clock.advance(0.1)
+        self.assertIs(controller.poll_policy(), TakeoverState.MODEL_CONTROL)
+        self.assertEqual(
+            [event.event_type for event in events],
+            [AuthorityEventType.POLICY_ACTIVE],
+        )
+        self.assertEqual(events[0].reason, "action_gateway_ready")
+
     def test_multiple_interventions_keep_epoch_and_sequence_monotonic(self) -> None:
         controller, clock, events = self.make_controller()
         controller.start_episode("episode-1")
@@ -137,7 +179,7 @@ class TakeoverControllerTest(unittest.TestCase):
             controller.toggle_ownership()
         controller.stop_episode(EpisodeOutcome.SUCCESS)
 
-        self.assertEqual(controller.control_epoch, 2)
+        self.assertEqual(controller.control_epoch, 3)
         self.assertEqual([event.sequence for event in events], list(range(1, 10)))
         context = controller.metadata_context()
         assert context.dagger is not None
@@ -154,7 +196,7 @@ class TakeoverControllerTest(unittest.TestCase):
         clock.advance(0.1)
         controller.stop_episode(EpisodeOutcome.SUCCESS)
 
-        self.assertEqual(controller.control_epoch, 1)
+        self.assertEqual(controller.control_epoch, 3)
         self.assertEqual([event.sequence for event in events], [1, 2, 3, 4])
         context = controller.metadata_context()
         assert context.dagger is not None
@@ -175,6 +217,19 @@ class TakeoverControllerTest(unittest.TestCase):
 
         self.assertIs(events[-1].event_type, AuthorityEventType.FAULT_HOLD)
         self.assertIn("clear failed", events[-1].reason)
+
+    def test_runtime_fault_fails_closed_and_enters_gravity_compensation(self) -> None:
+        gateway = FaultGateway(RuntimeError("watchdog expired"))
+        human = HumanMode()
+        controller, _, events = self.make_controller(gateway, human)
+        controller.start_episode("episode-1")
+
+        self.assertIs(controller.poll_runtime(), TakeoverState.FAULT_HOLD)
+
+        self.assertEqual(human.calls, 1)
+        self.assertEqual(controller.control_epoch, 1)
+        self.assertIs(events[-1].event_type, AuthorityEventType.FAULT_HOLD)
+        self.assertIn("watchdog expired", events[-1].reason)
 
     def test_no_action_gateway_explicitly_disables_output(self) -> None:
         self.assertFalse(NoActionGateway.action_output_enabled)
