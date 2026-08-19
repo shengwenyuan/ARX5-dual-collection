@@ -7,7 +7,6 @@ endif()
 
 find_package(ament_cmake REQUIRED)
 find_package(arx5_collection_interfaces REQUIRED)
-find_package(rclcpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
 
 add_library(vla_snapshot_core src/snapshot_buffer.cpp)
@@ -21,21 +20,11 @@ ament_target_dependencies(vla_snapshot_core
   sensor_msgs
 )
 
-add_executable(vla_snapshot_source src/snapshot_node.cpp)
-target_compile_features(vla_snapshot_source PUBLIC cxx_std_17)
-ament_target_dependencies(vla_snapshot_source
-  arx5_collection_interfaces
-  rclcpp
-  sensor_msgs
-)
-target_link_libraries(vla_snapshot_source vla_snapshot_core)
-
 install(DIRECTORY include/ DESTINATION include)
 install(
-  TARGETS vla_snapshot_core vla_snapshot_source
+  TARGETS vla_snapshot_core
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
-  RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
 
 if(BUILD_TESTING)

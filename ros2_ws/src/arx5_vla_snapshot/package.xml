@@ -2,13 +2,12 @@
 <package format="3">
   <name>arx5_vla_snapshot</name>
   <version>0.1.0</version>
-  <description>Latest-only causal color and arm snapshots for VLA clients.</description>
+  <description>Causal camera and arm snapshot matching core for the unified D405 source.</description>
   <maintainer email="devnull@example.com">ARX5 Collection</maintainer>
   <license>Proprietary</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
   <depend>arx5_collection_interfaces</depend>
-  <depend>rclcpp</depend>
   <depend>sensor_msgs</depend>
   <test_depend>ament_cmake_gtest</test_depend>
 

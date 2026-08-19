@@ -151,3 +151,9 @@ D0 真机验收回写本文件前，不实现或运行 Take-over。D1 开始前�
 - MCAP 三相机真实跨度中位数 14.36 ms、最大 31.19 ms，40 ms 下 100% 可配组；实际请求全部满足 40/2/100 ms。
 - MCAP 为 13.411 GB / 12.49 GiB，折算 60 秒为 8.79 GB / 8.19 GiB。分辨率下降已消除本轮 service transport 瓶颈，共享内存方案不进入当前实现。
 - D0 Shadow 收口。进入 D1 前仍须单独冻结 checkpoint action 语义、控制频率、执行 horizon 与 Gateway 安全阈值。
+
+## 2026-08-19 Observation 实现收敛
+
+- 删除已被统一 D405 Source 取代的独立 `vla_snapshot_source` Subscriber；`arx5_vla_snapshot` 仅保留被统一 Source 链接的 C++ 因果 Matcher。
+- 删除无生产调用的 Python 因果配组实现；Python 只负责调用 `/dagger/get_snapshot`、模型字段编码和策略通信。
+- 行为契约未变：Python 全量离线测试 220 passed、2 skipped；相关三个 ROS package 离线构建通过，C++ SnapshotBuffer 5 tests 全部通过。
