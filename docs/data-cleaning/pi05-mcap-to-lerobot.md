@@ -7,6 +7,7 @@
 - Input: 已原子提交的 `episode.mcap + metadata.json`
 - Output: 可被 openpi 直接加载、计算归一化统计并用于 `pi05_base` 后训练的 LeRobot 数据集
 - Current status table: `docs/data-cleaning/pi05-pipeline-status.md`
+- DAgger postprocess: `docs/data-cleaning/dagger-postprocess.md`
 - Scope note: 已在 `main` 实施离线清洗、π0.5 selector、LeRobot exporter 与验证 CLI；本文件同时记录部署和真实数据验收状态。
 
 ## 唯一目标
@@ -102,8 +103,9 @@ derived/pi05/<dataset_id>/
 - 只把 `owner=human` 的半开区间 `[HUMAN_ACTIVE, RESUME_REQUESTED)` 作为专家候选；model、pending、fault 和停止后的 Recorder 尾部仅保留审计，不产生专家 action loss。
 - 以 frame group 的 bag timestamp 过滤区间，以 Header timestamp 完成区间内的因果 observation/state 配组；两类时间戳职责不得混用。
 - 一个 intervention 对应一个独立的候选 segment 和 LeRobot episode。完整 action horizon 不得越过 segment 末端；不足时删除样本，不 padding、不插值。
-- 因果 observation 可以引用边界前、仍满足 freshness 的真实状态，这是专家从模型实际到达状态继续纠正所必需的上下文；action label 绝不能引用边界外或未来数据。
+- 首版 `pre_roll=0`、`post_roll=0`：frame group 与 action label 都必须位于同一人工区间，不引入边界外模型上下文，也不修改 OpenPI loss mask。
 - 普通 demonstration 与 DAgger human segment 可以进入同一训练版本，但必须满足完全相同的 checkpoint-bound 数据契约，并在 manifest 保留来源类型。数据集切分以原始 source Episode 为最小分组，禁止同源片段分散到 train/validation。
+- DAgger correction 必须先独立导出并完成 LeRobot/OpenPI 验证。随后通过 `mix-selections` 在索引层与 demonstration 合并，再由唯一 exporter 生成一个混合 LeRobot；不得通过复制视频或样本实现权重。
 
 ### 3. π0.5 输入字段
 
@@ -342,7 +344,7 @@ python scripts/cloud/train_pi05_arx5.py --repo-id <lerobot_repo_id> --exp-name <
 - `cleaning` 与 `pi05_dataset` 两层代码、四份 JSON schema、`arx5-dataset` CLI 和独立 dataset 镜像已落在 `main` 工作树。
 - w3 独立部署目录为 `/home/lenovo/swy/ARX5-dual-collection-dataset`；原始数据以只读方式挂载，未触碰采集容器和 feat 开发树。
 - `cups_overfit-02`～`cups_overfit-07` 共发现 58 条已提交 Episode；49 条 `success` 进入审计，9 条 `aborted` 未进入训练集。质量分档为 38A/11B，无 C。
-- 正式 task 固定为 `stacking five paper cups`；49 条源 Episode 经 40,578 个候选样本筛选为 50 个连续 LeRobot episode、37,355 个训练帧。
+- 当前 v2 task 固定为 `Stacking paper cups`；混合时 task 集合属于硬契约，不允许只靠大小写或人工理解合并不同 prompt。
 - 最终数据集已落到 `/home/lenovo/swy/ARX5-dual-collection-dev/reports/w3/2026-08-16/lerobot/local/stacking_five_paper_cups_pi05_v1`，包含 50 个 parquet 和 150 个 AV1 视频。
 - LeRobot 重开验证和固定 commit openpi loader 验证均通过；openpi 输入为三路 `224x224x3` RGB、32 维 padded state、`50x32` action chunk 和有效 prompt。
 - 最终 π0.5-base SFT 在 NVIDIA RPBZZZ6 8 卡云端执行；w3 只承担转换和 CPU 可完成的数据验收。

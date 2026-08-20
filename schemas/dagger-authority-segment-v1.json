@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://arx5.local/schemas/dagger-authority-segment-v1.json",
+  "title": "ARX5 DAgger authority interval",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "classifier_version", "segment_id", "source_episode_id",
+    "authority_class", "started_offset_ns", "ended_offset_ns",
+    "started_bag_timestamp_ns", "ended_bag_timestamp_ns", "intervention_id",
+    "complete", "training_eligible", "exclusion_reason"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "classifier_version": {"const": "dagger-authority-v1"},
+    "segment_id": {"type": "string", "minLength": 1},
+    "source_episode_id": {"type": "string", "minLength": 1},
+    "authority_class": {
+      "enum": ["policy", "handover", "expert_correction", "resume", "fault"]
+    },
+    "started_offset_ns": {"type": "integer", "minimum": 0},
+    "ended_offset_ns": {"type": "integer", "minimum": 0},
+    "started_bag_timestamp_ns": {"type": "integer", "minimum": 0},
+    "ended_bag_timestamp_ns": {"type": "integer", "minimum": 0},
+    "intervention_id": {"type": ["integer", "null"], "minimum": 1},
+    "complete": {"type": "boolean"},
+    "training_eligible": {"type": "boolean"},
+    "exclusion_reason": {"type": ["string", "null"]}
+  }
+}

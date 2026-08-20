@@ -42,6 +42,7 @@ class SelectionArtifactCodecTest(unittest.TestCase):
             )
             sample_row = json.loads((output / "sample_index.jsonl").read_text())
             report = json.loads((output / "selection.json").read_text())
+            source_row = json.loads((output / "source_manifest.jsonl").read_text())
 
         self.assertEqual(sample_row["schema_version"], 1)
         self.assertEqual(sample_row["filter_version"], "pi05-arx-filter-v1")
@@ -51,6 +52,11 @@ class SelectionArtifactCodecTest(unittest.TestCase):
         self.assertNotIn("sampling_reasons", sample_row)
         self.assertNotIn("delta_time_ns", sample_row)
         self.assertEqual(report["eligible_sample_count"], 1)
+        source_schema = json.loads(
+            (Path(__file__).parents[2] / "schemas/dataset-source-manifest-v1.json").read_text()
+        )
+        Draft202012Validator(source_schema).validate(source_row)
+        self.assertEqual(source_row["collection_type"], "demonstration")
 
     def test_writes_equal_eef_v2_provenance(self) -> None:
         image = MessageRef("/camera", 1, 100, 101)

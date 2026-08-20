@@ -18,6 +18,7 @@ from arx5_collection.pi05_dataset.selection import Pi05Sample
 from arx5_collection.pi05_dataset.selection import Pi05Segment
 from arx5_collection.pi05_dataset.selection import build_samples
 from arx5_collection.pi05_dataset.selection import select_nonidle_segments
+from arx5_collection.pi05_dataset.provenance import SegmentProvenance
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,6 +27,11 @@ class EpisodeSelection:
     task: str
     samples: tuple[Pi05Sample, ...]
     segments: tuple[Pi05Segment, ...]
+    segment_provenance: tuple[SegmentProvenance, ...] = ()
+
+    def __post_init__(self) -> None:
+        if self.segment_provenance and len(self.segment_provenance) != len(self.segments):
+            raise ValueError("segment provenance must match selected segments")
 
 
 @dataclass(frozen=True, slots=True)

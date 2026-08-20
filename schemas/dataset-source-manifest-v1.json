@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://arx5.local/schemas/dataset-source-manifest-v1.json",
+  "title": "ARX5 derived training segment provenance",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "segment_id", "source_episode_id", "split_group",
+    "collection_type", "training_class", "intervention_id",
+    "authority_segment_id", "source_started_bag_timestamp_ns",
+    "source_ended_bag_timestamp_ns", "sample_weight"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "segment_id": {"type": "string", "minLength": 1},
+    "source_episode_id": {"type": "string", "minLength": 1},
+    "split_group": {"type": "string", "minLength": 1},
+    "collection_type": {"enum": ["demonstration", "dagger"]},
+    "training_class": {"enum": ["demonstration", "expert_correction"]},
+    "intervention_id": {"type": ["integer", "null"], "minimum": 1},
+    "authority_segment_id": {"type": ["string", "null"]},
+    "source_started_bag_timestamp_ns": {"type": ["integer", "null"], "minimum": 0},
+    "source_ended_bag_timestamp_ns": {"type": ["integer", "null"], "minimum": 0},
+    "sample_weight": {"type": "number", "exclusiveMinimum": 0},
+    "mixture_source": {"type": "string", "minLength": 1},
+    "lerobot_episode_index": {"type": "integer", "minimum": 0}
+  }
+}

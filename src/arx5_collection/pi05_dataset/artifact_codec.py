@@ -36,6 +36,8 @@ from arx5_collection.pi05_dataset.eef_selection import EqualEefSample
 from arx5_collection.pi05_dataset.selection import Pi05Policy
 from arx5_collection.pi05_dataset.selection import Pi05Sample
 from arx5_collection.pi05_dataset.selection import Pi05Segment
+from arx5_collection.pi05_dataset.provenance import SegmentProvenance
+from arx5_collection.pi05_dataset.provenance import provenance_row
 
 if TYPE_CHECKING:
     from arx5_collection.pi05_dataset.selection_pipeline import DatasetSelection
@@ -220,9 +222,14 @@ def _write_selection_artifacts(
 ) -> Path:
     target = output_root / "selection"
     segment_rows = []
+    source_rows = []
     memberships: dict[tuple[str, int], str] = {}
     for episode in selection.episodes:
-        for segment in episode.segments:
+        provenance_items = episode.segment_provenance or tuple(
+            SegmentProvenance("demonstration", "demonstration")
+            for _ in episode.segments
+        )
+        for segment, provenance in zip(episode.segments, provenance_items):
             row = segment_to_artifact(
                 episode,
                 segment,
@@ -230,6 +237,13 @@ def _write_selection_artifacts(
                 filter_version=filter_version,
             )
             segment_rows.append(row)
+            source_rows.append(
+                provenance_row(
+                    row["segment_id"],
+                    episode.episode_id,
+                    provenance,
+                )
+            )
             for sample in segment.samples:
                 memberships[(episode.episode_id, sample.sample_index)] = row["segment_id"]
     sample_rows = [
@@ -259,11 +273,16 @@ def _write_selection_artifacts(
         eligible_sample_count=sum(row["training_eligible"] for row in sample_rows),
         segment_count=len(segment_rows),
     )
+    report["source_composition"] = {
+        key: sum(row["collection_type"] == key for row in source_rows)
+        for key in ("demonstration", "dagger")
+    }
     if sampling_contract is not None:
         report["sampling_contract"] = sampling_contract
     with staged_directory(target) as temporary:
         write_jsonl(temporary / "sample_index.jsonl", sample_rows)
         write_jsonl(temporary / "segments.jsonl", segment_rows)
+        write_jsonl(temporary / "source_manifest.jsonl", source_rows)
         write_json(temporary / "selection.json", report)
     return target
 

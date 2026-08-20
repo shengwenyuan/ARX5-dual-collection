@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://arx5.local/schemas/dagger-authority-quality-v1.json",
+  "title": "ARX5 DAgger authority classification quality",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "classifier_version", "episode_id", "valid", "issues",
+    "episode_monotonic_anchor_ns", "episode_bag_anchor_ns",
+    "bag_anchor_spread_ns", "event_count", "intervention_count",
+    "segment_count", "expert_correction_count"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "classifier_version": {"const": "dagger-authority-v1"},
+    "episode_id": {"type": "string", "minLength": 1},
+    "valid": {"type": "boolean"},
+    "issues": {"type": "array", "items": {"type": "string"}},
+    "episode_monotonic_anchor_ns": {"type": ["integer", "null"], "minimum": 0},
+    "episode_bag_anchor_ns": {"type": ["integer", "null"], "minimum": 0},
+    "bag_anchor_spread_ns": {"type": ["integer", "null"], "minimum": 0},
+    "event_count": {"type": "integer", "minimum": 0},
+    "intervention_count": {"type": "integer", "minimum": 0},
+    "segment_count": {"type": "integer", "minimum": 0},
+    "expert_correction_count": {"type": "integer", "minimum": 0}
+  }
+}

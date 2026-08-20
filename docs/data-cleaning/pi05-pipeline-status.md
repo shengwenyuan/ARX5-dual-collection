@@ -1,6 +1,6 @@
 # π0.5 数据清洗与转换状态表
 
-- Last updated: `2026-08-17`
+- Last updated: `2026-08-20`
 - Current dataset version: `stacking_five_paper_cups_pi05_v1`
 - Cleaning policy: `arx5-cleaning-v1`
 - Selection policy: `pi05-arx-filter-v1`
@@ -8,6 +8,7 @@
 - Status: `v1 implemented, exported, OpenPI-verified and trained`
 - Next selector: `pi05-arx-filter-v2-equal-eef-distance`（已实现并通过单测，正式数据验收 pending）
 - Detailed design: `docs/data-cleaning/pi05-mcap-to-lerobot.md`
+- DAgger postprocess: `docs/data-cleaning/dagger-postprocess.md`
 
 ## 维护约定
 
@@ -35,6 +36,7 @@
   -> RGB-D 与三相机帧组构造
   -> 双臂状态关联
   -> quality.json + frame_index.jsonl
+  -> DAgger authority 分类（仅 collection_type=dagger）
   -> success/质量/长度筛选
   -> Header-based 50 Hz sample 构造
   -> 14 维 joint state/action 构造
@@ -74,6 +76,9 @@
 | 层级 | 功能 | 状态 | 当前规则/输出 | 主要实现入口 | 规则来源 |
 |---|---|---:|---|---|---|
 | 输入发现 | 发现已原子提交的 Episode | enabled | 必须同时存在 `episode.mcap` 与 `metadata.json`；Episode ID 不允许重复 | `pi05_dataset.discovery.discover_episode_dirs` | 项目数据契约 |
+| DAgger 分类 | authority 与 metadata 双记录校验 | verified | 固定五类半开区间；只有完整 expert correction 可训练 | `dagger_dataset.classifier.classify_authority` | `dagger-authority-v1` |
+| DAgger 选择 | correction 独立运行 v2 selector | verified | 无 pre/post roll；不跨 intervention；保留 source manifest | `dagger_dataset.selection.select_equal_eef_dagger_dataset` | DAgger 数据契约 |
+| 数据混合 | demonstration + correction selection | verified | 不复制样本；权重只记录、尚未应用 | `pi05_dataset.mixing.mix_selections` | 当前首版决策 |
 | MCAP Reader | 必需流和消息类型校验 | enabled | 三相机 RGB/Depth 六路 + 双臂状态两路，共八路 | `cleaning.reader.read_episode_scan` | 项目适配 |
 | MCAP Reader | Header 与 bag time 留档 | enabled | 选择逻辑使用 `header_stamp_ns`；`bag_timestamp_ns` 仅用于来源引用和一致性校验 | `cleaning.models.MessageRef` | 当前 v1 决策 |
 | 数值检查 | ArmState 有限值和维度检查 | enabled | 六关节；含 NaN/Inf 的状态不进入可用 ArmSample | `cleaning.reader.read_episode_scan`、`cleaning.models.ArmSample` | 项目质量门槛 |
@@ -139,13 +144,15 @@ cleaning、selection、LeRobot dataset 和 norm stats 的目录发布语义已�
 | 每段尾部裁剪 | `34 frames` |
 | 左夹爪 open / closed | `-2.7309837341 / 0` |
 | 右夹爪 open / closed | `-2.4361028671 / 0` |
-| task | `stacking five paper cups` |
+| task | `Stacking paper cups` |
 | RGB 导出尺寸 | `640x360` |
 | 模型 action dimension | `32` |
 
 下一版 selector 默认值：EEF 位移 `5 mm`、夹爪归一化变化 `0.02`、最大采样间隔 `100 ms`、image max age `40 ms`、arm max age `2 ms`；LeRobot 名义 fps 和 action horizon 仍为 `50`。
 
 ## 正式数据结果
+
+DAgger W3 小批验收：两条真实 Episode 分别得到 2/3 段完整 correction。两条 Episode 全部纳入后，无复制混合索引包含 54 个 segment、27,816 个训练有效样本；完整 LeRobot 已通过 π0.5/OpenPI loader。加权采样尚未启用。
 
 | 项目 | 当前结果 |
 |---|---:|

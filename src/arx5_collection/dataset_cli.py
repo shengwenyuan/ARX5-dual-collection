@@ -8,10 +8,14 @@ from typing import Sequence
 
 from arx5_collection.cleaning.pipeline import clean_episode
 from arx5_collection.cleaning.pipeline import inspect_episode
+from arx5_collection.cleaning.reader import load_metadata
+from arx5_collection.dagger_dataset.pipeline import classify_dagger_episode
+from arx5_collection.dagger_dataset.selection import select_equal_eef_dagger_dataset
 from arx5_collection.pi05_dataset.actions import GripperCalibration
 from arx5_collection.pi05_dataset.discovery import discover_episode_dirs
 from arx5_collection.pi05_dataset.eef_selection import EqualEefPolicy
 from arx5_collection.pi05_dataset.exporter import export_lerobot
+from arx5_collection.pi05_dataset.mixing import mix_selections
 from arx5_collection.pi05_dataset.selection_pipeline import select_dataset
 from arx5_collection.pi05_dataset.selection_pipeline import DatasetSelection
 from arx5_collection.pi05_dataset.selection_pipeline import select_equal_eef_dataset
@@ -38,6 +42,17 @@ def _selected_episode_dirs(args: argparse.Namespace) -> list[Path]:
     return episodes
 
 
+def _selected_dagger_episode_dirs(args: argparse.Namespace) -> list[Path]:
+    episodes = [
+        episode
+        for episode in _selected_episode_dirs(args)
+        if load_metadata(episode).get("collection_type") == "dagger"
+    ]
+    if not episodes:
+        raise SystemExit(f"no committed DAgger Episodes found under {args.input_root}")
+    return episodes
+
+
 def _handle_inspect(args: argparse.Namespace) -> int:
     result = inspect_episode(args.episode)
     print(json.dumps(result.quality, indent=2, sort_keys=True))
@@ -58,6 +73,23 @@ def _handle_clean(args: argparse.Namespace) -> int:
         )
     print(json.dumps({"episodes": summaries}, indent=2, sort_keys=True))
     return 0
+
+
+def _handle_classify_dagger(args: argparse.Namespace) -> int:
+    summaries = []
+    for episode_dir in _selected_dagger_episode_dirs(args):
+        result, output = classify_dagger_episode(episode_dir, args.audit_root)
+        summaries.append(
+            {
+                "episode_id": result.episode_id,
+                "valid": result.valid,
+                "expert_corrections": len(result.expert_segments),
+                "issues": list(result.issues),
+                "output_dir": str(output),
+            }
+        )
+    print(json.dumps({"episodes": summaries}, indent=2, sort_keys=True))
+    return 0 if all(summary["valid"] for summary in summaries) else 2
 
 
 def _gripper_calibrations(
@@ -126,6 +158,60 @@ def _handle_select_pi05_eef(args: argparse.Namespace) -> int:
     return 0
 
 
+def _handle_select_pi05_eef_dagger(args: argparse.Namespace) -> int:
+    left_gripper, right_gripper = _gripper_calibrations(args)
+    policy = EqualEefPolicy(
+        eef_distance_m=args.eef_distance_mm / 1000.0,
+        gripper_delta_threshold=args.gripper_delta_threshold,
+        max_sample_interval_ns=round(args.max_sample_interval_ms * 1_000_000),
+    )
+    selection = select_equal_eef_dagger_dataset(
+        _selected_dagger_episode_dirs(args),
+        args.audit_root,
+        args.output_root,
+        args.task,
+        left_gripper,
+        right_gripper,
+        policy,
+    )
+    _print_selection(selection)
+    return 0
+
+
+def _named_paths(values: Sequence[str], label: str) -> dict[str, Path]:
+    result = {}
+    for value in values:
+        name, separator, path = value.partition("=")
+        if not separator or not name or not path:
+            raise SystemExit(f"{label} must use NAME=PATH")
+        if name in result:
+            raise SystemExit(f"duplicate {label} name: {name}")
+        result[name] = Path(path)
+    return result
+
+
+def _named_weights(values: Sequence[str]) -> dict[str, float]:
+    result = {}
+    for value in values:
+        name, separator, weight = value.partition("=")
+        if not separator or not name or not weight:
+            raise SystemExit("--weight must use NAME=FLOAT")
+        if name in result:
+            raise SystemExit(f"duplicate --weight name: {name}")
+        result[name] = float(weight)
+    return result
+
+
+def _handle_mix_selections(args: argparse.Namespace) -> int:
+    output = mix_selections(
+        _named_paths(args.input, "--input"),
+        args.output_root,
+        _named_weights(args.weight),
+    )
+    print(json.dumps({"selection_dir": str(output)}, indent=2, sort_keys=True))
+    return 0
+
+
 def _handle_to_lerobot(args: argparse.Namespace) -> int:
     output = export_lerobot(
         args.input_root,
@@ -189,6 +275,15 @@ def build_parser() -> argparse.ArgumentParser:
     clean_parser.add_argument("--outcome", action="append", choices=("success", "fail", "aborted"))
     clean_parser.set_defaults(handler=_handle_clean)
 
+    classify_parser = subparsers.add_parser(
+        "classify-dagger",
+        help="validate sparse authority events and write fixed semantic intervals",
+    )
+    classify_parser.add_argument("--input-root", type=Path, action="append", required=True)
+    classify_parser.add_argument("--audit-root", type=Path, required=True)
+    classify_parser.add_argument("--outcome", action="append", choices=("success", "fail", "aborted"))
+    classify_parser.set_defaults(handler=_handle_classify_dagger)
+
     select_parser = subparsers.add_parser(
         "select-pi05",
         help="build 50 Hz π0.5 sample and motion-segment indexes",
@@ -220,6 +315,31 @@ def build_parser() -> argparse.ArgumentParser:
         help="maximum real Header-time gap between retained trajectory samples",
     )
     eef_parser.set_defaults(handler=_handle_select_pi05_eef)
+
+    dagger_eef_parser = subparsers.add_parser(
+        "select-pi05-eef-dagger",
+        help="apply the equal-EEF recipe independently to complete corrections",
+    )
+    _add_selection_arguments(dagger_eef_parser)
+    dagger_eef_parser.add_argument("--eef-distance-mm", type=float, default=5.0)
+    dagger_eef_parser.add_argument("--gripper-delta-threshold", type=float, default=0.02)
+    dagger_eef_parser.add_argument("--max-sample-interval-ms", type=float, default=100.0)
+    dagger_eef_parser.set_defaults(handler=_handle_select_pi05_eef_dagger)
+
+    mix_parser = subparsers.add_parser(
+        "mix-selections",
+        help="merge compatible selections before one LeRobot export",
+    )
+    mix_parser.add_argument("--input", action="append", required=True, metavar="NAME=PATH")
+    mix_parser.add_argument(
+        "--weight",
+        action="append",
+        default=[],
+        metavar="NAME=FLOAT",
+        help="record a future dataloader weight without duplicating samples",
+    )
+    mix_parser.add_argument("--output-root", type=Path, required=True)
+    mix_parser.set_defaults(handler=_handle_mix_selections)
 
     export_parser = subparsers.add_parser(
         "to-lerobot",

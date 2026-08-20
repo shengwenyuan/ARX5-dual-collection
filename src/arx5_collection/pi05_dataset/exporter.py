@@ -11,6 +11,7 @@ from arx5_collection.artifacts import message_ref_from_artifact
 from arx5_collection.artifacts import read_json
 from arx5_collection.artifacts import read_jsonl
 from arx5_collection.artifacts import write_json
+from arx5_collection.artifacts import write_jsonl
 from arx5_collection.atomic import staged_directory
 from arx5_collection.pi05_dataset.discovery import episode_lookup
 from arx5_collection.pi05_dataset.images import extract_selected_rgb
@@ -42,6 +43,10 @@ def export_lerobot(
     sample_rows = read_jsonl(selection_dir / "sample_index.jsonl")
     segment_rows = read_jsonl(selection_dir / "segments.jsonl")
     selection_report = read_json(selection_dir / "selection.json")
+    source_manifest_path = selection_dir / "source_manifest.jsonl"
+    source_manifest = (
+        read_jsonl(source_manifest_path) if source_manifest_path.is_file() else []
+    )
     samples_by_segment: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for sample in sample_rows:
         if sample["training_eligible"]:
@@ -75,6 +80,7 @@ def export_lerobot(
                 segments_by_episode[str(segment["source_episode_id"])].append(segment)
 
             exported_frames = 0
+            exported_segment_ids = []
             for episode_id, episode_segments in segments_by_episode.items():
                 refs = {
                     message_ref_from_artifact(sample["images"][camera])
@@ -110,6 +116,7 @@ def export_lerobot(
                         dataset.add_frame(frame)
                         exported_frames += 1
                     dataset.save_episode()
+                    exported_segment_ids.append(segment_id)
                 shutil.rmtree(episode_cache)
 
         report_dir = output_root / "reports"
@@ -135,6 +142,36 @@ def export_lerobot(
         }
         if "sampling_contract" in selection_report:
             report["sampling_contract"] = selection_report["sampling_contract"]
+        if source_manifest:
+            source_by_segment = {
+                str(row["segment_id"]): row for row in source_manifest
+            }
+            if set(source_by_segment) != set(exported_segment_ids):
+                raise ValueError(
+                    "source manifest does not match exported selection segments"
+                )
+            exported_source_manifest = [
+                {
+                    **source_by_segment[segment_id],
+                    "lerobot_episode_index": index,
+                }
+                for index, segment_id in enumerate(exported_segment_ids)
+            ]
+            report["source_manifest"] = str(
+                (report_dir / "source_manifest.jsonl").resolve()
+            )
+            report["source_composition"] = selection_report.get(
+                "source_composition", {}
+            )
+            write_jsonl(
+                report_dir / "source_manifest.jsonl",
+                exported_source_manifest,
+            )
+        if "mixture" in selection_report:
+            report["mixture"] = selection_report["mixture"]
+            report["weighting_applied"] = selection_report.get(
+                "weighting_applied", False
+            )
         write_json(report_path, report)
     finally:
         if cache_parent.exists():

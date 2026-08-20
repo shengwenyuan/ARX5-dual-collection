@@ -157,7 +157,7 @@ w3 的单卡 JAX 推理环境使用隔离根 `/home/lenovo/swy/pi05-runtime`，�
 
 架构上冻结“模型无关清洗层 + 模型专用 dataset pipeline”：前者输出可复用的 `quality.json + frame_index.jsonl`，后者独立负责各模型的训练资格、采样频率、action、归一化和导出。未来其他清洗或训练链路应复用同一上游契约，新增独立 adapter/pipeline，不复制采集逻辑，也不把模型依赖带入采集运行路径。
 
-DAgger 原始 Episode 同样保持完整、连续和不可修改。主线 MCAP 继续以六路 RGB-D 和双臂 ArmState 为感知真值，不复制模型输入，也不记录普通推理使用的源消息。只有控制权变化通过稀疏 `/dagger/authority` 事件落入同一 MCAP；离线 pipeline 只生成区间、质量和 loss mask，不裁剪或覆盖原始数据，不推断模型开始出错的精确时刻。
+DAgger 原始 Episode 同样保持完整、连续和不可修改。主线 MCAP 继续以六路 RGB-D 和双臂 ArmState 为感知真值，不复制模型输入，也不记录普通推理使用的源消息。只有控制权变化通过稀疏 `/dagger/authority` 事件落入同一 MCAP；离线 pipeline 只生成区间、质量、训练资格与来源 manifest，不裁剪或覆盖原始数据，不推断模型开始出错的精确时刻。首版 correction 单独导出验证，之后在 selection 层与 demonstration 合并为一个 LeRobot；不增加 pre/post roll，也不修改 OpenPI loss mask。
 
 ## DAgger 控制边界
 
