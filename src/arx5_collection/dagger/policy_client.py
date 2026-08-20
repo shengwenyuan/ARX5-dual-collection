@@ -15,6 +15,20 @@ _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
 
 @dataclass(frozen=True, slots=True)
+class RtcPolicyContext:
+    estimated_delay_steps: int
+    action_prefix: tuple[tuple[float, ...], ...]
+
+    def __post_init__(self) -> None:
+        if self.estimated_delay_steps < 0:
+            raise ValueError("estimated RTC delay must not be negative")
+        if len(self.action_prefix) != self.estimated_delay_steps:
+            raise ValueError("RTC action prefix must match the estimated delay")
+        if any(len(action) == 0 for action in self.action_prefix):
+            raise ValueError("RTC action prefix rows must not be empty")
+
+
+@dataclass(frozen=True, slots=True)
 class Pi05PolicyRequest:
     session_id: str
     episode_id: str
@@ -23,6 +37,7 @@ class Pi05PolicyRequest:
     checkpoint_sha256: str
     prompt: str
     observation: Pi05Observation
+    rtc: RtcPolicyContext | None = None
 
     def __post_init__(self) -> None:
         if not self.session_id or not self.episode_id or not self.inference_id:
@@ -116,6 +131,7 @@ class AsyncPi05PolicyClient:
         episode_id: str,
         control_epoch: int,
         inference_id: str | None = None,
+        rtc: RtcPolicyContext | None = None,
     ) -> Future[InferenceTicket]:
         if not episode_id:
             raise ValueError("episode_id must not be empty")
@@ -128,7 +144,7 @@ class AsyncPi05PolicyClient:
             if control_epoch != self._active_epoch:
                 raise StalePolicyResponseError("policy request epoch is not active")
         return self._executor.submit(
-            self._infer, episode_id, control_epoch, inference_id
+            self._infer, episode_id, control_epoch, inference_id, rtc
         )
 
     def close(self, timeout_s: float | None = None) -> None:
@@ -140,7 +156,11 @@ class AsyncPi05PolicyClient:
         self._executor.shutdown(wait=True, cancel_futures=True)
 
     def _infer(
-        self, episode_id: str, control_epoch: int, inference_id: str
+        self,
+        episode_id: str,
+        control_epoch: int,
+        inference_id: str,
+        rtc: RtcPolicyContext | None,
     ) -> InferenceTicket:
         self._require_active_epoch(control_epoch)
         observation = self.encoder.encode(self.observations.capture())
@@ -152,6 +172,7 @@ class AsyncPi05PolicyClient:
             checkpoint_sha256=self.checkpoint_sha256,
             prompt=self.prompt,
             observation=observation,
+            rtc=rtc,
         )
         response = self.transport.infer(request)
         self._validate_response(response, episode_id, control_epoch, inference_id)

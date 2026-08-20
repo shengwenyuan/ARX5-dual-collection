@@ -12,6 +12,7 @@ from typing import Protocol
 
 from .models import InferenceTicket
 from .observation import GripperCalibration
+from .policy_client import RtcPolicyContext
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,6 +73,7 @@ class AsyncPolicy(Protocol):
         episode_id: str,
         control_epoch: int,
         inference_id: str | None = None,
+        rtc: RtcPolicyContext | None = None,
     ) -> Future[InferenceTicket]: ...
 
 
@@ -119,15 +121,31 @@ class Pi05JointActionContract:
         state: DualArmJointState,
         control_epoch: int,
     ) -> tuple[DualArmJointCommand, ...]:
+        self.validate_ticket_identity(ticket, control_epoch)
+
+        return self.validate_actions(ticket.execution_chunk, state)
+
+    def validate_ticket_identity(
+        self,
+        ticket: InferenceTicket,
+        control_epoch: int,
+    ) -> None:
         if ticket.control_epoch != control_epoch:
             raise RuntimeError("action ticket belongs to a stale control epoch")
         if ticket.checkpoint_sha256 != self.checkpoint_sha256:
             raise RuntimeError("action ticket checkpoint does not match the Session")
 
+    def validate_actions(
+        self,
+        actions: tuple[tuple[float, ...], ...],
+        state: DualArmJointState,
+    ) -> tuple[DualArmJointCommand, ...]:
         commands: list[DualArmJointCommand] = []
         previous_left = state.left
         previous_right = state.right
-        for index, action in enumerate(ticket.execution_chunk):
+        for index, action in enumerate(actions):
+            if len(action) != 14 or not all(math.isfinite(value) for value in action):
+                raise RuntimeError(f"action[{index}] is not a finite robot-space 14D action")
             left = tuple(action[:6])
             left_gripper = action[6]
             right = tuple(action[7:13])

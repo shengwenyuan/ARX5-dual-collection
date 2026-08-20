@@ -10,9 +10,13 @@ import tomllib
 from typing import Any
 
 from .checkpoint import checkpoint_tree_sha256
-from .config import load_policy_execution_profile
-from .models import InferenceTicket, PolicyExecutionProfile
-from .observation import PI05_IMAGE_HEIGHT, PI05_IMAGE_WIDTH
+from .config import load_checkpoint_profile, load_rtc_rollout
+from .models import (
+    InferenceTicket,
+    Pi05CheckpointProfile,
+    PolicyExecutionProfile,
+    RtcRolloutProfile,
+)
 from .policy_envelope import CorrelatedPolicyEnvelope
 
 
@@ -29,6 +33,8 @@ class PolicyServerSettings:
     port: int
     base_checkpoint: str
     execution: PolicyExecutionProfile
+    checkpoint_profile: Pi05CheckpointProfile
+    rtc_rollout: RtcRolloutProfile | None
 
     @classmethod
     def load(cls, path: str | Path) -> PolicyServerSettings:
@@ -38,6 +44,7 @@ class PolicyServerSettings:
         policy = payload.get("policy")
         if not isinstance(policy, dict):
             raise ValueError("policy config must contain a [policy] table")
+        checkpoint_profile = load_checkpoint_profile(payload)
         settings = cls(
             checkpoint=Path(str(policy["checkpoint"])),
             checkpoint_sha256=str(policy["checkpoint_sha256"]).lower(),
@@ -51,7 +58,9 @@ class PolicyServerSettings:
                     "gs://openpi-assets/checkpoints/pi05_base/params",
                 )
             ),
-            execution=load_policy_execution_profile(payload),
+            checkpoint_profile=checkpoint_profile,
+            rtc_rollout=load_rtc_rollout(payload, checkpoint_profile),
+            execution=checkpoint_profile.execution,
         )
         if not settings.repo_id or not settings.prompt or not settings.host:
             raise ValueError("repo_id, prompt, and host must not be empty")
@@ -86,19 +95,39 @@ def create_pi05_joint_policy(settings: PolicyServerSettings):
             )
         ]
     )
+    data_kwargs: dict[str, Any] = {}
+    if settings.checkpoint_profile.policy_type == "training_time_rtc":
+        data_kwargs["use_delta_joint_actions"] = True
     data = training_config.LeRobotAlohaDataConfig(
         repo_id=settings.repo_id,
         adapt_to_pi=False,
         repack_transforms=repack,
         base_config=training_config.DataConfig(prompt_from_task=True),
+        **data_kwargs,
     )
+    model = pi0_config.Pi0Config(
+        pi05=True,
+        action_dim=settings.checkpoint_profile.model_action_dimension,
+        action_horizon=settings.execution.action_chunk_size,
+    )
+    policy_metadata: dict[str, Any] = {}
+    if settings.checkpoint_profile.policy_type == "training_time_rtc":
+        from openpi.models import pi0_rtc_config
+
+        model = pi0_rtc_config.Pi05RtcConfig(
+            action_dim=settings.checkpoint_profile.model_action_dimension,
+            action_horizon=settings.execution.action_chunk_size,
+            max_delay=settings.checkpoint_profile.max_delay_steps,
+        )
+        policy_metadata = {
+            "policy_metadata": {
+                "policy_type": settings.checkpoint_profile.policy_type,
+                "max_delay": settings.checkpoint_profile.max_delay_steps,
+            }
+        }
     train = training_config.TrainConfig(
         name="pi05_arx5_joint_sft",
-        model=pi0_config.Pi0Config(
-            pi05=True,
-            action_dim=32,
-            action_horizon=settings.execution.action_chunk_size,
-        ),
+        model=model,
         data=data,
         weight_loader=weight_loaders.CheckpointWeightLoader(settings.base_checkpoint),
         assets_base_dir="./assets",
@@ -106,18 +135,31 @@ def create_pi05_joint_policy(settings: PolicyServerSettings):
         batch_size=64,
         fsdp_devices=1,
         num_workers=1,
+        **policy_metadata,
     )
-    return policy_config.create_trained_policy(
+    policy = policy_config.create_trained_policy(
         train,
         settings.checkpoint,
         default_prompt=settings.prompt,
     )
+    if settings.checkpoint_profile.policy_type == "training_time_rtc":
+        from .training_time_rtc_policy import TrainingTimeRtcPolicyAdapter
+
+        policy = TrainingTimeRtcPolicyAdapter(
+            policy,
+            action_horizon=settings.execution.action_chunk_size,
+            action_dimension=settings.execution.action_dimension,
+            max_delay_steps=settings.checkpoint_profile.max_delay_steps,
+            flow_steps=settings.checkpoint_profile.flow_steps,
+        )
+    return policy
 
 
 def warm_up_pi05_policy(
     policy: Any,
     prompt: str,
-    execution: PolicyExecutionProfile,
+    checkpoint: Pi05CheckpointProfile,
+    rollout: RtcRolloutProfile | None,
     numpy_module: Any | None = None,
 ) -> None:
     """Compile the accepted π0.5 input shape before the server becomes healthy."""
@@ -125,12 +167,19 @@ def warm_up_pi05_policy(
         import numpy as numpy_module
 
     image = numpy_module.zeros(
-        (3, PI05_IMAGE_HEIGHT, PI05_IMAGE_WIDTH),
+        (
+            checkpoint.input.channels,
+            checkpoint.input.height,
+            checkpoint.input.width,
+        ),
         dtype=numpy_module.uint8,
     )
     result = policy.infer(
         {
-            "state": numpy_module.zeros(14, dtype=numpy_module.float64),
+            "state": numpy_module.zeros(
+                checkpoint.execution.action_dimension,
+                dtype=numpy_module.float32,
+            ),
             "images": {
                 "cam_high": image,
                 "cam_left_wrist": image,
@@ -150,8 +199,46 @@ def warm_up_pi05_policy(
         0,
         "0" * 64,
         action_chunk,
-        execution,
+        checkpoint.execution,
     )
+    if checkpoint.policy_type == "training_time_rtc":
+        if rollout is None:
+            raise RuntimeError("RTC warm-up requires a rollout profile")
+        delay = rollout.initial_delay_steps
+        conditioned = policy.infer_rtc(
+            {
+                "state": numpy_module.zeros(
+                    checkpoint.execution.action_dimension,
+                    dtype=numpy_module.float32,
+                ),
+                "images": {
+                    "cam_high": image,
+                    "cam_left_wrist": image,
+                    "cam_right_wrist": image,
+                },
+                "prompt": prompt,
+            },
+            {
+                "estimated_delay_steps": delay,
+                "action_prefix": action_chunk[:delay],
+            },
+        )
+        try:
+            conditioned_chunk = tuple(
+                tuple(float(value) for value in row)
+                for row in conditioned["actions"]
+            )
+        except (KeyError, TypeError, ValueError) as error:
+            raise RuntimeError(
+                f"π0.5 RTC warm-up returned an invalid action: {error}"
+            ) from error
+        InferenceTicket(
+            "policy-rtc-warmup",
+            0,
+            "0" * 64,
+            conditioned_chunk,
+            checkpoint.execution,
+        )
     logging.info("Policy warm-up complete")
 
 
@@ -167,7 +254,12 @@ def serve(settings: PolicyServerSettings) -> None:
         )
     logging.info("Checkpoint identity verified: %s", actual_sha256)
     policy = create_pi05_joint_policy(settings)
-    warm_up_pi05_policy(policy, settings.prompt, settings.execution)
+    warm_up_pi05_policy(
+        policy,
+        settings.prompt,
+        settings.checkpoint_profile,
+        settings.rtc_rollout,
+    )
     envelope = CorrelatedPolicyEnvelope(policy, actual_sha256, time.time_ns)
     WebsocketPolicyServer(
         envelope,
@@ -180,6 +272,41 @@ def serve(settings: PolicyServerSettings) -> None:
             "action_dimension": settings.execution.action_dimension,
             "execution_steps": settings.execution.execution_steps,
             "control_rate_hz": settings.execution.control_rate_hz,
+            "policy_type": settings.checkpoint_profile.policy_type,
+            "max_delay_steps": settings.checkpoint_profile.max_delay_steps,
+            "flow_steps": settings.checkpoint_profile.flow_steps,
+            "input_width": settings.checkpoint_profile.input.width,
+            "input_height": settings.checkpoint_profile.input.height,
+            "input_channels": settings.checkpoint_profile.input.channels,
+            "input_layout": settings.checkpoint_profile.input.layout,
+            "input_color": settings.checkpoint_profile.input.color,
+            "input_dtype": settings.checkpoint_profile.input.dtype,
+            "input_resize": settings.checkpoint_profile.input.resize,
+            "action_semantics": settings.checkpoint_profile.action_semantics,
+            "prefix_mode": settings.checkpoint_profile.prefix_mode,
+            "hard_prefix_tolerance": (
+                settings.checkpoint_profile.hard_prefix_tolerance
+            ),
+            "model_action_dimension": (
+                settings.checkpoint_profile.model_action_dimension
+            ),
+            "gripper_normalization": (
+                settings.checkpoint_profile.gripper_normalization
+            ),
+            "model_input_width": settings.checkpoint_profile.input.model_width,
+            "model_input_height": settings.checkpoint_profile.input.model_height,
+            "model_input_resize": settings.checkpoint_profile.input.model_resize,
+            "input_crop": settings.checkpoint_profile.input.crop,
+            "input_pad": settings.checkpoint_profile.input.pad,
+            "camera_high_source": (
+                settings.checkpoint_profile.input.camera_high_source
+            ),
+            "camera_left_wrist_source": (
+                settings.checkpoint_profile.input.camera_left_wrist_source
+            ),
+            "camera_right_wrist_source": (
+                settings.checkpoint_profile.input.camera_right_wrist_source
+            ),
         },
     ).serve_forever()
 

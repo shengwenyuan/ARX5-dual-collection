@@ -13,6 +13,11 @@ class Policy:
         self.observation = observation
         return {"actions": [[0.0] * 14] * 50}
 
+    def infer_rtc(self, observation, rtc):
+        self.observation = observation
+        self.rtc = rtc
+        return {"actions": [[0.0] * 14] * 50}
+
 
 class PolicyEnvelopeTest(unittest.TestCase):
     def test_echoes_authority_identity_around_official_observation(self) -> None:
@@ -57,6 +62,27 @@ class PolicyEnvelopeTest(unittest.TestCase):
                 }
             )
         self.assertIsNone(policy.observation)
+
+    def test_passes_only_rtc_context_beside_the_official_observation(self) -> None:
+        policy = Policy()
+        envelope = CorrelatedPolicyEnvelope(policy, "a" * 64, lambda: 10)
+        rtc = {"estimated_delay_steps": 2, "action_prefix": [[0.0] * 14] * 2}
+
+        envelope.infer(
+            {
+                "session_id": "session-1",
+                "episode_id": "episode-1",
+                "control_epoch": 0,
+                "inference_id": "inference-1",
+                "checkpoint_sha256": "a" * 64,
+                "prompt": "task",
+                "observation": {"state": [0.0] * 14, "images": {}},
+                "rtc": rtc,
+            }
+        )
+
+        self.assertEqual(policy.rtc, rtc)
+        self.assertNotIn("rtc", policy.observation)
 
 
 if __name__ == "__main__":

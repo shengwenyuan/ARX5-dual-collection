@@ -54,6 +54,117 @@ class PolicyExecutionProfile:
         return self.execution_steps / self.control_rate_hz
 
 
+@dataclass(frozen=True, slots=True)
+class Pi05InputProfile:
+    width: int
+    height: int
+    channels: int
+    layout: str
+    color: str
+    dtype: str
+    resize: str
+    crop: str
+    pad: str
+    model_width: int
+    model_height: int
+    model_resize: str
+    camera_high_source: str
+    camera_left_wrist_source: str
+    camera_right_wrist_source: str
+
+    def __post_init__(self) -> None:
+        if min(
+            self.width,
+            self.height,
+            self.channels,
+            self.model_width,
+            self.model_height,
+        ) <= 0:
+            raise ValueError("PI input dimensions must be positive")
+        if self.layout != "chw" or self.color != "rgb" or self.dtype != "uint8":
+            raise ValueError("only the accepted RGB uint8 CHW PI input is supported")
+        if self.resize != "inter_area":
+            raise ValueError("only the accepted INTER_AREA resize is supported")
+        if self.crop != "none" or self.pad != "none":
+            raise ValueError("collector-side crop and pad must be disabled")
+        if self.model_resize != "resize_with_pad":
+            raise ValueError("unsupported PI model resize contract")
+        camera_sources = (
+            self.camera_high_source,
+            self.camera_left_wrist_source,
+            self.camera_right_wrist_source,
+        )
+        if any(not source for source in camera_sources) or len(set(camera_sources)) != 3:
+            raise ValueError("PI camera sources must be three distinct roles")
+
+
+@dataclass(frozen=True, slots=True)
+class Pi05CheckpointProfile:
+    policy_type: str
+    execution: PolicyExecutionProfile
+    max_delay_steps: int
+    flow_steps: int
+    action_semantics: str
+    prefix_mode: str
+    input: Pi05InputProfile
+    hard_prefix_tolerance: float = 1e-5
+    model_action_dimension: int = 32
+    gripper_normalization: str = "linear_open_closed_0_1"
+
+    def __post_init__(self) -> None:
+        if self.policy_type not in {"sequential", "training_time_rtc"}:
+            raise ValueError("unsupported PI policy type")
+        if self.max_delay_steps < 0 or self.flow_steps <= 0:
+            raise ValueError("PI delay and flow-step contract is invalid")
+        if self.model_action_dimension < self.execution.action_dimension:
+            raise ValueError("model action dimension cannot be smaller than robot action")
+        if self.action_semantics != "absolute_joint":
+            raise ValueError("only absolute joint actions are supported")
+        if self.gripper_normalization != "linear_open_closed_0_1":
+            raise ValueError("unsupported gripper normalization contract")
+        if self.policy_type == "training_time_rtc":
+            if self.max_delay_steps <= 0 or self.prefix_mode != "hard_prefix":
+                raise ValueError("training-time RTC requires hard-prefix delay")
+            if (
+                not math.isfinite(self.hard_prefix_tolerance)
+                or self.hard_prefix_tolerance <= 0
+            ):
+                raise ValueError("hard-prefix tolerance must be positive and finite")
+
+
+@dataclass(frozen=True, slots=True)
+class RtcRolloutProfile:
+    prefetch_after_steps: int
+    initial_delay_steps: int
+    delay_history_size: int
+    delay_estimator: str
+
+    def __post_init__(self) -> None:
+        if min(
+            self.prefetch_after_steps,
+            self.delay_history_size,
+        ) <= 0:
+            raise ValueError("RTC rollout step counts must be positive")
+        if self.initial_delay_steps < 0:
+            raise ValueError("RTC initial delay must not be negative")
+        if self.delay_estimator != "rolling_max":
+            raise ValueError("only the accepted rolling-max delay estimator is supported")
+
+    def validate_for(self, checkpoint: Pi05CheckpointProfile) -> None:
+        if checkpoint.policy_type != "training_time_rtc":
+            raise ValueError("RTC rollout requires a training-time RTC checkpoint")
+        if self.initial_delay_steps >= checkpoint.max_delay_steps:
+            raise ValueError("RTC initial delay is outside the trained delay range")
+        if self.prefetch_after_steps + checkpoint.max_delay_steps - 1 > (
+            checkpoint.execution.action_chunk_size
+        ):
+            raise ValueError("RTC safe window exceeds the action horizon")
+
+    def safe_window_steps(self, checkpoint: Pi05CheckpointProfile) -> int:
+        self.validate_for(checkpoint)
+        return self.prefetch_after_steps + checkpoint.max_delay_steps - 1
+
+
 DEFAULT_PI05_EXECUTION_PROFILE = PolicyExecutionProfile(
     action_chunk_size=50,
     action_dimension=14,

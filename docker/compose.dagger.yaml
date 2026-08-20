@@ -32,7 +32,7 @@ services:
       context: ..
       dockerfile: docker/Dockerfile.bringup
       target: dagger-collector
-    image: arx5-dual-collection:dagger
+    image: ${ARX5_DAGGER_COLLECTOR_IMAGE:-arx5-dual-collection:dagger}
     privileged: true
     network_mode: host
     shm_size: "1gb"
@@ -49,16 +49,16 @@ services:
       - /var/lib/arx5-collection:/var/lib/arx5-collection
       - ${ARX5_DAGGER_POLICY_CONFIG:-/var/lib/arx5-collection/dagger-policy.toml}:/config/policy.toml:ro
       - ${ARX5_TASK_CONFIG:-../config/task.eight-stream.json}:/config/task.json:ro
-      - ../reports:/reports
+      - ${ARX5_REPORT_ROOT:-../reports}:/reports
     command:
       - arx5-collect
       - dagger
-      - ${ARX5_DAGGER_MODE:-shadow}
+      - ${ARX5_DAGGER_MODE:-takeover}
       - --policy-config
       - /config/policy.toml
       - --task-config
       - /config/task.json
       - --output-root
-      - ${ARX5_OUTPUT_ROOT:-/reports/dagger-shadow}
+      - ${ARX5_OUTPUT_ROOT:-/reports/dagger-takeover}
       - --session-log-root
       - /reports/session-logs

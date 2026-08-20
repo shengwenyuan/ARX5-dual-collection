@@ -4,6 +4,7 @@ from concurrent.futures import Future
 from typing import Protocol
 
 from .models import DaggerTriggerSignal, InferenceTicket
+from .policy_client import RtcPolicyContext
 
 
 class AsyncPolicyClient(Protocol):
@@ -14,6 +15,7 @@ class AsyncPolicyClient(Protocol):
         episode_id: str,
         control_epoch: int,
         inference_id: str | None = None,
+        rtc: RtcPolicyContext | None = None,
     ) -> Future[InferenceTicket]: ...
 
 

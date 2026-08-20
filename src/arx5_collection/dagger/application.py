@@ -145,6 +145,7 @@ class ShadowApplication:
             self.settings.server_port,
             self.settings.checkpoint_sha256,
             self.settings.inference_timeout_s,
+            self.settings.checkpoint_profile,
         ) as transport, RosVlaSnapshotClient(
             timeout_s=self.settings.snapshot_service_timeout_s
         ) as observations, JsonlShadowLog(
@@ -157,7 +158,10 @@ class ShadowApplication:
                 observations=observations,
                 encoder=Pi05ObservationEncoder(
                     self.settings.grippers,
-                    OpenCvYuyvConverter(),
+                    OpenCvYuyvConverter(
+                        width=self.settings.checkpoint_profile.input.width,
+                        height=self.settings.checkpoint_profile.input.height,
+                    ),
                 ),
                 transport=transport,
                 execution=self.settings.execution,
@@ -289,11 +293,7 @@ class TakeoverApplication:
         self.stderr = stderr
 
     def run(self) -> int:
-        from .action_gateway import (
-            FixedRateCommandExecutor,
-            Pi05JointActionContract,
-            PolicyActionGateway,
-        )
+        from .action_runtime import open_takeover_action_runtime
         from .authority_ros import ACTION_OUTPUT_TOPICS, RosAuthorityEventPublisher
         from .command_ros import RosDualArmControlPort
         from .takeover import (
@@ -323,6 +323,7 @@ class TakeoverApplication:
             self.settings.server_port,
             self.settings.checkpoint_sha256,
             self.settings.inference_timeout_s,
+            self.settings.checkpoint_profile,
         ) as transport, RosVlaSnapshotClient(
             timeout_s=self.settings.snapshot_service_timeout_s
         ) as observations, RosAuthorityEventPublisher() as events:
@@ -333,66 +334,66 @@ class TakeoverApplication:
                 observations=observations,
                 encoder=Pi05ObservationEncoder(
                     self.settings.grippers,
-                    OpenCvYuyvConverter(),
+                    OpenCvYuyvConverter(
+                        width=self.settings.checkpoint_profile.input.width,
+                        height=self.settings.checkpoint_profile.input.height,
+                    ),
                 ),
                 transport=transport,
                 execution=self.settings.execution,
             )
-            gateway = PolicyActionGateway(
-                policy,
-                control,
-                Pi05JointActionContract(
-                    self.settings.checkpoint_sha256,
-                    self.settings.grippers,
-                    self.settings.control.safety,
-                ),
-                control,
-            )
-            executor = FixedRateCommandExecutor(
-                gateway,
-                control,
-                self.settings.execution.control_rate_hz,
-                self.settings.control.policy_wait_timeout_s,
-                self.settings.control.command_watchdog_s,
-            )
-            controller = TakeoverController(
-                gateway=gateway,
-                human_mode=self.session.home_controller,
-                timeline=AuthorityTimeline(
-                    self.settings.checkpoint_sha256,
-                    events,
-                ),
-                status_sink=status_sink,
-            )
-            trigger_factory = DaggerAutoTriggerFactory(status_sink=status_sink)
-            executor.start()
-            print(
-                f"DAGGER TAKEOVER READY logs={log_dir}; "
-                f"execution={self.settings.execution.execution_steps}/"
-                f"{self.settings.execution.action_chunk_size}@"
-                f"{self.settings.execution.control_rate_hz:g}Hz",
-                file=self.stdout,
-                flush=True,
-            )
+            def run_with_gateway(gateway, executor) -> int:
+                controller = TakeoverController(
+                    gateway=gateway,
+                    human_mode=self.session.home_controller,
+                    timeline=AuthorityTimeline(
+                        self.settings.checkpoint_sha256,
+                        events,
+                    ),
+                    status_sink=status_sink,
+                )
+                trigger_factory = DaggerAutoTriggerFactory(status_sink=status_sink)
+                executor.start()
+                print(
+                    f"DAGGER TAKEOVER READY logs={log_dir}; "
+                    f"policy={self.settings.checkpoint_profile.policy_type} "
+                    f"horizon={self.settings.execution.action_chunk_size}@"
+                    f"{self.settings.execution.control_rate_hz:g}Hz",
+                    file=self.stdout,
+                    flush=True,
+                )
+                try:
+                    with trigger_factory.open(self.session.station) as trigger:
+                        runtime = self.session.create_runtime(
+                            self.request,
+                            TakeoverRecordTrigger(trigger, controller, status_sink),
+                            metadata_context_provider=controller.metadata_context,
+                            recording_started_hook=controller.start_episode,
+                            recording_stopping_hook=controller.stop_episode,
+                        )
+                        return run_episode_loop(
+                            runtime,
+                            self.request,
+                            episodes=self.spec.episodes,
+                            stdout=self.stdout,
+                            stderr=self.stderr,
+                            continue_after_failed_episode=True,
+                        )
+                finally:
+                    executor.close()
+
             try:
-                with trigger_factory.open(self.session.station) as trigger:
-                    runtime = self.session.create_runtime(
-                        self.request,
-                        TakeoverRecordTrigger(trigger, controller, status_sink),
-                        metadata_context_provider=controller.metadata_context,
-                        recording_started_hook=controller.start_episode,
-                        recording_stopping_hook=controller.stop_episode,
-                    )
-                    return run_episode_loop(
-                        runtime,
-                        self.request,
-                        episodes=self.spec.episodes,
-                        stdout=self.stdout,
-                        stderr=self.stderr,
-                        continue_after_failed_episode=True,
+                with open_takeover_action_runtime(
+                    self.settings,
+                    policy,
+                    control,
+                    log_dir,
+                ) as action_runtime:
+                    return run_with_gateway(
+                        action_runtime.gateway,
+                        action_runtime.executor,
                     )
             finally:
-                executor.close()
                 policy.close()
 
 

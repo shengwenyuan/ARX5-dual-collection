@@ -4,6 +4,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from .policy_client import Pi05PolicyRequest, Pi05PolicyResponse
+from .models import Pi05CheckpointProfile
 
 
 class OpenPiDaggerTransport:
@@ -15,6 +16,7 @@ class OpenPiDaggerTransport:
         port: int,
         checkpoint_sha256: str,
         timeout_s: float = 30.0,
+        checkpoint_profile: Pi05CheckpointProfile | None = None,
     ) -> None:
         if not host or not 0 < port <= 65535 or timeout_s <= 0:
             raise ValueError("policy transport host, port, and timeout are invalid")
@@ -39,6 +41,8 @@ class OpenPiDaggerTransport:
         if str(metadata.get("checkpoint_sha256", "")).lower() != checkpoint_sha256.lower():
             self.close()
             raise RuntimeError("policy server checkpoint SHA-256 mismatch")
+        if checkpoint_profile is not None and checkpoint_profile.policy_type == "training_time_rtc":
+            validate_rtc_server_metadata(metadata, checkpoint_profile)
 
     def __enter__(self) -> OpenPiDaggerTransport:
         return self
@@ -72,7 +76,7 @@ class OpenPiDaggerTransport:
 
 def policy_request_to_wire(request: Pi05PolicyRequest, numpy_module: Any) -> dict[str, Any]:
     observation = request.observation
-    return {
+    payload = {
         "session_id": request.session_id,
         "episode_id": request.episode_id,
         "control_epoch": request.control_epoch,
@@ -80,7 +84,7 @@ def policy_request_to_wire(request: Pi05PolicyRequest, numpy_module: Any) -> dic
         "checkpoint_sha256": request.checkpoint_sha256,
         "prompt": request.prompt,
         "observation": {
-            "state": numpy_module.asarray(observation.state, dtype=numpy_module.float64),
+            "state": numpy_module.asarray(observation.state, dtype=numpy_module.float32),
             "images": {
                 "cam_high": _image_array(observation.camera_high, numpy_module),
                 "cam_left_wrist": _image_array(
@@ -92,6 +96,15 @@ def policy_request_to_wire(request: Pi05PolicyRequest, numpy_module: Any) -> dic
             },
         },
     }
+    if request.rtc is not None:
+        payload["rtc"] = {
+            "estimated_delay_steps": request.rtc.estimated_delay_steps,
+            "action_prefix": numpy_module.asarray(
+                request.rtc.action_prefix,
+                dtype=numpy_module.float32,
+            ),
+        }
+    return payload
 
 
 def policy_response_from_wire(response: Mapping[str, Any]) -> Pi05PolicyResponse:
@@ -109,6 +122,47 @@ def policy_response_from_wire(response: Mapping[str, Any]) -> Pi05PolicyResponse
         )
     except (KeyError, TypeError, ValueError) as error:
         raise RuntimeError(f"invalid policy response: {error}") from error
+
+
+def validate_rtc_server_metadata(
+    metadata: Mapping[str, Any],
+    profile: Pi05CheckpointProfile,
+) -> None:
+    expected = {
+        "policy_type": profile.policy_type,
+        "action_horizon": profile.execution.action_chunk_size,
+        "action_dimension": profile.execution.action_dimension,
+        "control_rate_hz": profile.execution.control_rate_hz,
+        "max_delay_steps": profile.max_delay_steps,
+        "flow_steps": profile.flow_steps,
+        "action_semantics": profile.action_semantics,
+        "prefix_mode": profile.prefix_mode,
+        "hard_prefix_tolerance": profile.hard_prefix_tolerance,
+        "model_action_dimension": profile.model_action_dimension,
+        "gripper_normalization": profile.gripper_normalization,
+        "input_width": profile.input.width,
+        "input_height": profile.input.height,
+        "input_channels": profile.input.channels,
+        "input_layout": profile.input.layout,
+        "input_color": profile.input.color,
+        "input_dtype": profile.input.dtype,
+        "input_resize": profile.input.resize,
+        "input_crop": profile.input.crop,
+        "input_pad": profile.input.pad,
+        "model_input_width": profile.input.model_width,
+        "model_input_height": profile.input.model_height,
+        "model_input_resize": profile.input.model_resize,
+        "camera_high_source": profile.input.camera_high_source,
+        "camera_left_wrist_source": profile.input.camera_left_wrist_source,
+        "camera_right_wrist_source": profile.input.camera_right_wrist_source,
+    }
+    mismatches = {
+        key: (expected_value, metadata.get(key))
+        for key, expected_value in expected.items()
+        if metadata.get(key) != expected_value
+    }
+    if mismatches:
+        raise RuntimeError(f"policy server checkpoint profile mismatch: {mismatches}")
 
 
 def _image_array(frame: Any, numpy_module: Any) -> Any:

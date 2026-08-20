@@ -96,6 +96,36 @@ class DaggerConfigTest(unittest.TestCase):
         self.assertEqual(settings.execution.control_rate_hz, 20.0)
         self.assertEqual(settings.execution.inference_period_s, 0.2)
 
+    def test_v3_rtc_numbers_are_loaded_from_one_typed_profile(self) -> None:
+        root = Path(__file__).resolve().parents[2]
+        path = root / "config" / "dagger.pi05-stacking-v3-rtc.toml"
+
+        collector = DaggerCollectorSettings.load(path)
+        server = PolicyServerSettings.load(path)
+
+        self.assertEqual(collector.checkpoint_profile, server.checkpoint_profile)
+        self.assertEqual(collector.rtc_rollout, server.rtc_rollout)
+        self.assertEqual(collector.execution.action_chunk_size, 50)
+        self.assertEqual(collector.execution.action_dimension, 14)
+        self.assertEqual(collector.execution.control_rate_hz, 25.0)
+        self.assertEqual(collector.checkpoint_profile.max_delay_steps, 10)
+        self.assertEqual(collector.checkpoint_profile.flow_steps, 10)
+        self.assertEqual(collector.checkpoint_profile.model_action_dimension, 32)
+        self.assertEqual(collector.checkpoint_profile.input.width, 640)
+        self.assertEqual(collector.checkpoint_profile.input.height, 360)
+        self.assertEqual(collector.checkpoint_profile.input.model_width, 224)
+        self.assertEqual(collector.checkpoint_profile.input.model_height, 224)
+        assert collector.rtc_rollout is not None
+        self.assertEqual(collector.rtc_rollout.prefetch_after_steps, 10)
+        self.assertEqual(collector.rtc_rollout.initial_delay_steps, 3)
+        self.assertEqual(collector.rtc_rollout.delay_history_size, 10)
+        self.assertEqual(
+            collector.rtc_rollout.safe_window_steps(
+                collector.checkpoint_profile
+            ),
+            19,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

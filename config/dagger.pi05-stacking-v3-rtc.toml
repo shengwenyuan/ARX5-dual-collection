@@ -1,6 +1,6 @@
 [policy]
-checkpoint = "/checkpoints/stacking_five_paper_cups_pi05_v2/9999"
-checkpoint_sha256 = "6855485b55e04707d9c0aa96ad4ca1c8374afac5919d9f4777b71023ea7021a0"
+checkpoint = "/checkpoints/stacking_five_paper_cups_pi05_train_rtc_v3/9999"
+checkpoint_sha256 = "c5a2660f139fac5363ec95ec63da3f8c6b372098215ea64612539316fe5a70aa"
 repo_id = "local/stacking_five_paper_cups_pi05_v2"
 prompt = "Stacking paper cups"
 host = "0.0.0.0"
@@ -8,16 +8,16 @@ port = 8000
 base_checkpoint = "gs://openpi-assets/checkpoints/pi05_base/params"
 
 [checkpoint_profile]
-policy_type = "sequential"
+policy_type = "training_time_rtc"
 action_horizon = 50
 action_dimension = 14
 model_action_dimension = 32
 sequential_execution_steps = 10
 control_rate_hz = 25.0
-max_delay_steps = 0
+max_delay_steps = 10
 flow_steps = 10
 action_semantics = "absolute_joint"
-prefix_mode = "none"
+prefix_mode = "hard_prefix"
 hard_prefix_tolerance = 0.00001
 gripper_normalization = "linear_open_closed_0_1"
 
@@ -37,6 +37,12 @@ model_resize = "resize_with_pad"
 camera_high_source = "overview"
 camera_left_wrist_source = "left"
 camera_right_wrist_source = "right"
+
+[rollout]
+prefetch_after_steps = 10
+initial_delay_steps = 3
+delay_history_size = 10
+delay_estimator = "rolling_max"
 
 [robot]
 profile = "dagger"

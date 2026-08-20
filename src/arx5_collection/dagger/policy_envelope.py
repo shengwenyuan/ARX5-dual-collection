@@ -13,6 +13,14 @@ class OpenPiPolicy(Protocol):
         ...
 
 
+class RtcOpenPiPolicy(Protocol):
+    def infer_rtc(
+        self,
+        observation: Mapping[str, Any],
+        rtc: Mapping[str, Any],
+    ) -> Mapping[str, Any]: ...
+
+
 class CorrelatedPolicyEnvelope:
     """Echo DAgger authority identifiers around an official openpi policy call."""
 
@@ -47,7 +55,16 @@ class CorrelatedPolicyEnvelope:
         official_observation["prompt"] = prompt
 
         started_at_ns = self.wall_clock_ns()
-        result = self.policy.infer(official_observation)
+        rtc = request.get("rtc")
+        if rtc is None:
+            result = self.policy.infer(official_observation)
+        else:
+            if not isinstance(rtc, Mapping):
+                raise ValueError("rtc must be a mapping")
+            infer_rtc = getattr(self.policy, "infer_rtc", None)
+            if infer_rtc is None:
+                raise ValueError("loaded policy does not support RTC requests")
+            result = infer_rtc(official_observation, rtc)
         completed_at_ns = self.wall_clock_ns()
         if "actions" not in result:
             raise ValueError("openpi response does not contain actions")

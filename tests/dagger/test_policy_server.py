@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import unittest
 
-from arx5_collection.dagger.models import PolicyExecutionProfile
+from arx5_collection.dagger.models import (
+    Pi05CheckpointProfile,
+    Pi05InputProfile,
+    PolicyExecutionProfile,
+)
 from arx5_collection.dagger.policy_server import warm_up_pi05_policy
 
 
@@ -14,6 +18,7 @@ class Array:
 
 class Numpy:
     uint8 = "uint8"
+    float32 = "float32"
     float64 = "float64"
 
     @staticmethod
@@ -37,7 +42,32 @@ class PolicyWarmupTest(unittest.TestCase):
         warm_up_pi05_policy(
             policy,
             "Stacking paper cups",
-            PolicyExecutionProfile(50, 14, 10, 25.0),
+            Pi05CheckpointProfile(
+                "sequential",
+                PolicyExecutionProfile(50, 14, 10, 25.0),
+                0,
+                10,
+                "absolute_joint",
+                "none",
+                Pi05InputProfile(
+                    640,
+                    360,
+                    3,
+                    "chw",
+                    "rgb",
+                    "uint8",
+                    "inter_area",
+                    "none",
+                    "none",
+                    224,
+                    224,
+                    "resize_with_pad",
+                    "overview",
+                    "left",
+                    "right",
+                ),
+            ),
+            None,
             Numpy,
         )
 
