@@ -108,7 +108,9 @@ D1a 的本地纯逻辑与 Application 组装测试已通过。W3 无硬件集成
 - w3 首版模型固定为 `stacking_five_paper_cups_pi05_v2/9999`，tree SHA-256 为 `6855485b55e04707d9c0aa96ad4ca1c8374afac5919d9f4777b71023ea7021a0`；宿主机路径不进入 profile，Compose 只挂载 checkpoint root。
 - 本地全仓 `251 passed, 2 skipped`。w3 Collector 镜像 `sha256:691c9cbf462ef55cf8c3c0f8e53ec77ddf977588117d6aee80d68b369b7444f5` 已完成固定 ARX commit、Vendor patch 和六个 ROS package 编译；60 项 Container DAgger tests、CLI、ROS feedback/paired-command loopback 与重复 Publisher guard 通过。
 - w3 完整 Policy 镜像重建受当前 PyPI DNS 阻断；在旧已验收 OpenPI 镜像上只覆盖本仓 Python 层得到临时候选 `arx5-dual-policy:dagger-d1b`，ID `sha256:d71c999f247f25a26ac9bbfd8fd67c51fcd1c7f88ef21a493c754f43a78f2ca8`。双容器均已静态确认同一 checkpoint、SHA 和 `50/14/10/25 Hz`，未加载模型。
-- 当前未启动 Policy Server、CAN、相机、ARX 节点或 Recorder，未发送真机控制命令。下一步是用户启动的无模型 Vendor latch/service 验收，再进入模型 Take-over 单 Episode。
+- 2026-08-20 用户完成 w3 无模型 Vendor latch 验收：两个 command Topic 均为 `Publisher count: 0`；双臂 `enable_policy_control` 与随后 `gravity_compensation` 均返回 `success=True`。
+- Controller 持久日志确认双臂启动时均处于 `Policy control is latched off`；测试未生成 Episode，Ctrl+C 后容器、slcand 和 CAN 均无残留。Vendor Controller 在完成 DisableMotor/CAN 回收后仍出现既有 SIGINT `-11`，与 D1a 相同，不影响锁存验收。
+- D1b 无模型物理锁存闭环通过。下一步进入 v2 checkpoint 的模型 Take-over 单 Episode；首次动作前仍必须由用户启动并在真机旁监督。
 
 ## 2026-08-19 D0 重构部署结果
 
