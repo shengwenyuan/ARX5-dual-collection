@@ -3,6 +3,7 @@ from __future__ import annotations
 import select
 import sys
 import termios
+import time
 import tty
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
@@ -17,7 +18,7 @@ from arx5_collection.episode.ports import RecordTrigger, TriggerEvent
 from arx5_collection.production.config import StationConfig
 from arx5_collection.production.triggers import open_configured_pedals
 
-from .models import DaggerTriggerEvent
+from .models import DaggerTriggerEvent, DaggerTriggerSignal
 from .ports import DaggerTrigger
 
 
@@ -30,20 +31,33 @@ class DaggerPedalTriggerAdapter:
     def __init__(self, trigger: RecordTrigger) -> None:
         self.trigger = trigger
 
-    def wait(self, timeout_s: float) -> DaggerTriggerEvent | None:
-        event = self.trigger.wait(timeout_s)
-        if event is TriggerEvent.ACTIVATE:
-            return DaggerTriggerEvent.RECORD_TOGGLE
-        if event is TriggerEvent.ABORT:
-            return DaggerTriggerEvent.OWNERSHIP_TOGGLE
+    def wait(self, timeout_s: float) -> DaggerTriggerSignal | None:
+        signal = self.trigger.wait(timeout_s)
+        if signal is None:
+            return None
+        if signal.event is TriggerEvent.ACTIVATE:
+            return DaggerTriggerSignal(
+                DaggerTriggerEvent.RECORD_TOGGLE,
+                signal.monotonic_time_ns,
+            )
+        if signal.event is TriggerEvent.ABORT:
+            return DaggerTriggerSignal(
+                DaggerTriggerEvent.OWNERSHIP_TOGGLE,
+                signal.monotonic_time_ns,
+            )
         return None
 
 
 class DaggerKeyboardTrigger:
     """Keyboard fallback: SPACE records, T transfers ownership, A aborts."""
 
-    def __init__(self, stream: TextIO | None = None) -> None:
+    def __init__(
+        self,
+        stream: TextIO | None = None,
+        monotonic_clock: Callable[[], float] = time.monotonic,
+    ) -> None:
         self.stream = stream or sys.stdin
+        self.monotonic_clock = monotonic_clock
         self._original_settings: list[object] | None = None
 
     def __enter__(self) -> DaggerKeyboardTrigger:
@@ -68,19 +82,26 @@ class DaggerKeyboardTrigger:
             )
             self._original_settings = None
 
-    def wait(self, timeout_s: float) -> DaggerTriggerEvent | None:
+    def wait(self, timeout_s: float) -> DaggerTriggerSignal | None:
         if self._original_settings is None:
             raise RuntimeError("keyboard trigger must be used as a context manager")
         readable, _, _ = select.select([self.stream], [], [], timeout_s)
         if not readable:
             return None
         key = self.stream.read(1)
+        monotonic_time_ns = round(self.monotonic_clock() * 1e9)
         if key == " ":
-            return DaggerTriggerEvent.RECORD_TOGGLE
+            return DaggerTriggerSignal(
+                DaggerTriggerEvent.RECORD_TOGGLE,
+                monotonic_time_ns,
+            )
         if key in {"t", "T"}:
-            return DaggerTriggerEvent.OWNERSHIP_TOGGLE
+            return DaggerTriggerSignal(
+                DaggerTriggerEvent.OWNERSHIP_TOGGLE,
+                monotonic_time_ns,
+            )
         if key in {"a", "A"}:
-            return DaggerTriggerEvent.ABORT
+            return DaggerTriggerSignal(DaggerTriggerEvent.ABORT, monotonic_time_ns)
         return None
 
 

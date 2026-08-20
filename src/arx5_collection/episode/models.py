@@ -19,6 +19,28 @@ class EpisodeOutcome(str, Enum):
 
 
 @dataclass(frozen=True, slots=True)
+class RecordingStarted:
+    episode_id: str
+    monotonic_time_ns: int
+
+    def __post_init__(self) -> None:
+        if not self.episode_id:
+            raise ValueError("episode_id must not be empty")
+        if self.monotonic_time_ns < 0:
+            raise ValueError("monotonic_time_ns must not be negative")
+
+
+@dataclass(frozen=True, slots=True)
+class RecordingStopping:
+    outcome: EpisodeOutcome
+    monotonic_time_ns: int
+
+    def __post_init__(self) -> None:
+        if self.monotonic_time_ns < 0:
+            raise ValueError("monotonic_time_ns must not be negative")
+
+
+@dataclass(frozen=True, slots=True)
 class StreamSpec:
     id: str
     topic: str

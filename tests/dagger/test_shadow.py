@@ -8,7 +8,11 @@ from threading import Condition
 from time import monotonic
 
 from arx5_collection.collection_metadata import ShadowQuality
-from arx5_collection.dagger.models import DaggerTriggerEvent, InferenceTicket
+from arx5_collection.dagger.models import (
+    DaggerTriggerEvent,
+    DaggerTriggerSignal,
+    InferenceTicket,
+)
 from arx5_collection.dagger.observation import (
     ObservationFailureCode,
     ObservationUnavailableError,
@@ -19,7 +23,11 @@ from arx5_collection.dagger.shadow import (
     ShadowInferenceLoop,
     ShadowRecordTrigger,
 )
-from arx5_collection.episode.models import EpisodeOutcome
+from arx5_collection.episode.models import (
+    EpisodeOutcome,
+    RecordingStarted,
+    RecordingStopping,
+)
 from arx5_collection.episode.ports import TriggerEvent
 
 
@@ -66,7 +74,7 @@ class Trigger:
 
     def wait(self, timeout_s: float):
         event, self.event = self.event, None
-        return event
+        return None if event is None else DaggerTriggerSignal(event, 123)
 
 
 class ShadowInferenceLoopTest(unittest.TestCase):
@@ -134,9 +142,9 @@ class ShadowInferenceLoopTest(unittest.TestCase):
         policy = AsyncPolicy([RuntimeError("transient"), None])
         shadow = ShadowInferenceLoop(policy, period_s=0.01)
         hooks = ShadowEpisodeHooks(shadow, "a" * 64)
-        hooks.recording_started("episode-1")
+        hooks.recording_started(RecordingStarted("episode-1", 100))
         self.assertTrue(policy.wait_calls(2))
-        hooks.recording_stopping(EpisodeOutcome.SUCCESS)
+        hooks.recording_stopping(RecordingStopping(EpisodeOutcome.SUCCESS, 200))
 
         context = hooks.metadata_context()
         assert context.dagger is not None and context.dagger.shadow is not None
@@ -145,14 +153,13 @@ class ShadowInferenceLoopTest(unittest.TestCase):
 
     def test_maps_record_and_abort_but_ignores_ownership(self) -> None:
         messages = []
-        self.assertIs(
-            ShadowRecordTrigger(Trigger(DaggerTriggerEvent.RECORD_TOGGLE)).wait(0),
-            TriggerEvent.ACTIVATE,
-        )
-        self.assertIs(
-            ShadowRecordTrigger(Trigger(DaggerTriggerEvent.ABORT)).wait(0),
-            TriggerEvent.ABORT,
-        )
+        record = ShadowRecordTrigger(
+            Trigger(DaggerTriggerEvent.RECORD_TOGGLE)
+        ).wait(0)
+        abort = ShadowRecordTrigger(Trigger(DaggerTriggerEvent.ABORT)).wait(0)
+        self.assertIs(record.event, TriggerEvent.ACTIVATE)
+        self.assertIs(abort.event, TriggerEvent.ABORT)
+        self.assertEqual(record.monotonic_time_ns, 123)
         self.assertIsNone(
             ShadowRecordTrigger(
                 Trigger(DaggerTriggerEvent.OWNERSHIP_TOGGLE), messages.append

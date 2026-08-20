@@ -3,7 +3,7 @@ from __future__ import annotations
 from concurrent.futures import Future
 from typing import Protocol
 
-from .models import DaggerTriggerEvent, InferenceTicket
+from .models import DaggerTriggerSignal, InferenceTicket
 
 
 class AsyncPolicyClient(Protocol):
@@ -18,4 +18,4 @@ class AsyncPolicyClient(Protocol):
 
 
 class DaggerTrigger(Protocol):
-    def wait(self, timeout_s: float) -> DaggerTriggerEvent | None: ...
+    def wait(self, timeout_s: float) -> DaggerTriggerSignal | None: ...

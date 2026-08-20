@@ -1,26 +1,31 @@
 from __future__ import annotations
 
 from pathlib import Path
+from time import monotonic_ns
 
 from arx5_collection.episode.models import StreamMetrics, StreamSpec
-from arx5_collection.episode.ports import TriggerEvent
+from arx5_collection.episode.ports import TriggerEvent, TriggerSignal
 
 
 class FakeTrigger:
     def __init__(
         self,
-        events: list[bool | TriggerEvent | BaseException],
+        events: list[bool | TriggerEvent | TriggerSignal | BaseException],
+        clock_ns=monotonic_ns,
     ) -> None:
         self.events = iter(events)
+        self.clock_ns = clock_ns
 
-    def wait(self, timeout_s: float) -> TriggerEvent | None:
+    def wait(self, timeout_s: float) -> TriggerSignal | None:
         event = next(self.events, False)
         if isinstance(event, BaseException):
             raise event
         if event is True:
-            return TriggerEvent.ACTIVATE
+            return TriggerSignal(TriggerEvent.ACTIVATE, self.clock_ns())
         if event is False:
             return None
+        if isinstance(event, TriggerEvent):
+            return TriggerSignal(event, self.clock_ns())
         return event
 
 

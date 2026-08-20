@@ -13,6 +13,8 @@ from .models import (
     EpisodeRequest,
     EpisodeResult,
     EpisodeState,
+    RecordingStarted,
+    RecordingStopping,
     StreamMetrics,
 )
 from .ports import RecordTrigger, RecordingBackend, StreamMonitor, TriggerEvent
@@ -33,8 +35,8 @@ class EpisodeRuntime:
         pre_episode_check: Callable[[], None] | None = None,
         state_sink: Callable[[EpisodeState], None] | None = None,
         metadata_context_provider: Callable[[], MetadataContext] | None = None,
-        recording_started_hook: Callable[[str], None] | None = None,
-        recording_stopping_hook: Callable[[EpisodeOutcome], None] | None = None,
+        recording_started_hook: Callable[[RecordingStarted], None] | None = None,
+        recording_stopping_hook: Callable[[RecordingStopping], None] | None = None,
         poll_interval_s: float = 0.1,
     ) -> None:
         self.store = store
@@ -67,7 +69,7 @@ class EpisodeRuntime:
             self.pre_episode_check()
         pending = self.store.prepare(self.episode_id_factory())
         started_at = self.wall_clock()
-        started_monotonic = self.monotonic_clock()
+        started_monotonic_ns = round(self.monotonic_clock() * 1e9)
 
         try:
             self.backend.start(pending.mcap_path, request.streams)
@@ -82,13 +84,18 @@ class EpisodeRuntime:
                 self.state_sink(self.state)
             if self.recording_started_hook is not None:
                 try:
-                    self.recording_started_hook(pending.episode_id)
+                    self.recording_started_hook(
+                        RecordingStarted(pending.episode_id, started_monotonic_ns)
+                    )
                 except BaseException:
                     self._stop_components()
                     raise
-            outcome, errors = self._wait_for_end()
+            outcome, errors, stopping_monotonic_ns = self._wait_for_end()
             ended_at = self.wall_clock()
-            duration_s = self.monotonic_clock() - started_monotonic
+            duration_s = max(
+                0.0,
+                (stopping_monotonic_ns - started_monotonic_ns) / 1e9,
+            )
             self.state = EpisodeState.FINALIZING
             if self.state_sink is not None:
                 self.state_sink(self.state)
@@ -96,7 +103,9 @@ class EpisodeRuntime:
             hook_error: BaseException | None = None
             if self.recording_stopping_hook is not None:
                 try:
-                    self.recording_stopping_hook(outcome)
+                    self.recording_stopping_hook(
+                        RecordingStopping(outcome, stopping_monotonic_ns)
+                    )
                 except BaseException as error:
                     hook_error = error
             try:
@@ -145,24 +154,39 @@ class EpisodeRuntime:
             self.state = EpisodeState.READY
 
     def _wait_for_start(self) -> None:
-        while self.trigger.wait(self.poll_interval_s) is not TriggerEvent.ACTIVATE:
-            continue
+        while True:
+            signal = self.trigger.wait(self.poll_interval_s)
+            if signal is not None and signal.event is TriggerEvent.ACTIVATE:
+                return
 
-    def _wait_for_end(self) -> tuple[EpisodeOutcome, tuple[str, ...]]:
+    def _wait_for_end(self) -> tuple[EpisodeOutcome, tuple[str, ...], int]:
         try:
             while True:
                 failure = self.monitor.required_failure()
                 if failure is not None:
-                    return EpisodeOutcome.ABORTED, (failure,)
-                event = self.trigger.wait(self.poll_interval_s)
-                if event is TriggerEvent.ABORT:
-                    return EpisodeOutcome.ABORTED, ("operator requested abort",)
-                if event is TriggerEvent.ACTIVATE:
-                    return EpisodeOutcome.SUCCESS, ()
+                    return EpisodeOutcome.ABORTED, (failure,), self._monotonic_ns()
+                signal = self.trigger.wait(self.poll_interval_s)
+                if signal is None:
+                    continue
+                if signal.event is TriggerEvent.ABORT:
+                    return (
+                        EpisodeOutcome.ABORTED,
+                        ("operator requested abort",),
+                        signal.monotonic_time_ns,
+                    )
+                if signal.event is TriggerEvent.ACTIVATE:
+                    return EpisodeOutcome.SUCCESS, (), signal.monotonic_time_ns
         except KeyboardInterrupt:
-            return EpisodeOutcome.ABORTED, ("recording interrupted",)
+            return (
+                EpisodeOutcome.ABORTED,
+                ("recording interrupted",),
+                self._monotonic_ns(),
+            )
         except Exception as error:
-            return EpisodeOutcome.ABORTED, (str(error),)
+            return EpisodeOutcome.ABORTED, (str(error),), self._monotonic_ns()
+
+    def _monotonic_ns(self) -> int:
+        return round(self.monotonic_clock() * 1e9)
 
     def _stop_components(self) -> tuple[StreamMetrics, ...]:
         backend_error: Exception | None = None

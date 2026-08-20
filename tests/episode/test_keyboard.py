@@ -26,14 +26,14 @@ class KeyboardTriggerTest(unittest.TestCase):
             os.write(self.master_fd, b"x")
             self.assertIsNone(trigger.wait(0.1))
             os.write(self.master_fd, b" ")
-            self.assertIs(trigger.wait(0.1), TriggerEvent.ACTIVATE)
+            self.assertIs(trigger.wait(0.1).event, TriggerEvent.ACTIVATE)
 
     def test_a_is_abort_case_insensitively(self) -> None:
         with KeyboardTrigger(self.stream) as trigger:
             os.write(self.master_fd, b"a")
-            self.assertIs(trigger.wait(0.1), TriggerEvent.ABORT)
+            self.assertIs(trigger.wait(0.1).event, TriggerEvent.ABORT)
             os.write(self.master_fd, b"A")
-            self.assertIs(trigger.wait(0.1), TriggerEvent.ABORT)
+            self.assertIs(trigger.wait(0.1).event, TriggerEvent.ABORT)
 
     def test_context_restores_terminal(self) -> None:
         original = termios.tcgetattr(self.stream.fileno())

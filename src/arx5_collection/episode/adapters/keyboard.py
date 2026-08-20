@@ -3,19 +3,27 @@ from __future__ import annotations
 import select
 import sys
 import termios
+import time
 import tty
+from collections.abc import Callable
 from types import TracebackType
 from typing import TextIO
 
-from ..ports import TriggerEvent
+from ..ports import TriggerEvent, TriggerSignal
 
 
 class KeyboardTrigger:
-    def __init__(self, stream: TextIO | None = None, key: str = " ") -> None:
+    def __init__(
+        self,
+        stream: TextIO | None = None,
+        key: str = " ",
+        monotonic_clock: Callable[[], float] = time.monotonic,
+    ) -> None:
         if len(key) != 1:
             raise ValueError("trigger key must be one character")
         self.stream = stream or sys.stdin
         self.key = key
+        self.monotonic_clock = monotonic_clock
         self._original_settings: list[object] | None = None
 
     def __enter__(self) -> KeyboardTrigger:
@@ -40,15 +48,16 @@ class KeyboardTrigger:
             )
             self._original_settings = None
 
-    def wait(self, timeout_s: float) -> TriggerEvent | None:
+    def wait(self, timeout_s: float) -> TriggerSignal | None:
         if self._original_settings is None:
             raise RuntimeError("keyboard trigger must be used as a context manager")
         readable, _, _ = select.select([self.stream], [], [], timeout_s)
         if not readable:
             return None
         key = self.stream.read(1)
+        monotonic_time_ns = round(self.monotonic_clock() * 1e9)
         if key == self.key:
-            return TriggerEvent.ACTIVATE
+            return TriggerSignal(TriggerEvent.ACTIVATE, monotonic_time_ns)
         if key in {"a", "A"}:
-            return TriggerEvent.ABORT
+            return TriggerSignal(TriggerEvent.ABORT, monotonic_time_ns)
         return None

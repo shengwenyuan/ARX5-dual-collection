@@ -84,9 +84,9 @@ class AutoTriggerFactoryTest(unittest.TestCase):
         )
         with factory.open(station()) as trigger:
             os.write(self.master_fd, b" ")
-            self.assertIs(trigger.wait(0.1), TriggerEvent.ACTIVATE)
+            self.assertIs(trigger.wait(0.1).event, TriggerEvent.ACTIVATE)
             os.write(self.master_fd, b"a")
-            self.assertIs(trigger.wait(0.1), TriggerEvent.ABORT)
+            self.assertIs(trigger.wait(0.1).event, TriggerEvent.ABORT)
         self.assertEqual(
             self.messages,
             ["TRIGGER_MODE=keyboard-fallback reason=abort pedal missing"],

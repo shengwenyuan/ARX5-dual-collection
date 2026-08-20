@@ -14,6 +14,8 @@ from arx5_collection.episode.models import (
     EpisodeOutcome,
     EpisodeRequest,
     EpisodeState,
+    RecordingStarted,
+    RecordingStopping,
     StreamMetrics,
     StreamSpec,
 )
@@ -46,17 +48,25 @@ class EpisodeRuntimeTest(unittest.TestCase):
                 datetime(2026, 8, 16, 1, 59, tzinfo=timezone.utc),
             ]
         )
-        monotonic_times = iter([100.0, 190.25])
+        started: list[RecordingStarted] = []
+        stopping: list[RecordingStopping] = []
         runtime = self.runtime(
-            trigger=FakeTrigger([True, False, True]),
+            trigger=FakeTrigger(
+                [True, False, True],
+                clock_ns=iter_clock_ns([90.0, 190.25]),
+            ),
             wall_clock=lambda: next(wall_times),
-            monotonic_clock=lambda: next(monotonic_times),
+            monotonic_clock=lambda: 100.0,
+            recording_started_hook=started.append,
+            recording_stopping_hook=stopping.append,
         )
 
         result = runtime.run_once(self.request())
 
         self.assertEqual(result.outcome, EpisodeOutcome.SUCCESS)
         self.assertEqual(result.duration_s, 90.25)
+        self.assertEqual(started[0].monotonic_time_ns, 100_000_000_000)
+        self.assertEqual(stopping[0].monotonic_time_ns, 190_250_000_000)
         self.assertTrue(result.committed)
         self.assertEqual(runtime.state, EpisodeState.READY)
         self.assertEqual(
@@ -159,7 +169,7 @@ class EpisodeRuntimeTest(unittest.TestCase):
             trigger=FakeTrigger([True]),
             backend=backend,
             monitor=monitor,
-            recording_started_hook=lambda episode_id: (_ for _ in ()).throw(
+            recording_started_hook=lambda started: (_ for _ in ()).throw(
                 RuntimeError("model start failed")
             ),
         )
@@ -179,8 +189,8 @@ class EpisodeRuntimeTest(unittest.TestCase):
         runtime = self.runtime(
             trigger=FakeTrigger([True, True]),
             backend=OrderedBackend(),
-            recording_stopping_hook=lambda outcome: events.append(
-                f"control_stop:{outcome.value}"
+            recording_stopping_hook=lambda stopping: events.append(
+                f"control_stop:{stopping.outcome.value}"
             ),
         )
         runtime.run_once(self.request())
@@ -255,6 +265,11 @@ class EpisodeRuntimeTest(unittest.TestCase):
 def iter_clock(values: list[float]):
     iterator = iter(values)
     return lambda: next(iterator)
+
+
+def iter_clock_ns(values: list[float]):
+    iterator = iter(values)
+    return lambda: round(next(iterator) * 1e9)
 
 
 if __name__ == "__main__":

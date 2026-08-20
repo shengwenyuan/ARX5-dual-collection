@@ -12,8 +12,8 @@ from arx5_collection.collection_metadata import (
     DaggerMetadata,
     MetadataContext,
 )
-from arx5_collection.episode.models import EpisodeOutcome
-from arx5_collection.episode.ports import TriggerEvent
+from arx5_collection.episode.models import RecordingStarted, RecordingStopping
+from arx5_collection.episode.ports import TriggerEvent, TriggerSignal
 
 from .models import DaggerTriggerEvent
 from .ports import DaggerTrigger
@@ -104,17 +104,22 @@ class AuthorityTimeline:
         self._segments: list[ControlSegment] = []
         self._active: tuple[ControlOwner, float, int | None] | None = None
 
-    def start_episode(self, control_epoch: int) -> None:
+    def start_episode(self, control_epoch: int, monotonic_time_ns: int) -> None:
         if self._episode_started_ns is not None:
             raise RuntimeError("authority timeline is already active")
-        self._episode_started_ns = self.clock_ns()
+        self._episode_started_ns = monotonic_time_ns
         self._intervention_count = 0
         self._segments = []
         self._active = None
 
-    def takeover_requested(self, control_epoch: int, reason: str) -> int:
+    def takeover_requested(
+        self,
+        control_epoch: int,
+        reason: str,
+        monotonic_time_ns: int,
+    ) -> int:
         self._require_active()
-        at_s = self._offset_s()
+        at_s = self._offset_s(monotonic_time_ns)
         self._close_active(at_s)
         self._intervention_count += 1
         self._emit(
@@ -122,27 +127,36 @@ class AuthorityTimeline:
             intervention_id=self._intervention_count,
             control_epoch=control_epoch,
             reason=reason,
+            monotonic_time_ns=monotonic_time_ns,
         )
         return self._intervention_count
 
     def human_active(self, intervention_id: int, control_epoch: int) -> None:
-        at_s = self._offset_s()
+        monotonic_time_ns = self.clock_ns()
+        at_s = self._offset_s(monotonic_time_ns)
         self._active = (ControlOwner.HUMAN, at_s, intervention_id)
         self._emit(
             AuthorityEventType.HUMAN_ACTIVE,
             intervention_id=intervention_id,
             control_epoch=control_epoch,
             reason="gravity_compensation_confirmed",
+            monotonic_time_ns=monotonic_time_ns,
         )
 
-    def resume_requested(self, intervention_id: int, control_epoch: int) -> None:
-        at_s = self._offset_s()
+    def resume_requested(
+        self,
+        intervention_id: int,
+        control_epoch: int,
+        monotonic_time_ns: int,
+    ) -> None:
+        at_s = self._offset_s(monotonic_time_ns)
         self._close_active(at_s)
         self._emit(
             AuthorityEventType.RESUME_REQUESTED,
             intervention_id=intervention_id,
             control_epoch=control_epoch,
             reason="operator_requested_policy_resume",
+            monotonic_time_ns=monotonic_time_ns,
         )
 
     def policy_active(
@@ -151,13 +165,15 @@ class AuthorityTimeline:
         control_epoch: int,
         reason: str,
     ) -> None:
-        at_s = self._offset_s()
+        monotonic_time_ns = self.clock_ns()
+        at_s = self._offset_s(monotonic_time_ns)
         self._active = (ControlOwner.MODEL, at_s, None)
         self._emit(
             AuthorityEventType.POLICY_ACTIVE,
             intervention_id=intervention_id,
             control_epoch=control_epoch,
             reason=reason,
+            monotonic_time_ns=monotonic_time_ns,
         )
 
     def fault_hold(
@@ -166,17 +182,19 @@ class AuthorityTimeline:
         control_epoch: int,
         reason: str,
     ) -> None:
-        self._close_active(self._offset_s())
+        monotonic_time_ns = self.clock_ns()
+        self._close_active(self._offset_s(monotonic_time_ns))
         self._emit(
             AuthorityEventType.FAULT_HOLD,
             intervention_id=intervention_id,
             control_epoch=control_epoch,
             reason=reason,
+            monotonic_time_ns=monotonic_time_ns,
         )
 
-    def finish_episode(self) -> None:
+    def finish_episode(self, monotonic_time_ns: int) -> None:
         self._require_active()
-        self._close_active(self._offset_s())
+        self._close_active(self._offset_s(monotonic_time_ns))
         self._episode_started_ns = None
 
     def metadata(self) -> MetadataContext:
@@ -196,12 +214,13 @@ class AuthorityTimeline:
         intervention_id: int,
         control_epoch: int,
         reason: str,
+        monotonic_time_ns: int,
     ) -> None:
         self._sequence += 1
         self.event_sink(
             AuthorityEvent(
                 sequence=self._sequence,
-                monotonic_time_ns=self.clock_ns(),
+                monotonic_time_ns=monotonic_time_ns,
                 intervention_id=intervention_id,
                 control_epoch=control_epoch,
                 event_type=event_type,
@@ -209,10 +228,12 @@ class AuthorityTimeline:
             )
         )
 
-    def _offset_s(self) -> float:
+    def _offset_s(self, monotonic_time_ns: int) -> float:
         self._require_active()
         assert self._episode_started_ns is not None
-        return max(0.0, (self.clock_ns() - self._episode_started_ns) / 1e9)
+        if monotonic_time_ns < self._episode_started_ns:
+            raise RuntimeError("authority event precedes Episode start")
+        return (monotonic_time_ns - self._episode_started_ns) / 1e9
 
     def _close_active(self, ended_offset_s: float) -> None:
         if self._active is None:
@@ -252,15 +273,15 @@ class TakeoverController:
         self.episode_id: str | None = None
         self.intervention_id = 0
 
-    def start_episode(self, episode_id: str) -> None:
-        if self.state is not TakeoverState.IDLE or not episode_id:
+    def start_episode(self, started: RecordingStarted) -> None:
+        if self.state is not TakeoverState.IDLE:
             raise RuntimeError("Take-over episode cannot start")
-        self.episode_id = episode_id
+        self.episode_id = started.episode_id
         self.intervention_id = 0
-        self.timeline.start_episode(self.control_epoch)
+        self.timeline.start_episode(self.control_epoch, started.monotonic_time_ns)
         self.state = TakeoverState.RESUME_PENDING
         try:
-            self.gateway.prepare_policy(episode_id, self.control_epoch)
+            self.gateway.prepare_policy(started.episode_id, self.control_epoch)
             self.poll_policy()
         except Exception as error:
             self._fault(error)
@@ -305,19 +326,18 @@ class TakeoverController:
             return self.state
         return self.poll_policy()
 
-    def toggle_ownership(self) -> TakeoverState:
+    def toggle_ownership(self, monotonic_time_ns: int) -> TakeoverState:
         if self.state is TakeoverState.MODEL_CONTROL:
-            self._takeover()
+            self._takeover(monotonic_time_ns)
         elif self.state is TakeoverState.HUMAN_ACTIVE:
-            self._resume()
+            self._resume(monotonic_time_ns)
         else:
             self.status_sink(
                 f"DAgger ownership toggle ignored in state={self.state.value}"
             )
         return self.state
 
-    def stop_episode(self, outcome: EpisodeOutcome) -> None:
-        del outcome
+    def stop_episode(self, stopping: RecordingStopping) -> None:
         if self.state is TakeoverState.IDLE:
             return
         if self.state is not TakeoverState.FAULT_HOLD:
@@ -328,7 +348,7 @@ class TakeoverController:
                 self.human_mode.enable_gravity_compensation()
             except Exception as error:
                 self._fault(error)
-        self.timeline.finish_episode()
+        self.timeline.finish_episode(stopping.monotonic_time_ns)
         self.state = TakeoverState.IDLE
         self.episode_id = None
         self.intervention_id = 0
@@ -336,11 +356,12 @@ class TakeoverController:
     def metadata_context(self) -> MetadataContext:
         return self.timeline.metadata()
 
-    def _takeover(self) -> None:
+    def _takeover(self, monotonic_time_ns: int) -> None:
         self.state = TakeoverState.HANDOVER_PENDING
         self.intervention_id = self.timeline.takeover_requested(
             self.control_epoch,
             "operator_ownership_toggle",
+            monotonic_time_ns,
         )
         try:
             self.gateway.close_gate(self.control_epoch)
@@ -359,12 +380,13 @@ class TakeoverController:
         except Exception as error:
             self._fault(error)
 
-    def _resume(self) -> None:
+    def _resume(self, monotonic_time_ns: int) -> None:
         assert self.episode_id is not None
         self.state = TakeoverState.RESUME_PENDING
         self.timeline.resume_requested(
             self.intervention_id,
             self.control_epoch,
+            monotonic_time_ns,
         )
         try:
             self.gateway.prepare_policy(self.episode_id, self.control_epoch)
@@ -410,16 +432,19 @@ class TakeoverRecordTrigger:
         self.controller = controller
         self.status_sink = status_sink or (lambda message: None)
 
-    def wait(self, timeout_s: float) -> TriggerEvent | None:
-        event = self.trigger.wait(timeout_s)
-        if event is DaggerTriggerEvent.RECORD_TOGGLE:
-            return TriggerEvent.ACTIVATE
-        if event is DaggerTriggerEvent.ABORT:
-            return TriggerEvent.ABORT
+    def wait(self, timeout_s: float) -> TriggerSignal | None:
+        signal = self.trigger.wait(timeout_s)
+        if signal is None:
+            self.controller.poll_runtime()
+            return None
+        if signal.event is DaggerTriggerEvent.RECORD_TOGGLE:
+            return TriggerSignal(TriggerEvent.ACTIVATE, signal.monotonic_time_ns)
+        if signal.event is DaggerTriggerEvent.ABORT:
+            return TriggerSignal(TriggerEvent.ABORT, signal.monotonic_time_ns)
         self.controller.poll_runtime()
-        if event is DaggerTriggerEvent.OWNERSHIP_TOGGLE:
+        if signal.event is DaggerTriggerEvent.OWNERSHIP_TOGGLE:
             if self.controller.state is TakeoverState.IDLE:
                 self.status_sink("DAgger ownership toggle ignored before Episode start")
             else:
-                self.controller.toggle_ownership()
+                self.controller.toggle_ownership(signal.monotonic_time_ns)
         return None

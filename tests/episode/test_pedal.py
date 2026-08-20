@@ -141,17 +141,19 @@ class PedalTriggerTest(unittest.TestCase):
         with self.trigger:
             self.readable = [21]
             self.reports[21] = PRESS_REPORT
-            self.assertIs(self.trigger.wait(0.1), TriggerEvent.ACTIVATE)
+            signal = self.trigger.wait(0.1)
+            self.assertIs(signal.event, TriggerEvent.ACTIVATE)
+            self.assertEqual(signal.monotonic_time_ns, 1_000_000_000)
 
             self.readable = [23]
             self.reports[23] = PRESS_REPORT
-            self.assertIs(self.trigger.wait(0.1), TriggerEvent.ABORT)
+            self.assertIs(self.trigger.wait(0.1).event, TriggerEvent.ABORT)
 
     def test_abort_wins_when_both_are_ready(self) -> None:
         with self.trigger:
             self.readable = [21, 23]
             self.reports = {21: PRESS_REPORT, 23: PRESS_REPORT}
-            self.assertIs(self.trigger.wait(0.1), TriggerEvent.ABORT)
+            self.assertIs(self.trigger.wait(0.1).event, TriggerEvent.ABORT)
 
     def test_ignores_other_reports_and_debounces(self) -> None:
         with self.trigger:
@@ -160,7 +162,7 @@ class PedalTriggerTest(unittest.TestCase):
             self.assertIsNone(self.trigger.wait(0.1))
 
             self.reports[21] = PRESS_REPORT
-            self.assertIs(self.trigger.wait(0.1), TriggerEvent.ACTIVATE)
+            self.assertIs(self.trigger.wait(0.1).event, TriggerEvent.ACTIVATE)
             self.now = 1.1
             self.assertIsNone(self.trigger.wait(0.1))
 

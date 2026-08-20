@@ -8,9 +8,12 @@ from pathlib import Path
 from types import TracebackType
 from typing import Iterator
 
-from arx5_collection.episode.models import EpisodeRequest
 from arx5_collection.collection_metadata import MetadataContext
-from arx5_collection.episode.models import EpisodeOutcome
+from arx5_collection.episode.models import (
+    EpisodeRequest,
+    RecordingStarted,
+    RecordingStopping,
+)
 from arx5_collection.episode.ports import RecordTrigger
 from arx5_collection.episode.runtime import EpisodeRuntime
 from arx5_collection.episode.store import EpisodeStore
@@ -192,8 +195,8 @@ class ProductionSession:
         request: EpisodeRequest,
         trigger: RecordTrigger,
         metadata_context_provider: Callable[[], MetadataContext] | None = None,
-        recording_started_hook: Callable[[str], None] | None = None,
-        recording_stopping_hook: Callable[[EpisodeOutcome], None] | None = None,
+        recording_started_hook: Callable[[RecordingStarted], None] | None = None,
+        recording_stopping_hook: Callable[[RecordingStopping], None] | None = None,
     ) -> EpisodeRuntime:
         def prepare_episode() -> None:
             self.pre_episode_check()

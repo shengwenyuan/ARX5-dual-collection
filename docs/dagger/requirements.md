@@ -1,7 +1,7 @@
 # Human-Gated DAgger 需求
 
 - Status: `aligned`
-- Updated: 2026-08-19
+- Updated: 2026-08-20
 - Scope: 本地 VLA 推理、显式人工接管、连续 MCAP 与离线训练区间
 
 ## 目标
@@ -149,6 +149,19 @@ Gateway 是模型命令到 ARX Vendor Controller 的唯一入口，持有双臂�
 - Shadow 模式下的汇总质量、尝试数、成功数、失败数和恢复数
 
 控制区间由 `/dagger/authority` 事件确定。原始 MCAP 不因离线处理改变；清洗只输出索引、质量和 loss mask。
+
+### 离线裁切与 LeRobot 边界
+
+原始 MCAP 不做物理裁切。离线 pipeline 必须先验证事件与 metadata，再生成半开区间索引：
+
+1. 将每条 authority 事件匹配到对应的 `control_segments` 边界；计算 `event.monotonic_time_ns - boundary_offset_ns`。同一 Episode 的所有结果必须得到同一个单调时钟 anchor，否则该 Episode 不得进入训练集。
+2. 使用 authority 消息的 MCAP `bag_timestamp_ns` 与对应 offset 估计 Episode 的 bag-time anchor；所有训练区间转换为 `[start_ns, end_ns)`。不得用 MCAP 第一条或最后一条消息替代 Episode 语义边界。
+3. DAgger 专家数据只来自 `owner=human`，即 `HUMAN_ACTIVE -> RESUME_REQUESTED`。handover/resume pending、model、fault 和 Episode 停止后的 Recorder 清理尾部均不产生专家 loss。
+4. 以 overview frame group 的 `bag_timestamp_ns` 判断 observation tick 是否落在区间内；图像和状态仍按既有 Header 时间执行严格因果选择，禁止未来帧、插值和补帧。
+5. action target 的全部时间步必须落在同一个 human 区间。靠近区间末端而无法提供完整 horizon 的样本直接丢弃，不跨越 `RESUME_REQUESTED`，不 pad、不复用最后 action。
+6. 每个 human 区间导出为独立 LeRobot episode。来自同一个原始 Episode 的全部派生片段必须进入同一 train/validation split，避免跨 split leakage。
+
+普通 `collection_type=demonstration` 不读取 authority；其有效域仍为 Episode `[0, duration_s)`，再执行既有质量和 selector 规则。混合数据集必须在外部 manifest 保留 `collection_type`、source Episode、intervention ID 与来源区间，不把 DAgger model 区间误标为人工演示。
 
 ## 分阶段验收
 

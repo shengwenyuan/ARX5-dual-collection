@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 
 from arx5_collection.collection_metadata import ControlOwner
-from arx5_collection.dagger.models import DaggerTriggerEvent
+from arx5_collection.dagger.models import DaggerTriggerEvent, DaggerTriggerSignal
 from arx5_collection.dagger.takeover import (
     AuthorityEventType,
     AuthorityTimeline,
@@ -12,7 +12,11 @@ from arx5_collection.dagger.takeover import (
     TakeoverRecordTrigger,
     TakeoverState,
 )
-from arx5_collection.episode.models import EpisodeOutcome
+from arx5_collection.episode.models import (
+    EpisodeOutcome,
+    RecordingStarted,
+    RecordingStopping,
+)
 from arx5_collection.episode.ports import TriggerEvent
 
 
@@ -86,7 +90,9 @@ class Trigger:
 
     def wait(self, timeout_s: float):
         del timeout_s
-        return self.events.pop(0) if self.events else None
+        if not self.events:
+            return None
+        return DaggerTriggerSignal(self.events.pop(0), 123)
 
 
 class TakeoverControllerTest(unittest.TestCase):
@@ -101,18 +107,38 @@ class TakeoverControllerTest(unittest.TestCase):
         )
         return controller, clock, events
 
+    @staticmethod
+    def start(controller, clock, episode_id="episode-1") -> None:
+        controller.start_episode(RecordingStarted(episode_id, clock.value))
+
+    @staticmethod
+    def stop(controller, clock) -> None:
+        controller.stop_episode(
+            RecordingStopping(EpisodeOutcome.SUCCESS, clock.value)
+        )
+
     def test_single_intervention_orders_side_effects_events_and_segments(self) -> None:
         gateway = Gateway()
         human = HumanMode()
         controller, clock, events = self.make_controller(gateway, human)
-        controller.start_episode("episode-1")
+        self.start(controller, clock)
 
         clock.advance(0.1)
-        self.assertIs(controller.toggle_ownership(), TakeoverState.HUMAN_ACTIVE)
+        self.assertIs(
+            controller.toggle_ownership(clock.value),
+            TakeoverState.HUMAN_ACTIVE,
+        )
         clock.advance(0.2)
-        self.assertIs(controller.toggle_ownership(), TakeoverState.MODEL_CONTROL)
+        self.assertIs(
+            controller.toggle_ownership(clock.value),
+            TakeoverState.MODEL_CONTROL,
+        )
         clock.advance(0.3)
-        controller.stop_episode(EpisodeOutcome.SUCCESS)
+        stopping_time_ns = clock.value
+        clock.advance(0.5)  # Control cleanup starts after the pedal boundary.
+        controller.stop_episode(
+            RecordingStopping(EpisodeOutcome.SUCCESS, stopping_time_ns)
+        )
 
         self.assertEqual(
             [event.event_type for event in events],
@@ -125,6 +151,16 @@ class TakeoverControllerTest(unittest.TestCase):
             ],
         )
         self.assertEqual([event.sequence for event in events], [1, 2, 3, 4, 5])
+        self.assertEqual(
+            [event.monotonic_time_ns for event in events],
+            [
+                1_000_000_000,
+                1_100_000_000,
+                1_100_000_000,
+                1_300_000_000,
+                1_300_000_000,
+            ],
+        )
         self.assertEqual(
             [event.control_epoch for event in events], [0, 0, 1, 1, 1]
         )
@@ -151,12 +187,19 @@ class TakeoverControllerTest(unittest.TestCase):
             context.dagger.control_segments[1].intervention_id,
             1,
         )
+        self.assertEqual(
+            [
+                (segment.started_offset_s, segment.ended_offset_s)
+                for segment in context.dagger.control_segments
+            ],
+            [(0.0, 0.1), (0.1, 0.3), (0.3, 0.6)],
+        )
 
     def test_policy_authority_waits_for_asynchronous_gateway_readiness(self) -> None:
         gateway = PendingGateway()
         controller, clock, events = self.make_controller(gateway)
 
-        controller.start_episode("episode-1")
+        self.start(controller, clock)
 
         self.assertIs(controller.state, TakeoverState.RESUME_PENDING)
         self.assertEqual(events, [])
@@ -171,13 +214,13 @@ class TakeoverControllerTest(unittest.TestCase):
 
     def test_multiple_interventions_keep_epoch_and_sequence_monotonic(self) -> None:
         controller, clock, events = self.make_controller()
-        controller.start_episode("episode-1")
+        self.start(controller, clock)
         for _ in range(2):
             clock.advance(0.1)
-            controller.toggle_ownership()
+            controller.toggle_ownership(clock.value)
             clock.advance(0.1)
-            controller.toggle_ownership()
-        controller.stop_episode(EpisodeOutcome.SUCCESS)
+            controller.toggle_ownership(clock.value)
+        self.stop(controller, clock)
 
         self.assertEqual(controller.control_epoch, 3)
         self.assertEqual([event.sequence for event in events], list(range(1, 10)))
@@ -187,14 +230,14 @@ class TakeoverControllerTest(unittest.TestCase):
 
     def test_new_episode_resets_interventions_but_not_epoch_or_sequence(self) -> None:
         controller, clock, events = self.make_controller()
-        controller.start_episode("episode-1")
+        self.start(controller, clock)
         clock.advance(0.1)
-        controller.toggle_ownership()
-        controller.stop_episode(EpisodeOutcome.SUCCESS)
+        controller.toggle_ownership(clock.value)
+        self.stop(controller, clock)
 
-        controller.start_episode("episode-2")
+        self.start(controller, clock, "episode-2")
         clock.advance(0.1)
-        controller.stop_episode(EpisodeOutcome.SUCCESS)
+        self.stop(controller, clock)
 
         self.assertEqual(controller.control_epoch, 3)
         self.assertEqual([event.sequence for event in events], [1, 2, 3, 4])
@@ -208,12 +251,18 @@ class TakeoverControllerTest(unittest.TestCase):
 
     def test_failure_enters_latched_fault_hold_without_raising(self) -> None:
         controller, clock, events = self.make_controller(Gateway("clear"))
-        controller.start_episode("episode-1")
+        self.start(controller, clock)
         clock.advance(0.1)
 
-        self.assertIs(controller.toggle_ownership(), TakeoverState.FAULT_HOLD)
-        self.assertIs(controller.toggle_ownership(), TakeoverState.FAULT_HOLD)
-        controller.stop_episode(EpisodeOutcome.SUCCESS)
+        self.assertIs(
+            controller.toggle_ownership(clock.value),
+            TakeoverState.FAULT_HOLD,
+        )
+        self.assertIs(
+            controller.toggle_ownership(clock.value),
+            TakeoverState.FAULT_HOLD,
+        )
+        self.stop(controller, clock)
 
         self.assertIs(events[-1].event_type, AuthorityEventType.FAULT_HOLD)
         self.assertIn("clear failed", events[-1].reason)
@@ -221,8 +270,8 @@ class TakeoverControllerTest(unittest.TestCase):
     def test_runtime_fault_fails_closed_and_enters_gravity_compensation(self) -> None:
         gateway = FaultGateway(RuntimeError("watchdog expired"))
         human = HumanMode()
-        controller, _, events = self.make_controller(gateway, human)
-        controller.start_episode("episode-1")
+        controller, clock, events = self.make_controller(gateway, human)
+        self.start(controller, clock)
 
         self.assertIs(controller.poll_runtime(), TakeoverState.FAULT_HOLD)
 
@@ -246,8 +295,11 @@ class TakeoverControllerTest(unittest.TestCase):
         )
 
         self.assertIsNone(trigger.wait(0))
-        self.assertIs(trigger.wait(0), TriggerEvent.ACTIVATE)
-        self.assertIs(trigger.wait(0), TriggerEvent.ABORT)
+        record = trigger.wait(0)
+        abort = trigger.wait(0)
+        self.assertIs(record.event, TriggerEvent.ACTIVATE)
+        self.assertIs(abort.event, TriggerEvent.ABORT)
+        self.assertEqual(record.monotonic_time_ns, 123)
 
 
 if __name__ == "__main__":

@@ -15,6 +15,16 @@ class DaggerTriggerEvent(str, Enum):
     ABORT = "abort"
 
 
+@dataclass(frozen=True, slots=True)
+class DaggerTriggerSignal:
+    event: DaggerTriggerEvent
+    monotonic_time_ns: int
+
+    def __post_init__(self) -> None:
+        if self.monotonic_time_ns < 0:
+            raise ValueError("monotonic_time_ns must not be negative")
+
+
 class ShadowFailureCode(str, Enum):
     OBSERVATION_UNAVAILABLE = "observation_unavailable"
     POLICY_TIMEOUT = "policy_timeout"

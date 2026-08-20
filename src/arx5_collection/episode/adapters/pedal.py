@@ -9,7 +9,7 @@ from pathlib import Path
 from types import TracebackType
 from typing import Protocol
 
-from ..ports import TriggerEvent
+from ..ports import TriggerEvent, TriggerSignal
 
 
 PRESS_REPORT = bytes.fromhex("66cc030001" + "00" * 59)
@@ -186,7 +186,7 @@ class PedalTrigger:
                 pass
         self._entered = False
 
-    def wait(self, timeout_s: float) -> TriggerEvent | None:
+    def wait(self, timeout_s: float) -> TriggerSignal | None:
         if not self._entered:
             raise RuntimeError("pedal trigger must be used as a context manager")
         if timeout_s < 0:
@@ -209,14 +209,14 @@ class PedalTrigger:
         if TriggerEvent.ABORT in candidates:
             if now - self._last_press[TriggerEvent.ABORT] >= self.debounce_s:
                 self._last_press[TriggerEvent.ABORT] = now
-                return TriggerEvent.ABORT
+                return TriggerSignal(TriggerEvent.ABORT, round(now * 1e9))
             return None
         if (
             TriggerEvent.ACTIVATE in candidates
             and now - self._last_press[TriggerEvent.ACTIVATE] >= self.debounce_s
         ):
             self._last_press[TriggerEvent.ACTIVATE] = now
-            return TriggerEvent.ACTIVATE
+            return TriggerSignal(TriggerEvent.ACTIVATE, round(now * 1e9))
         return None
 
 

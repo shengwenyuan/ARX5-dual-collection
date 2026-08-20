@@ -14,8 +14,8 @@ from arx5_collection.collection_metadata import (
     ShadowMetadata,
     ShadowQuality,
 )
-from arx5_collection.episode.models import EpisodeOutcome
-from arx5_collection.episode.ports import TriggerEvent
+from arx5_collection.episode.models import RecordingStarted, RecordingStopping
+from arx5_collection.episode.ports import TriggerEvent, TriggerSignal
 
 from .models import DaggerTriggerEvent, ShadowFailureCode
 from .observation import ObservationUnavailableError
@@ -256,13 +256,15 @@ class ShadowRecordTrigger:
         self.trigger = trigger
         self.status_sink = status_sink or (lambda message: None)
 
-    def wait(self, timeout_s: float) -> TriggerEvent | None:
-        event = self.trigger.wait(timeout_s)
-        if event is DaggerTriggerEvent.RECORD_TOGGLE:
-            return TriggerEvent.ACTIVATE
-        if event is DaggerTriggerEvent.ABORT:
-            return TriggerEvent.ABORT
-        if event is DaggerTriggerEvent.OWNERSHIP_TOGGLE:
+    def wait(self, timeout_s: float) -> TriggerSignal | None:
+        signal = self.trigger.wait(timeout_s)
+        if signal is None:
+            return None
+        if signal.event is DaggerTriggerEvent.RECORD_TOGGLE:
+            return TriggerSignal(TriggerEvent.ACTIVATE, signal.monotonic_time_ns)
+        if signal.event is DaggerTriggerEvent.ABORT:
+            return TriggerSignal(TriggerEvent.ABORT, signal.monotonic_time_ns)
+        if signal.event is DaggerTriggerEvent.OWNERSHIP_TOGGLE:
             self.status_sink("DAgger Shadow has no control ownership; event ignored")
         return None
 
@@ -272,11 +274,11 @@ class ShadowEpisodeHooks:
         self.shadow = shadow
         self.checkpoint_sha256 = checkpoint_sha256
 
-    def recording_started(self, episode_id: str) -> None:
-        self.shadow.start(episode_id)
+    def recording_started(self, started: RecordingStarted) -> None:
+        self.shadow.start(started.episode_id)
 
-    def recording_stopping(self, outcome: EpisodeOutcome) -> None:
-        del outcome
+    def recording_stopping(self, stopping: RecordingStopping) -> None:
+        del stopping
         self.shadow.stop()
 
     def metadata_context(self) -> MetadataContext:

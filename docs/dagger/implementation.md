@@ -1,7 +1,7 @@
 # DAgger 实施记录
 
-- Status: `D0 Shadow accepted; D1a Take-over no-action single Episode accepted`
-- Updated: 2026-08-19
+- Status: `D0 accepted; D1b v2 Take-over and unified Timeline accepted`
+- Updated: 2026-08-20
 - Branch: `main`
 
 ## 当前迭代
@@ -212,3 +212,24 @@ D1a 的本地纯逻辑与 Application 组装测试已通过。W3 无硬件集成
 - 本地 226 tests 通过、2 skipped；W3 独立镜像完成 6 个 ROS package 构建，35 个 DAgger tests 与 9 个 production profile/orchestrator tests 通过。Adapter 无硬件 smoke 明确打印 slave 输入到 canonical 输出的两条映射；尚待用户启动 ARX 链路完成真实 Topic 验收。
 - 首轮真实 profile 测试发现 Session 仍固定启动 `v2_collect`，因此只有 master Topic，DAgger readiness 必然超时。profile 已扩展为同时选择 Controller launch 与 Adapter 输入；W3 重建后确认 DAgger 解析为 `v2_joint_control`、slave 输入和 25 Hz。
 - W3 复测通过：`v2_joint_control` 下左右 Canonical ArmState 分别观测到 439/446 条消息，age 均为 18 ms；CAN 零错误，退出后 usbfs 从 256 MB 恢复为 16 MB。Arm profile 链路收口。
+
+## 2026-08-20 Episode / Timeline 时间锚点修复
+
+- W3 v2 Take-over 已完成单 Session 双 Episode、多次人工接管与模型恢复，控制效果符合预期；原始 `/dagger/authority` 事件顺序和 metadata 区间结构正确。
+- 离线分析发现 metadata 区间相对 Episode 起点存在 Episode 内固定偏移，且最后区间结束于停止清理完成时刻，而非右踏板触发时刻。
+- Episode Runtime 现为唯一边界所有者：开始 Hook 接收 Recorder 前采样的单调时钟锚点；键盘/踏板 Trigger 在识别输入时携带事件时间；停止 Hook 直接接收该触发时刻。
+- Authority Timeline 不再自行定义 Episode 起点。每条稀疏事件只采时一次，同一时间同时写入 `/dagger/authority` 和 metadata 区间边界；控制关闭、旧动作清空、重力补偿耗时不再延长最终区间。
+- 本地全仓 `251 passed, 2 skipped`。W3 候选 Collector `arx5-dual-collection:dagger-timeline-anchor-20260820`，镜像 ID `sha256:024b54ded18e16ac97c28d4746ad7d92a9f81214779454bee10f3c96a2f8d487`，31 项容器内相关测试通过；未启动模型或设备。
+- W3 验收 Episode `20260820T034131341693Z-5b0af467` 为 success，47.167 s、一次接管和恢复；八路频率稳定且无 warning/error。
+- 五条 authority 事件分别对应初始模型、请求接管、人工生效、请求恢复和模型恢复。以事件单调时钟减 metadata 边界 offset 反推的五个 Episode anchor 全部为 `242645300406856 ns`，离散为 `0 ns`。
+- 最终模型区间与 Episode duration 同为 `47.167449426 s`，停止边界误差为 `0 ns`。MCAP authority 接收时刻相对语义边界仅有 `0.056–0.155 ms` 正常发布延迟。
+- Recorder 因先执行控制关闭和重力补偿，最后一条原始消息比踏板边界晚约 `9.813 ms`；该安全清理尾部不属于任何控制区间。原始 MCAP 保留，离线转换必须按下述事件时间契约过滤，不以文件物理末尾定义训练边界。
+- 时间锚点修复收口，候选镜像通过验收。
+
+## v3 Training-time RTC 迁移盘点
+
+- W3 v3 checkpoint 为 `stacking_five_paper_cups_pi05_train_rtc_v3/9999`，类型明确为 `training_time_rtc`，tree SHA-256 为 `c5a2660f139fac5363ec95ec63da3f8c6b372098215ea64612539316fe5a70aa`。
+- 运行基线仍为 `50 / 10 / 25 Hz`，新增 hard-prefix RTC：10 flow steps、最小执行 horizon 10、初始延迟估计 3 steps、10 次延迟历史。
+- v3 参考 Client 直接提交 `640x480` RGB，而当前 Collector 的 π0.5 encoder 输出 `640x360`；迁移前必须按 v3 训练预处理冻结图像契约，不能仅因 Server 内部还能 resize 就视为等价。
+- v3 不是替换 checkpoint 路径即可运行。现有 v2 Gateway、顺序执行器和 Policy envelope 必须升级为连续 action queue、重叠异步推理、delay 估计、带 control epoch/action sequence 的关联校验与原子 tail replacement。
+- 相机 Source、Observation、MCAP、Authority Timeline、Take-over 状态机、Vendor latch 和 14D action contract 继续复用；RTC 诊断留在 Session JSONL，不增加普通推理 MCAP Topic。

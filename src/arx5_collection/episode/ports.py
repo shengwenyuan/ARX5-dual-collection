@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from dataclasses import dataclass
 from enum import Enum
 from typing import Protocol, runtime_checkable
 
@@ -12,9 +13,19 @@ class TriggerEvent(str, Enum):
     ABORT = "abort"
 
 
+@dataclass(frozen=True, slots=True)
+class TriggerSignal:
+    event: TriggerEvent
+    monotonic_time_ns: int
+
+    def __post_init__(self) -> None:
+        if self.monotonic_time_ns < 0:
+            raise ValueError("monotonic_time_ns must not be negative")
+
+
 @runtime_checkable
 class RecordTrigger(Protocol):
-    def wait(self, timeout_s: float) -> TriggerEvent | None:
+    def wait(self, timeout_s: float) -> TriggerSignal | None:
         """Return the trigger event received before the timeout, if any."""
         ...
 

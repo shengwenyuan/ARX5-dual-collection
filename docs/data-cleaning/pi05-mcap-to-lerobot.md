@@ -96,6 +96,15 @@ derived/pi05/<dataset_id>/
 
 这与现有 `docs/data-cleaning/requirements.md` 的无 oracle 帧索引原则一致；outcome 只在下游训练集合选择层生效。
 
+#### DAgger Episode 选择
+
+- `collection_type=dagger` 必须先通过 `/dagger/authority` 与 metadata control segment 一致性检查。
+- 只把 `owner=human` 的半开区间 `[HUMAN_ACTIVE, RESUME_REQUESTED)` 作为专家候选；model、pending、fault 和停止后的 Recorder 尾部仅保留审计，不产生专家 action loss。
+- 以 frame group 的 bag timestamp 过滤区间，以 Header timestamp 完成区间内的因果 observation/state 配组；两类时间戳职责不得混用。
+- 一个 intervention 对应一个独立的候选 segment 和 LeRobot episode。完整 action horizon 不得越过 segment 末端；不足时删除样本，不 padding、不插值。
+- 因果 observation 可以引用边界前、仍满足 freshness 的真实状态，这是专家从模型实际到达状态继续纠正所必需的上下文；action label 绝不能引用边界外或未来数据。
+- 普通 demonstration 与 DAgger human segment 可以进入同一训练版本，但必须满足完全相同的 checkpoint-bound 数据契约，并在 manifest 保留来源类型。数据集切分以原始 source Episode 为最小分组，禁止同源片段分散到 train/validation。
+
 ### 3. π0.5 输入字段
 
 LeRobot 统一字段：
