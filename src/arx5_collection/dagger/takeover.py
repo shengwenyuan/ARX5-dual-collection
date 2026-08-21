@@ -272,12 +272,14 @@ class TakeoverController:
         self.control_epoch = 0
         self.episode_id: str | None = None
         self.intervention_id = 0
+        self._safety_failure: RuntimeError | None = None
 
     def start_episode(self, started: RecordingStarted) -> None:
         if self.state is not TakeoverState.IDLE:
             raise RuntimeError("Take-over episode cannot start")
         self.episode_id = started.episode_id
         self.intervention_id = 0
+        self._safety_failure = None
         self.timeline.start_episode(self.control_epoch, started.monotonic_time_ns)
         self.state = TakeoverState.RESUME_PENDING
         try:
@@ -318,6 +320,8 @@ class TakeoverController:
         return self.state
 
     def poll_runtime(self) -> TakeoverState:
+        if self._safety_failure is not None:
+            raise self._safety_failure
         if self.state in (TakeoverState.IDLE, TakeoverState.FAULT_HOLD):
             return self.state
         error = self.gateway.take_fault()
@@ -352,6 +356,9 @@ class TakeoverController:
         self.state = TakeoverState.IDLE
         self.episode_id = None
         self.intervention_id = 0
+        if self._safety_failure is not None:
+            failure, self._safety_failure = self._safety_failure, None
+            raise failure
 
     def metadata_context(self) -> MetadataContext:
         return self.timeline.metadata()
@@ -411,6 +418,10 @@ class TakeoverController:
             self.human_mode.enable_gravity_compensation()
         except BaseException as cleanup_error:
             failures.append(f"gravity_compensation={cleanup_error}")
+            self._safety_failure = RuntimeError(
+                "dual-arm G_COMPENSATION recovery failed: "
+                f"{cleanup_error}"
+            )
         reason = "; ".join(failures)
         self.timeline.fault_hold(
             self.intervention_id,

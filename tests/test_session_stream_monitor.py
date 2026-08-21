@@ -74,6 +74,7 @@ def test_stale_idle_snapshot_does_not_seed_episode_health() -> None:
         status_sink=None,
         clock=lambda: now[0],
     )
+    assert monitor.display_period_s == 2.0
     monitor._context = context
     monitor._status_callback(status(100))
 

@@ -9,7 +9,13 @@ from pathlib import Path
 from typing import TextIO
 
 from .adapters.keyboard import KeyboardTrigger
-from .models import EpisodeOutcome, EpisodeRequest, EpisodeState, StreamSpec
+from .models import (
+    EpisodeBlocked,
+    EpisodeOutcome,
+    EpisodeRequest,
+    EpisodeState,
+    StreamSpec,
+)
 from .ports import RecordTrigger
 from .runtime import EpisodeRuntime
 
@@ -93,7 +99,6 @@ def run_episode_loop(
     episodes: int = 0,
     stdout: TextIO | None = None,
     stderr: TextIO | None = None,
-    continue_after_failed_episode: bool = False,
 ) -> int:
     output = stdout or sys.stdout
     error_output = stderr or sys.stderr
@@ -124,7 +129,16 @@ def run_episode_loop(
                 file=error_output,
                 flush=True,
             )
-            result = runtime.run_once(request)
+            try:
+                result = runtime.run_once(request)
+            except EpisodeBlocked as error:
+                render_session_blocked(
+                    result="not_started",
+                    reason=error.reason,
+                    safety=error.safety,
+                    output=error_output,
+                )
+                continue
             print(
                 json.dumps(
                     {
@@ -138,23 +152,49 @@ def run_episode_loop(
                 flush=True,
             )
             completed += 1
-            if (
-                result.outcome is EpisodeOutcome.ABORTED
-                and result.errors != ("operator requested abort",)
-            ):
-                if not continue_after_failed_episode:
-                    return 2
-                print(
-                    "WARNING: Episode failed; Session remains READY: "
-                    + "; ".join(result.errors),
-                    file=error_output,
-                    flush=True,
-                )
+            if result.outcome is EpisodeOutcome.ABORTED:
+                if result.errors == ("recording interrupted",):
+                    return 0
+                if result.errors != ("operator requested abort",):
+                    render_session_blocked(
+                        result="aborted",
+                        reason="; ".join(result.errors),
+                        safety=(
+                            "Episode stop hooks completed; dual-arm "
+                            "G_COMPENSATION confirmed"
+                        ),
+                        output=error_output,
+                    )
     except KeyboardInterrupt:
         return 0
     finally:
         runtime.state_sink = previous_sink
     return 0
+
+
+def render_session_blocked(
+    result: str,
+    reason: str,
+    safety: str,
+    output: TextIO,
+) -> None:
+    title = (
+        "EPISODE ABORTED - SESSION BLOCKED"
+        if result == "aborted"
+        else "EPISODE NOT STARTED - SESSION BLOCKED"
+    )
+    print(
+        "\a\n"
+        "============================================================\n"
+        f"{title}\n"
+        f"result: {result}\n"
+        f"reason: {reason}\n"
+        f"safety: {safety}\n"
+        "action: inspect devices, then activate to recheck or Ctrl+C to exit\n"
+        "============================================================\n",
+        file=output,
+        flush=True,
+    )
 
 
 def require_exact_keys(value: object, expected: set[str], label: str) -> None:

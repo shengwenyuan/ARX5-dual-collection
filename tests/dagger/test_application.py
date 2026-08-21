@@ -39,12 +39,15 @@ class DaggerApplicationBuilderTest(unittest.TestCase):
                 task_config=ROOT / "config" / "task.eight-stream.json",
                 policy_config=policy_config,
                 output_root=Path(directory) / "episodes",
-                session_log_root=Path(directory) / "logs",
                 episodes=1,
                 min_free_gib=1,
                 readiness_timeout_s=30.0,
                 software_version="test",
                 session_id="session-1",
+            )
+            self.assertEqual(
+                spec.log_dir,
+                Path(directory) / "episodes" / "logs" / "session-1",
             )
             application = DaggerApplicationBuilder(
                 session_builder=fake_session_builder  # type: ignore[arg-type]
@@ -67,7 +70,6 @@ class DaggerApplicationBuilderTest(unittest.TestCase):
                 task_config=ROOT / "config" / "task.eight-stream.json",
                 policy_config=policy_config,
                 output_root=Path(directory) / "episodes",
-                session_log_root=Path(directory) / "logs",
                 episodes=1,
                 min_free_gib=1,
                 readiness_timeout_s=30.0,
@@ -96,7 +98,6 @@ class DaggerApplicationBuilderTest(unittest.TestCase):
                 task_config=ROOT / "config" / "task.eight-stream.json",
                 policy_config=policy_config,
                 output_root=Path(directory) / "episodes",
-                session_log_root=Path(directory) / "logs",
                 episodes=1,
                 min_free_gib=1,
                 readiness_timeout_s=30.0,

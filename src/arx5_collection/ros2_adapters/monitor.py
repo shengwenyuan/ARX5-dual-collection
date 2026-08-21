@@ -19,7 +19,7 @@ class RosStreamMonitor:
         self,
         backend: RosbagRecordingBackend,
         status_sink: Callable[[str], None] | None = print,
-        display_period_s: float = 1.0,
+        display_period_s: float = 2.0,
         startup_grace_s: float = 3.0,
         heartbeat_timeout_s: float = 2.5,
         data_silence_timeout_s: float = 2.0,

@@ -18,6 +18,15 @@ class EpisodeOutcome(str, Enum):
     ABORTED = "aborted"
 
 
+class EpisodeBlocked(RuntimeError):
+    """A recoverable pre-Episode failure with confirmed safe arm state."""
+
+    def __init__(self, reason: str, safety: str) -> None:
+        self.reason = reason
+        self.safety = safety
+        super().__init__(reason)
+
+
 @dataclass(frozen=True, slots=True)
 class RecordingStarted:
     episode_id: str

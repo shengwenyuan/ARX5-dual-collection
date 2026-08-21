@@ -19,13 +19,11 @@ services:
       - /run/udev:/run/udev:ro
       - /var/lib/arx5-collection:/var/lib/arx5-collection
       - ..:/workspace:ro
-      - ../reports:/reports
+      - /home/lenovo/swy/reports:/home/lenovo/swy/reports
     command:
       - arx5-collect
       - run
       - --task-config
       - /workspace/config/task.eight-stream.json
       - --output-root
-      - ${ARX5_OUTPUT_ROOT:-/reports/episodes}
-      - --session-log-root
-      - /reports/session-logs
+      - "${ARX5_OUTPUT_ROOT:-}"

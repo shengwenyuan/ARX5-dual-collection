@@ -12,7 +12,7 @@ from arx5_collection.episode.runtime import EpisodeRuntime
 from arx5_collection.episode.store import EpisodeStore
 
 from .fakes import FakeBackend, FakeMonitor, FakeTrigger
-from arx5_collection.episode.models import StreamMetrics
+from arx5_collection.episode.models import EpisodeBlocked, StreamMetrics
 from arx5_collection.episode.ports import TriggerEvent
 
 
@@ -97,7 +97,7 @@ class EpisodeCliTest(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertTrue(trigger.closed)
 
-    def test_aborted_episode_exits_the_session(self) -> None:
+    def test_recording_interrupt_aborts_and_exits_cleanly(self) -> None:
         trigger = ContextTrigger([True, KeyboardInterrupt(), True, True])
         exit_code = run_cli(
             runtime_factory=self.runtime_factory(),
@@ -106,7 +106,7 @@ class EpisodeCliTest(unittest.TestCase):
             stdout=io.StringIO(),
             stderr=io.StringIO(),
         )
-        self.assertEqual(exit_code, 2)
+        self.assertEqual(exit_code, 0)
         self.assertEqual(len(list(self.output_root.iterdir())), 1)
 
     def test_a_aborts_current_episode_and_continues(self) -> None:
@@ -126,10 +126,10 @@ class EpisodeCliTest(unittest.TestCase):
         self.assertEqual([row["outcome"] for row in rows], ["aborted", "success"])
         self.assertIn("/aborted/", rows[0]["mcap_path"])
 
-    def test_configured_failed_episode_keeps_the_session_ready(self) -> None:
-        trigger = ContextTrigger([True, KeyboardInterrupt(), True, True])
+    def test_failed_episode_keeps_the_session_ready(self) -> None:
+        trigger = ContextTrigger([True, True, True])
         request = load_request(self.task_config, self.output_root, STATION_PATH)
-        runtime = self.runtime_factory()(request, trigger)
+        runtime = self.runtime_factory(fail_first_episode=True)(request, trigger)
         output = io.StringIO()
         errors = io.StringIO()
 
@@ -139,26 +139,75 @@ class EpisodeCliTest(unittest.TestCase):
             episodes=2,
             stdout=output,
             stderr=errors,
-            continue_after_failed_episode=True,
         )
 
         rows = [json.loads(line) for line in output.getvalue().splitlines()]
         self.assertEqual(exit_code, 0)
         self.assertEqual([row["outcome"] for row in rows], ["aborted", "success"])
-        self.assertIn("Session remains READY", errors.getvalue())
+        self.assertEqual(errors.getvalue().count("SESSION BLOCKED"), 1)
+        self.assertEqual(errors.getvalue().count("\a"), 1)
+        self.assertIn("result: aborted", errors.getvalue())
 
-    def runtime_factory(self):
+    def test_pre_episode_block_does_not_create_an_empty_episode(self) -> None:
+        trigger = ContextTrigger([True, True, True])
+        request = load_request(self.task_config, self.output_root, STATION_PATH)
+        runtime = self.runtime_factory()(request, trigger)
+        attempts = 0
+
+        def check() -> None:
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                raise EpisodeBlocked(
+                    "camera not ready",
+                    "dual-arm G_COMPENSATION confirmed",
+                )
+
+        runtime.pre_episode_check = check
+        output = io.StringIO()
+        errors = io.StringIO()
+
+        exit_code = run_episode_loop(
+            runtime,
+            request,
+            episodes=1,
+            stdout=output,
+            stderr=errors,
+        )
+
+        rows = [json.loads(line) for line in output.getvalue().splitlines()]
+        self.assertEqual(exit_code, 0)
+        self.assertEqual([row["outcome"] for row in rows], ["success"])
+        self.assertEqual(attempts, 2)
+        self.assertEqual(errors.getvalue().count("SESSION BLOCKED"), 1)
+        self.assertEqual(errors.getvalue().count("\a"), 1)
+        self.assertIn("result: not_started", errors.getvalue())
+        self.assertFalse(any(self.output_root.glob(".*.partial")))
+
+    def runtime_factory(self, fail_first_episode: bool = False):
         ids = iter(["episode-001", "episode-002"])
         clock_values = iter([0.0, 1.0, 2.0, 3.0])
 
         def factory(request, trigger):
             stream = request.streams[0]
             metrics = (StreamMetrics(stream.id, 60, 1.0, 60.0, 18.0),)
+            monitor = FakeMonitor(metrics)
+            if fail_first_episode:
+                original_start = monitor.start
+                starts = 0
+
+                def start(streams) -> None:
+                    nonlocal starts
+                    starts += 1
+                    original_start(streams)
+                    monitor.failure = "left_arm data stopped" if starts == 1 else None
+
+                monitor.start = start  # type: ignore[method-assign]
             return EpisodeRuntime(
                 store=EpisodeStore(request.output_root),
                 trigger=trigger,
                 backend=FakeBackend(),
-                monitor=FakeMonitor(metrics),
+                monitor=monitor,
                 software_version="0.1.0",
                 episode_id_factory=lambda: next(ids),
                 wall_clock=lambda: datetime.now(timezone.utc),

@@ -47,6 +47,12 @@ class ProcessExit:
     escalated_to: str | None
 
 
+class ProcessUnavailableError(RuntimeError):
+    def __init__(self, process_name: str, detail: str) -> None:
+        self.process_name = process_name
+        super().__init__(detail)
+
+
 class ManagedProcess:
     """Own one subprocess and its independent POSIX process group."""
 
@@ -92,12 +98,16 @@ class ManagedProcess:
 
     def require_running(self) -> None:
         if self._process is None:
-            raise RuntimeError(f"process {self.spec.name} has not been started")
+            raise ProcessUnavailableError(
+                self.spec.name,
+                f"process {self.spec.name} has not been started",
+            )
         return_code = self._process.poll()
         if return_code is not None:
-            raise RuntimeError(
+            raise ProcessUnavailableError(
+                self.spec.name,
                 f"process {self.spec.name} exited with {return_code}; "
-                f"log={self.spec.log_path}"
+                f"log={self.spec.log_path}",
             )
 
     def stop(

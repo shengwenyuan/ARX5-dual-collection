@@ -85,10 +85,7 @@ def build_parser() -> argparse.ArgumentParser:
 def add_session_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--station-config", type=Path, default=DEFAULT_STATION_CONFIG)
     parser.add_argument("--task-config", type=Path, required=True)
-    parser.add_argument("--output-root", type=Path, required=True)
-    parser.add_argument(
-        "--session-log-root", type=Path, default=Path("/reports/session-logs")
-    )
+    parser.add_argument("--output-root", type=absolute_path, required=True)
     parser.add_argument("--episodes", type=non_negative_int, default=0)
     parser.add_argument("--min-free-gib", type=positive_int, default=80)
     parser.add_argument("--readiness-timeout-s", type=positive_float, default=30.0)
@@ -225,7 +222,7 @@ def run_session(args: argparse.Namespace) -> int:
     station = load_configured_station(args.station_config)
     validate_task_streams(args.task_config)
     request = load_request(args.task_config, args.output_root, args.station_config)
-    session_log_dir = args.session_log_root / _session_id()
+    session_log_dir = args.output_root / "logs" / _session_id()
 
     def check_sink(result: CheckResult) -> None:
         render_check(result, sys.stdout)
@@ -290,7 +287,6 @@ def _dagger_run_spec(args: argparse.Namespace):
         task_config=args.task_config,
         policy_config=args.policy_config,
         output_root=args.output_root,
-        session_log_root=args.session_log_root,
         episodes=args.episodes,
         min_free_gib=args.min_free_gib,
         readiness_timeout_s=args.readiness_timeout_s,
@@ -328,6 +324,13 @@ def positive_int(value: str) -> int:
     if result <= 0:
         raise argparse.ArgumentTypeError("must be positive")
     return result
+
+
+def absolute_path(value: str) -> Path:
+    path = Path(value)
+    if not path.is_absolute():
+        raise argparse.ArgumentTypeError("must be an absolute path")
+    return path
 
 
 def positive_float(value: str) -> float:

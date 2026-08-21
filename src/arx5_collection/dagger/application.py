@@ -39,12 +39,15 @@ class DaggerRunSpec:
     task_config: Path
     policy_config: Path
     output_root: Path
-    session_log_root: Path
     episodes: int
     min_free_gib: int
     readiness_timeout_s: float
     software_version: str
     session_id: str
+
+    @property
+    def log_dir(self) -> Path:
+        return self.output_root / "logs" / self.session_id
 
 
 class DaggerSessionBuilder:
@@ -68,7 +71,7 @@ class DaggerSessionBuilder:
         return ProductionSession(
             station=station,
             output_root=spec.output_root,
-            log_dir=spec.session_log_root / spec.session_id,
+            log_dir=spec.log_dir,
             software_version=spec.software_version,
             min_free_bytes=spec.min_free_gib * GIB,
             readiness_timeout_s=spec.readiness_timeout_s,
@@ -136,7 +139,7 @@ class ShadowApplication:
         self.stderr = stderr
 
     def run(self) -> int:
-        log_dir = self.spec.session_log_root / self.spec.session_id
+        log_dir = self.spec.log_dir
         status_sink = lambda message: print(
             message, file=self.stderr, flush=True
         )
@@ -193,7 +196,6 @@ class ShadowApplication:
                         episodes=self.spec.episodes,
                         stdout=self.stdout,
                         stderr=self.stderr,
-                        continue_after_failed_episode=True,
                     )
             finally:
                 shadow_loop.stop()
@@ -231,7 +233,7 @@ class TakeoverDryRunApplication:
             TakeoverRecordTrigger,
         )
 
-        log_dir = self.spec.session_log_root / self.spec.session_id
+        log_dir = self.spec.log_dir
         status_sink = lambda message: print(
             message, file=self.stderr, flush=True
         )
@@ -269,7 +271,6 @@ class TakeoverDryRunApplication:
                         episodes=self.spec.episodes,
                         stdout=self.stdout,
                         stderr=self.stderr,
-                        continue_after_failed_episode=True,
                     )
 
 
@@ -302,7 +303,7 @@ class TakeoverApplication:
             TakeoverRecordTrigger,
         )
 
-        log_dir = self.spec.session_log_root / self.spec.session_id
+        log_dir = self.spec.log_dir
         status_sink = lambda message: print(
             message, file=self.stderr, flush=True
         )
@@ -377,7 +378,6 @@ class TakeoverApplication:
                             episodes=self.spec.episodes,
                             stdout=self.stdout,
                             stderr=self.stderr,
-                            continue_after_failed_episode=True,
                         )
                 finally:
                     executor.close()

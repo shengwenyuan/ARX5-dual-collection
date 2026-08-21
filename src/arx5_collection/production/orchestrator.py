@@ -10,6 +10,8 @@ from typing import Iterator
 
 from arx5_collection.collection_metadata import MetadataContext
 from arx5_collection.episode.models import (
+    EpisodeBlocked,
+    EpisodeOutcome,
     EpisodeRequest,
     RecordingStarted,
     RecordingStopping,
@@ -22,12 +24,13 @@ from arx5_collection.ros2_adapters.monitor import RosStreamMonitor
 from arx5_collection.ros2_adapters.recording import RosbagRecordingBackend
 from arx5_collection.ros2_adapters.reset import RosDualArmResetController
 
-from .checks import CheckPhase, CheckResult, require_passed
+from .checks import CheckFailure, CheckPhase, CheckResult, require_passed
 from .config import StationConfig
 from .devices import DeviceIdentityVerifier
 from .processes import (
     CameraSnapshotConfig,
     ManagedProcess,
+    ProcessUnavailableError,
     RosCommandSet,
     RosProcessSupervisor,
 )
@@ -199,8 +202,23 @@ class ProductionSession:
         recording_stopping_hook: Callable[[RecordingStopping], None] | None = None,
     ) -> EpisodeRuntime:
         def prepare_episode() -> None:
-            self.pre_episode_check()
+            try:
+                self.pre_episode_check()
+            except CheckFailure as error:
+                safety = self._confirm_gravity_compensation(str(error))
+                raise EpisodeBlocked(str(error), safety) from error
+            except ProcessUnavailableError as error:
+                safety = self._confirm_gravity_compensation(str(error))
+                if error.process_name == "arx5-controller":
+                    raise RuntimeError(f"{error}; {safety}") from error
+                raise EpisodeBlocked(str(error), safety) from error
             self.home.run()
+
+        def stop_episode(stopping: RecordingStopping) -> None:
+            if recording_stopping_hook is not None:
+                recording_stopping_hook(stopping)
+            elif stopping.outcome is EpisodeOutcome.ABORTED:
+                self._confirm_gravity_compensation("Episode aborted")
 
         return EpisodeRuntime(
             store=EpisodeStore(request.output_root, min_free_bytes=self.min_free_bytes),
@@ -211,8 +229,17 @@ class ProductionSession:
             pre_episode_check=prepare_episode,
             metadata_context_provider=metadata_context_provider,
             recording_started_hook=recording_started_hook,
-            recording_stopping_hook=recording_stopping_hook,
+            recording_stopping_hook=stop_episode,
         )
+
+    def _confirm_gravity_compensation(self, reason: str) -> str:
+        try:
+            self.home_controller.enable_gravity_compensation()
+        except BaseException as error:
+            raise RuntimeError(
+                f"{reason}; dual-arm G_COMPENSATION recovery failed: {error}"
+            ) from error
+        return "dual-arm G_COMPENSATION confirmed"
 
     def stop(self) -> None:
         with ignore_repeated_termination():

@@ -280,6 +280,29 @@ class TakeoverControllerTest(unittest.TestCase):
         self.assertIs(events[-1].event_type, AuthorityEventType.FAULT_HOLD)
         self.assertIn("watchdog expired", events[-1].reason)
 
+    def test_gravity_compensation_failure_is_safety_critical(self) -> None:
+        human = HumanMode(fail=True)
+        controller, clock, events = self.make_controller(
+            FaultGateway(RuntimeError("watchdog expired")),
+            human,
+        )
+        self.start(controller, clock)
+
+        self.assertIs(controller.poll_runtime(), TakeoverState.FAULT_HOLD)
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "G_COMPENSATION recovery failed",
+        ):
+            controller.poll_runtime()
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "G_COMPENSATION recovery failed",
+        ):
+            self.stop(controller, clock)
+
+        self.assertIs(events[-1].event_type, AuthorityEventType.FAULT_HOLD)
+        self.assertIn("gravity_compensation=gravity failed", events[-1].reason)
+
     def test_no_action_gateway_explicitly_disables_output(self) -> None:
         self.assertFalse(NoActionGateway.action_output_enabled)
 

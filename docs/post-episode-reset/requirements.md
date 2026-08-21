@@ -55,7 +55,7 @@ ProductionSession.create_runtime
 - CLI 只渲染复位状态，不承载运动步骤。
 - Episode Runtime 不 import Vendor SDK。
 - 复位逻辑与离线数据清洗无关。
-- 标准入口保持 `ARX5_OUTPUT_ROOT=<path> docker compose -f docker/compose.production.yaml run --rm --name arx5-collect-w3 collector`。
+- 标准入口保持 `ARX5_OUTPUT_ROOT=/absolute/path/reports/<date>/<task> docker compose -f docker/compose.production.yaml run --rm collector`；日志自动进入任务目录下的 `logs/`。
 
 ## 验收
 

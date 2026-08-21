@@ -124,10 +124,11 @@ class AutoTriggerFactoryTest(unittest.TestCase):
                 "--task-config",
                 "task.json",
                 "--output-root",
-                "episodes",
+                "/reports/episodes",
             ]
         )
         self.assertEqual(run.station_config, Path("/var/lib/arx5-collection/station.json"))
+        self.assertEqual(run.output_root, Path("/reports/episodes"))
         shadow = parser.parse_args(
             [
                 "dagger",
@@ -137,7 +138,7 @@ class AutoTriggerFactoryTest(unittest.TestCase):
                 "--policy-config",
                 "policy.toml",
                 "--output-root",
-                "episodes",
+                "/reports/episodes",
             ]
         )
         self.assertEqual(shadow.dagger_command, "shadow")
@@ -150,7 +151,7 @@ class AutoTriggerFactoryTest(unittest.TestCase):
                 "--policy-config",
                 "policy.toml",
                 "--output-root",
-                "episodes",
+                "/reports/episodes",
             ]
         )
         self.assertEqual(dry_run.dagger_command, "takeover-dry-run")
@@ -171,9 +172,19 @@ class AutoTriggerFactoryTest(unittest.TestCase):
                     "--task-config",
                     "task.json",
                     "--output-root",
-                    "episodes",
+                    "/reports/episodes",
                     "--trigger-key",
                     "x",
+                ]
+            )
+        with self.assertRaises(SystemExit):
+            parser.parse_args(
+                [
+                    "run",
+                    "--task-config",
+                    "task.json",
+                    "--output-root",
+                    "episodes",
                 ]
             )
 

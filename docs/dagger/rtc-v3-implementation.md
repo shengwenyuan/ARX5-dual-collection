@@ -111,10 +111,10 @@ Policy Server 不感知 Client queue、剩余动作、已执行位置或 splice 
 
 Policy 与 Collector 保持两个职责独立的容器。Docker Compose 是 host 侧唯一进程编排入口；Collector 仍是采集 Session 主进程，不获取 Docker socket，也不在 `arx5-collect` 内实现容器管理。
 
-每台工作站只需一次性保存 `/var/lib/arx5-collection/dagger.env`。它记录镜像引用、Policy TOML、checkpoint root、Task JSON 和 report root；参考 `config/dagger.compose.env.example`。正常运行只传本次输出目录：
+环境文件只记录镜像引用、Policy TOML、checkpoint root、Task JSON 和模式；参考 `config/dagger.compose.env.example`。正常运行必须传本次任务的绝对输出目录，Session 日志自动进入其 `logs/` 子目录：
 
 ```bash
-ARX5_OUTPUT_ROOT=/reports/<station>/<date>/<task> \
+ARX5_OUTPUT_ROOT=/home/lenovo/swy/reports/<date>/<task> \
 docker compose \
   --env-file /var/lib/arx5-collection/dagger.env \
   -f docker/compose.dagger.yaml \
