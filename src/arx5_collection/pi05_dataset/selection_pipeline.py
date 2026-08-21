@@ -19,6 +19,7 @@ from arx5_collection.pi05_dataset.selection import Pi05Segment
 from arx5_collection.pi05_dataset.selection import build_samples
 from arx5_collection.pi05_dataset.selection import select_nonidle_segments
 from arx5_collection.pi05_dataset.provenance import SegmentProvenance
+from arx5_collection.pi05_dataset.provenance import derive_source_session_id
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,8 +29,13 @@ class EpisodeSelection:
     samples: tuple[Pi05Sample, ...]
     segments: tuple[Pi05Segment, ...]
     segment_provenance: tuple[SegmentProvenance, ...] = ()
+    source_session_id: str | None = None
 
     def __post_init__(self) -> None:
+        if not self.task.strip():
+            raise ValueError("task must not be empty")
+        if self.source_session_id is not None and not self.source_session_id:
+            raise ValueError("source Session id must not be empty")
         if self.segment_provenance and len(self.segment_provenance) != len(self.segments):
             raise ValueError("segment provenance must match selected segments")
 
@@ -85,7 +91,15 @@ def _select_dataset(
                 ExcludedEpisodeArtifact(episode_id=episode_id, reason="no_valid_motion_segment")
             )
             continue
-        selected.append(EpisodeSelection(episode_id, task.strip(), samples, segments))
+        selected.append(
+            EpisodeSelection(
+                episode_id,
+                task,
+                samples,
+                segments,
+                source_session_id=derive_source_session_id(episode_dir),
+            )
+        )
     result = DatasetSelection(tuple(selected), tuple(excluded))
     output_dir = artifact_writer(output_root, result, policy, left_gripper, right_gripper)
     return DatasetSelection(result.episodes, result.excluded_episodes, output_dir)

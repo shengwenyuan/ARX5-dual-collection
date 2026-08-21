@@ -221,6 +221,14 @@ def _write_selection_artifacts(
     sampling_contract: EqualEefSamplingContractArtifact | None = None,
 ) -> Path:
     target = output_root / "selection"
+    session_tasks: dict[str, set[str]] = {}
+    for episode in selection.episodes:
+        session_id = episode.source_session_id or episode.episode_id
+        session_tasks.setdefault(session_id, set()).add(episode.task)
+    for session_id, tasks in session_tasks.items():
+        if len(tasks) != 1:
+            raise ValueError(f"task mismatch within source Session: {session_id}")
+
     segment_rows = []
     source_rows = []
     memberships: dict[tuple[str, int], str] = {}
@@ -241,6 +249,7 @@ def _write_selection_artifacts(
                 provenance_row(
                     row["segment_id"],
                     episode.episode_id,
+                    episode.source_session_id or episode.episode_id,
                     provenance,
                 )
             )

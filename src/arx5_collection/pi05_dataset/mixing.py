@@ -22,12 +22,19 @@ _CONTRACT_KEYS = (
 def _source_rows(selection_dir: Path) -> list[dict[str, object]]:
     path = selection_dir / "source_manifest.jsonl"
     if path.is_file():
-        return read_jsonl(path)
+        rows = read_jsonl(path)
+        for row in rows:
+            # Legacy selections did not retain Session identity. Treat each source
+            # Episode as its own compatibility Session rather than inventing a
+            # cross-Episode relationship.
+            row.setdefault("source_session_id", row["source_episode_id"])
+        return rows
     return [
         {
             "schema_version": 1,
             "segment_id": row["segment_id"],
             "source_episode_id": row["source_episode_id"],
+            "source_session_id": row["source_episode_id"],
             "split_group": row["source_episode_id"],
             "collection_type": "demonstration",
             "training_class": "demonstration",
@@ -41,14 +48,47 @@ def _source_rows(selection_dir: Path) -> list[dict[str, object]]:
     ]
 
 
-def _selection_tasks(selection_dir: Path) -> frozenset[str]:
-    tasks = frozenset(
-        str(row["task"]).strip()
-        for row in read_jsonl(selection_dir / "segments.jsonl")
-    )
-    if not tasks or "" in tasks:
-        raise ValueError(f"selection has no valid task contract: {selection_dir}")
-    return tasks
+def _validate_task_scope(
+    segments: list[dict[str, object]],
+    sources: list[dict[str, object]],
+) -> frozenset[str]:
+    source_by_segment = {str(row["segment_id"]): row for row in sources}
+    if len(source_by_segment) != len(sources):
+        raise ValueError("source manifest contains duplicate segment ids")
+
+    episode_tasks: dict[str, set[str]] = {}
+    session_tasks: dict[str, set[str]] = {}
+    all_tasks: set[str] = set()
+    for segment in segments:
+        segment_id = str(segment["segment_id"])
+        try:
+            source = source_by_segment[segment_id]
+        except KeyError as error:
+            raise ValueError(f"source manifest is missing segment: {segment_id}") from error
+        task = segment.get("task")
+        if not isinstance(task, str) or not task.strip():
+            raise ValueError(f"segment has no valid task: {segment_id}")
+        episode_id = str(segment["source_episode_id"])
+        if str(source["source_episode_id"]) != episode_id:
+            raise ValueError(f"source Episode mismatch for segment: {segment_id}")
+        if str(source.get("split_group")) != episode_id:
+            raise ValueError(f"split_group must equal source Episode: {segment_id}")
+        session_id = source.get("source_session_id")
+        if not isinstance(session_id, str) or not session_id:
+            raise ValueError(f"source Session is missing for segment: {segment_id}")
+        episode_tasks.setdefault(episode_id, set()).add(task)
+        session_tasks.setdefault(session_id, set()).add(task)
+        all_tasks.add(task)
+
+    for episode_id, tasks in episode_tasks.items():
+        if len(tasks) != 1:
+            raise ValueError(f"task mismatch within source Episode: {episode_id}")
+    for session_id, tasks in session_tasks.items():
+        if len(tasks) != 1:
+            raise ValueError(f"task mismatch within source Session: {session_id}")
+    if not all_tasks:
+        raise ValueError("mixed selection has no task")
+    return frozenset(all_tasks)
 
 
 def mix_selections(
@@ -70,13 +110,10 @@ def mix_selections(
     reports = {name: read_json(path / "selection.json") for name, path in inputs.items()}
     first_name = next(iter(inputs))
     baseline = reports[first_name]
-    baseline_tasks = _selection_tasks(inputs[first_name])
     for name, report in reports.items():
         for key in _CONTRACT_KEYS:
             if report.get(key) != baseline.get(key):
                 raise ValueError(f"selection contract mismatch for {name}: {key}")
-        if _selection_tasks(inputs[name]) != baseline_tasks:
-            raise ValueError(f"selection contract mismatch for {name}: task")
 
     sample_rows: list[dict[str, object]] = []
     segment_rows: list[dict[str, object]] = []
@@ -111,6 +148,7 @@ def mix_selections(
     manifest_segments = {str(row["segment_id"]) for row in source_rows}
     if manifest_segments != seen_segments:
         raise ValueError("source manifest does not cover the merged segments exactly")
+    tasks = _validate_task_scope(segment_rows, source_rows)
     composition = Counter(str(row["collection_type"]) for row in source_rows)
     report = dict(baseline)
     report.update(
@@ -136,7 +174,7 @@ def mix_selections(
             for name, path in inputs.items()
         },
         weighting_applied=False,
-        tasks=sorted(baseline_tasks),
+        tasks=sorted(tasks),
     )
     target = output_root / "selection"
     with staged_directory(target) as temporary:

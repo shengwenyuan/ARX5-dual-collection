@@ -14,6 +14,7 @@
     "schema_version": {"const": 1},
     "segment_id": {"type": "string", "minLength": 1},
     "source_episode_id": {"type": "string", "minLength": 1},
+    "source_session_id": {"type": "string", "minLength": 1},
     "split_group": {"type": "string", "minLength": 1},
     "collection_type": {"enum": ["demonstration", "dagger"]},
     "training_class": {"enum": ["demonstration", "expert_correction"]},

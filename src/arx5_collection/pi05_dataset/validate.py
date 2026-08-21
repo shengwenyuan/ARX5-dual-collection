@@ -58,8 +58,8 @@ def validate_lerobot(
         for camera in EXPECTED_IMAGE_KEYS:
             if np.asarray(sample[camera]).shape != (3, height, width):
                 raise ValueError(f"invalid {camera} at dataset index {index}")
-        task = str(sample.get("task", "")).strip()
-        if not task:
+        task = sample.get("task")
+        if not isinstance(task, str) or not task.strip():
             raise ValueError(f"missing task at dataset index {index}")
         checked_tasks.add(task)
     if expected_task is not None and checked_tasks != {expected_task}:

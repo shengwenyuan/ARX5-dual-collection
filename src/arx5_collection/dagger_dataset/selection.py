@@ -15,6 +15,7 @@ from arx5_collection.pi05_dataset.artifact_codec import write_equal_eef_selectio
 from arx5_collection.pi05_dataset.eef_selection import build_equal_eef_samples
 from arx5_collection.pi05_dataset.eef_selection import EqualEefPolicy
 from arx5_collection.pi05_dataset.provenance import SegmentProvenance
+from arx5_collection.pi05_dataset.provenance import derive_source_session_id
 from arx5_collection.pi05_dataset.selection import Pi05Sample
 from arx5_collection.pi05_dataset.selection import Pi05Segment
 from arx5_collection.pi05_dataset.selection import select_nonidle_segments
@@ -184,10 +185,11 @@ def select_equal_eef_dagger_dataset(
         selected.append(
             EpisodeSelection(
                 episode_id=episode_id,
-                task=task.strip(),
+                task=task,
                 samples=tuple(episode_samples),
                 segments=tuple(episode_segments),
                 segment_provenance=tuple(provenance),
+                source_session_id=derive_source_session_id(episode_dir),
             )
         )
     result = DatasetSelection(tuple(selected), tuple(excluded))

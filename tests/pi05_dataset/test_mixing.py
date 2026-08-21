@@ -16,6 +16,7 @@ def make_selection(
     collection_type: str,
     *,
     task: str = "Stacking paper cups",
+    session: str | None = None,
 ) -> Path:
     root.mkdir(parents=True)
     segment_id = f"{episode}--000"
@@ -54,6 +55,7 @@ def make_selection(
                 "schema_version": 1,
                 "segment_id": segment_id,
                 "source_episode_id": episode,
+                "source_session_id": session or f"session-{episode}",
                 "split_group": episode,
                 "collection_type": collection_type,
                 "training_class": (
@@ -108,18 +110,98 @@ class SelectionMixingTest(unittest.TestCase):
                     root / "mixed",
                 )
 
-    def test_rejects_task_prompt_drift(self) -> None:
+    def test_allows_distinct_tasks_across_sessions_without_rewriting(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            demo = make_selection(root / "demo", "demo-a", "demonstration")
+            demo = make_selection(
+                root / "demo",
+                "demo-a",
+                "demonstration",
+                task="Stacking paper cups",
+                session="w3/day/session-a",
+            )
             dagger = make_selection(
                 root / "dagger",
                 "dagger-a",
                 "dagger",
                 task="stacking five paper cups",
+                session="w3/day/session-b",
             )
 
-            with self.assertRaisesRegex(ValueError, "contract mismatch.*task"):
+            output = mix_selections(
+                {"demonstration": demo, "dagger": dagger},
+                root / "mixed",
+            )
+            segments = read_jsonl(output / "segments.jsonl")
+            report = read_json(output / "selection.json")
+
+        self.assertEqual(
+            {row["task"] for row in segments},
+            {"Stacking paper cups", "stacking five paper cups"},
+        )
+        self.assertEqual(
+            set(report["tasks"]),
+            {"Stacking paper cups", "stacking five paper cups"},
+        )
+
+    def test_rejects_task_drift_within_source_episode(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            demo = make_selection(root / "demo", "demo-a", "demonstration")
+            dagger = make_selection(root / "dagger", "dagger-a", "dagger")
+            with (demo / "segments.jsonl").open("a") as stream:
+                stream.write(
+                    json.dumps(
+                        {
+                            "segment_id": "demo-a--001",
+                            "source_episode_id": "demo-a",
+                            "task": "Different prompt",
+                        }
+                    )
+                    + "\n"
+                )
+            with (demo / "source_manifest.jsonl").open("a") as stream:
+                stream.write(
+                    json.dumps(
+                        {
+                            "schema_version": 1,
+                            "segment_id": "demo-a--001",
+                            "source_episode_id": "demo-a",
+                            "source_session_id": "session-demo-a",
+                            "split_group": "demo-a",
+                            "collection_type": "demonstration",
+                            "training_class": "demonstration",
+                            "sample_weight": 1.0,
+                        }
+                    )
+                    + "\n"
+                )
+
+            with self.assertRaisesRegex(ValueError, "task mismatch within source Episode"):
+                mix_selections(
+                    {"demonstration": demo, "dagger": dagger},
+                    root / "mixed",
+                )
+
+    def test_rejects_task_drift_within_source_session(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            demo = make_selection(
+                root / "demo",
+                "demo-a",
+                "demonstration",
+                task="Task A",
+                session="w3/day/session-a",
+            )
+            dagger = make_selection(
+                root / "dagger",
+                "dagger-a",
+                "dagger",
+                task="Task B",
+                session="w3/day/session-a",
+            )
+
+            with self.assertRaisesRegex(ValueError, "task mismatch within source Session"):
                 mix_selections(
                     {"demonstration": demo, "dagger": dagger},
                     root / "mixed",

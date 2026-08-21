@@ -1,6 +1,21 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
+from pathlib import Path
+
+
+def derive_source_session_id(episode_dir: Path) -> str:
+    """Return a portable identity for the collection Session containing an Episode."""
+
+    metadata = json.loads((episode_dir / "metadata.json").read_text())
+    station = metadata.get("station", {})
+    timing = metadata.get("timing", {})
+    station_id = station.get("id") if isinstance(station, dict) else None
+    started_at = timing.get("started_at") if isinstance(timing, dict) else None
+    day = started_at[:10] if isinstance(started_at, str) and len(started_at) >= 10 else None
+    parts = [station_id, day, episode_dir.parent.name]
+    return "/".join(str(part) for part in parts if part)
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,12 +51,14 @@ class SegmentProvenance:
 def provenance_row(
     segment_id: str,
     source_episode_id: str,
+    source_session_id: str,
     provenance: SegmentProvenance,
 ) -> dict[str, object]:
     return {
         "schema_version": 1,
         "segment_id": segment_id,
         "source_episode_id": source_episode_id,
+        "source_session_id": source_session_id,
         "split_group": source_episode_id,
         "collection_type": provenance.collection_type,
         "training_class": provenance.training_class,

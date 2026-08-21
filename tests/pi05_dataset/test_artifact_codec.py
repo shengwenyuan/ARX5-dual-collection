@@ -57,6 +57,7 @@ class SelectionArtifactCodecTest(unittest.TestCase):
         )
         Draft202012Validator(source_schema).validate(source_row)
         self.assertEqual(source_row["collection_type"], "demonstration")
+        self.assertEqual(source_row["source_session_id"], "episode-a")
 
     def test_writes_equal_eef_v2_provenance(self) -> None:
         image = MessageRef("/camera", 1, 100, 101)
