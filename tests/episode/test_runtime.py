@@ -77,15 +77,30 @@ class EpisodeRuntimeTest(unittest.TestCase):
         schema = json.loads(SCHEMA_PATH.read_text())
         Draft202012Validator(schema, format_checker=FormatChecker()).validate(metadata)
 
-    def test_required_failure_commits_aborted_episode(self) -> None:
+    def test_required_failure_commits_failed_episode(self) -> None:
         runtime = self.runtime(
             trigger=FakeTrigger([True]),
             monitor=FakeMonitor(METRICS, failure="left_arm stopped"),
         )
         result = runtime.run_once(self.request())
-        self.assertEqual(result.outcome, EpisodeOutcome.ABORTED)
+        self.assertEqual(result.outcome, EpisodeOutcome.FAIL)
         self.assertEqual(result.errors, ("left_arm stopped",))
         self.assertTrue(result.committed)
+        self.assertEqual(result.mcap_path.parent.parent, self.output_root / "fail")
+        self.assertEqual(json.loads(result.metadata_path.read_text())["outcome"], "fail")
+
+    def test_runtime_check_failure_commits_failed_episode(self) -> None:
+        runtime = self.runtime(
+            trigger=FakeTrigger([True]),
+            runtime_check=lambda: (_ for _ in ()).throw(
+                RuntimeError("d405-source exited")
+            ),
+        )
+
+        result = runtime.run_once(self.request())
+
+        self.assertEqual(result.outcome, EpisodeOutcome.FAIL)
+        self.assertEqual(result.errors, ("d405-source exited",))
 
     def test_pre_episode_check_runs_after_start_before_recorder(self) -> None:
         events: list[str] = []
@@ -243,6 +258,7 @@ class EpisodeRuntimeTest(unittest.TestCase):
         wall_clock=None,
         monotonic_clock=None,
         metadata_context_provider=None,
+        runtime_check=None,
         recording_started_hook=None,
         recording_stopping_hook=None,
     ) -> EpisodeRuntime:
@@ -256,6 +272,7 @@ class EpisodeRuntimeTest(unittest.TestCase):
             wall_clock=wall_clock or (lambda: datetime.now(timezone.utc)),
             monotonic_clock=monotonic_clock or iter_clock([10.0, 100.0]),
             metadata_context_provider=metadata_context_provider,
+            runtime_check=runtime_check,
             recording_started_hook=recording_started_hook,
             recording_stopping_hook=recording_stopping_hook,
             poll_interval_s=0.01,

@@ -4,6 +4,8 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
+from .models import EpisodeOutcome
+
 
 @dataclass(frozen=True, slots=True)
 class PendingEpisode:
@@ -55,7 +57,7 @@ class EpisodeStore:
     def commit(
         self,
         pending: PendingEpisode,
-        aborted: bool = False,
+        outcome: EpisodeOutcome,
     ) -> StoredEpisode:
         if not pending.partial_dir.is_dir():
             raise FileNotFoundError(pending.partial_dir)
@@ -66,11 +68,12 @@ class EpisodeStore:
         if not pending.mcap_path.is_file() or not pending.metadata_path.is_file():
             raise RuntimeError("episode artifacts must be regular files")
 
-        final_dir = (
-            self.root / "aborted" / pending.episode_id
-            if aborted
-            else pending.final_dir
-        )
+        outcome_roots = {
+            EpisodeOutcome.SUCCESS: self.root,
+            EpisodeOutcome.FAIL: self.root / "fail",
+            EpisodeOutcome.ABORTED: self.root / "aborted",
+        }
+        final_dir = outcome_roots[outcome] / pending.episode_id
         if final_dir.exists():
             raise FileExistsError(f"episode already exists: {pending.episode_id}")
         final_dir.parent.mkdir(parents=True, exist_ok=True)

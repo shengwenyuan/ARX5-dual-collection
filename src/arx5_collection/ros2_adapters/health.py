@@ -97,14 +97,10 @@ class StreamHealthTracker:
             if observed is None:
                 if now_s - self.started_s >= self.startup_grace_s:
                     reason = f"stream {stream.id} produced no telemetry"
-                    if stream.required:
-                        return f"required {reason}"
                     self._warn(stream.id, reason)
                 continue
             if now_s - observed.last_status_s >= self.heartbeat_timeout_s:
                 reason = f"stream {stream.id} telemetry stopped"
-                if stream.required:
-                    return f"required {reason}"
                 self._warn(stream.id, reason)
                 continue
             if observed.latest.silence_s >= self.data_silence_timeout_s:

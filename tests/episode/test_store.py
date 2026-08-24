@@ -5,6 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from arx5_collection.episode.models import EpisodeOutcome
 from arx5_collection.episode.store import EpisodeStore
 
 
@@ -45,7 +46,7 @@ class EpisodeStoreTest(unittest.TestCase):
         missing = self.store.prepare("missing")
         missing.mcap_path.write_bytes(b"mcap")
         with self.assertRaises(RuntimeError):
-            self.store.commit(missing)
+            self.store.commit(missing, EpisodeOutcome.SUCCESS)
         self.assertTrue(missing.partial_dir.exists())
 
         extra = self.store.prepare("extra")
@@ -53,7 +54,7 @@ class EpisodeStoreTest(unittest.TestCase):
         extra.metadata_path.write_text("{}")
         (extra.partial_dir / "extra.txt").write_text("unexpected")
         with self.assertRaises(RuntimeError):
-            self.store.commit(extra)
+            self.store.commit(extra, EpisodeOutcome.SUCCESS)
         self.assertTrue(extra.partial_dir.exists())
 
     def test_commit_renames_complete_episode(self) -> None:
@@ -61,7 +62,7 @@ class EpisodeStoreTest(unittest.TestCase):
         pending.mcap_path.write_bytes(b"mcap")
         pending.metadata_path.write_text("{}")
 
-        stored = self.store.commit(pending)
+        stored = self.store.commit(pending, EpisodeOutcome.SUCCESS)
 
         self.assertFalse(pending.partial_dir.exists())
         self.assertEqual(stored.directory, self.root / "episode-001")
@@ -75,13 +76,23 @@ class EpisodeStoreTest(unittest.TestCase):
         pending.mcap_path.write_bytes(b"mcap")
         pending.metadata_path.write_text("{}")
 
-        stored = self.store.commit(pending, aborted=True)
+        stored = self.store.commit(pending, EpisodeOutcome.ABORTED)
 
         self.assertEqual(
             stored.directory,
             self.root / "aborted" / "episode-aborted",
         )
         self.assertTrue(stored.mcap_path.is_file())
+
+    def test_failed_commit_uses_fail_subdirectory(self) -> None:
+        pending = self.store.prepare("episode-failed")
+        pending.mcap_path.write_bytes(b"mcap")
+        pending.metadata_path.write_text("{}")
+
+        stored = self.store.commit(pending, EpisodeOutcome.FAIL)
+
+        self.assertEqual(stored.directory, self.root / "fail" / "episode-failed")
+        self.assertTrue(stored.metadata_path.is_file())
 
     def test_list_partials_only_reports(self) -> None:
         first = self.store.prepare("first")

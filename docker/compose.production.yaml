@@ -6,6 +6,8 @@ services:
       context: ..
       dockerfile: docker/Dockerfile.bringup
       target: production
+      args:
+        SOURCE_REVISION: "${ARX5_SOURCE_REVISION:-unknown}"
     image: arx5-dual-collection:production
     privileged: true
     network_mode: host

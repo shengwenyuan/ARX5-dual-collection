@@ -143,10 +143,11 @@ class EpisodeCliTest(unittest.TestCase):
 
         rows = [json.loads(line) for line in output.getvalue().splitlines()]
         self.assertEqual(exit_code, 0)
-        self.assertEqual([row["outcome"] for row in rows], ["aborted", "success"])
+        self.assertEqual([row["outcome"] for row in rows], ["fail", "success"])
         self.assertEqual(errors.getvalue().count("SESSION BLOCKED"), 1)
         self.assertEqual(errors.getvalue().count("\a"), 1)
-        self.assertIn("result: aborted", errors.getvalue())
+        self.assertIn("EPISODE FAILED - SESSION BLOCKED", errors.getvalue())
+        self.assertIn("result: fail", errors.getvalue())
 
     def test_pre_episode_block_does_not_create_an_empty_episode(self) -> None:
         trigger = ContextTrigger([True, True, True])

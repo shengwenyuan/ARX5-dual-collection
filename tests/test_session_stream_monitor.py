@@ -66,7 +66,7 @@ def test_episode_cycles_reuse_session_subscription_and_reset_baseline() -> None:
     assert context.shutdown_called
 
 
-def test_stale_idle_snapshot_does_not_seed_episode_health() -> None:
+def test_stale_idle_snapshot_warns_without_failing_episode() -> None:
     now = [0.0]
     context = FakeContext()
     monitor = RosStreamMonitor(
@@ -81,8 +81,7 @@ def test_stale_idle_snapshot_does_not_seed_episode_health() -> None:
     now[0] = 4.0
     monitor.start((STREAM,))
     now[0] = 7.0
-    assert monitor.required_failure() == (
-        "required stream camera_left_color produced no telemetry"
-    )
-    monitor.stop()
+    assert monitor.required_failure() is None
+    metrics = monitor.stop()
+    assert any("produced no telemetry" in warning for warning in metrics[0].warnings)
     monitor.close()

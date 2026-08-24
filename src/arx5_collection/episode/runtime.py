@@ -33,6 +33,7 @@ class EpisodeRuntime:
         wall_clock: Callable[[], datetime] | None = None,
         monotonic_clock: Callable[[], float] | None = None,
         pre_episode_check: Callable[[], None] | None = None,
+        runtime_check: Callable[[], None] | None = None,
         state_sink: Callable[[EpisodeState], None] | None = None,
         metadata_context_provider: Callable[[], MetadataContext] | None = None,
         recording_started_hook: Callable[[RecordingStarted], None] | None = None,
@@ -53,6 +54,7 @@ class EpisodeRuntime:
             monotonic_clock = monotonic
         self.monotonic_clock = monotonic_clock
         self.pre_episode_check = pre_episode_check
+        self.runtime_check = runtime_check
         self.state_sink = state_sink
         self.metadata_context_provider = metadata_context_provider
         self.recording_started_hook = recording_started_hook
@@ -142,7 +144,7 @@ class EpisodeRuntime:
             write_metadata(pending.metadata_path, metadata)
             stored = self.store.commit(
                 pending,
-                aborted=outcome is EpisodeOutcome.ABORTED,
+                outcome=outcome,
             )
             return replace(
                 pending_result,
@@ -162,9 +164,11 @@ class EpisodeRuntime:
     def _wait_for_end(self) -> tuple[EpisodeOutcome, tuple[str, ...], int]:
         try:
             while True:
+                if self.runtime_check is not None:
+                    self.runtime_check()
                 failure = self.monitor.required_failure()
                 if failure is not None:
-                    return EpisodeOutcome.ABORTED, (failure,), self._monotonic_ns()
+                    return EpisodeOutcome.FAIL, (failure,), self._monotonic_ns()
                 signal = self.trigger.wait(self.poll_interval_s)
                 if signal is None:
                     continue
@@ -183,7 +187,7 @@ class EpisodeRuntime:
                 self._monotonic_ns(),
             )
         except Exception as error:
-            return EpisodeOutcome.ABORTED, (str(error),), self._monotonic_ns()
+            return EpisodeOutcome.FAIL, (str(error),), self._monotonic_ns()
 
     def _monotonic_ns(self) -> int:
         return round(self.monotonic_clock() * 1e9)

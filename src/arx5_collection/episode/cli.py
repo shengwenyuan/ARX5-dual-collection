@@ -152,19 +152,20 @@ def run_episode_loop(
                 flush=True,
             )
             completed += 1
-            if result.outcome is EpisodeOutcome.ABORTED:
-                if result.errors == ("recording interrupted",):
-                    return 0
-                if result.errors != ("operator requested abort",):
-                    render_session_blocked(
-                        result="aborted",
-                        reason="; ".join(result.errors),
-                        safety=(
-                            "Episode stop hooks completed; dual-arm "
-                            "G_COMPENSATION confirmed"
-                        ),
-                        output=error_output,
-                    )
+            if result.outcome is EpisodeOutcome.ABORTED and result.errors == (
+                "recording interrupted",
+            ):
+                return 0
+            if result.outcome is EpisodeOutcome.FAIL:
+                render_session_blocked(
+                    result="fail",
+                    reason="; ".join(result.errors),
+                    safety=(
+                        "Episode stop hooks completed; dual-arm "
+                        "G_COMPENSATION confirmed"
+                    ),
+                    output=error_output,
+                )
     except KeyboardInterrupt:
         return 0
     finally:
@@ -179,8 +180,8 @@ def render_session_blocked(
     output: TextIO,
 ) -> None:
     title = (
-        "EPISODE ABORTED - SESSION BLOCKED"
-        if result == "aborted"
+        "EPISODE FAILED - SESSION BLOCKED"
+        if result == "fail"
         else "EPISODE NOT STARTED - SESSION BLOCKED"
     )
     print(

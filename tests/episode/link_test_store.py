@@ -4,6 +4,7 @@ import tempfile
 from pathlib import Path
 
 from arx5_collection.episode import store as store_module
+from arx5_collection.episode.models import EpisodeOutcome
 
 
 def main() -> None:
@@ -12,7 +13,7 @@ def main() -> None:
         pending = store.prepare("link-episode")
         pending.mcap_path.write_bytes(b"mcap")
         pending.metadata_path.write_text("{}")
-        stored = store.commit(pending)
+        stored = store.commit(pending, EpisodeOutcome.SUCCESS)
 
         assert stored.mcap_path.read_bytes() == b"mcap"
         assert stored.metadata_path.read_text() == "{}"

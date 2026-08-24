@@ -32,6 +32,8 @@ services:
       context: ..
       dockerfile: docker/Dockerfile.bringup
       target: dagger-collector
+      args:
+        SOURCE_REVISION: "${ARX5_SOURCE_REVISION:-unknown}"
     image: ${ARX5_DAGGER_COLLECTOR_IMAGE:-arx5-dual-collection:dagger}
     privileged: true
     network_mode: host

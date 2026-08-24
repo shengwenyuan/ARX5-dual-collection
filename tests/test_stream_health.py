@@ -29,17 +29,25 @@ def sample(
     )
 
 
-def test_missing_required_stream_fails_after_startup_grace() -> None:
+def test_missing_telemetry_warns_after_startup_grace() -> None:
     tracker = StreamHealthTracker(STREAMS, started_s=10.0)
     assert tracker.required_failure(12.9) is None
-    assert "produced no telemetry" in tracker.required_failure(13.0)
+    assert tracker.required_failure(13.0) is None
+    assert any(
+        "produced no telemetry" in warning
+        for warning in tracker.warnings_for("camera_left_color")
+    )
 
 
-def test_heartbeat_and_data_silence_are_required_failures() -> None:
+def test_heartbeat_warns_but_data_silence_is_a_required_failure() -> None:
     heartbeat = StreamHealthTracker(STREAMS, started_s=0.0)
     heartbeat.observe(sample(), arrival_s=1.0)
     assert heartbeat.required_failure(3.4) is None
-    assert "telemetry stopped" in heartbeat.required_failure(3.5)
+    assert heartbeat.required_failure(3.5) is None
+    assert any(
+        "telemetry stopped" in warning
+        for warning in heartbeat.warnings_for("camera_left_color")
+    )
 
     silence = StreamHealthTracker(STREAMS, started_s=0.0)
     silence.observe(sample(silence_s=2.0), arrival_s=1.0)

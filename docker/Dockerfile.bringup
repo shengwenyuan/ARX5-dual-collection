@@ -124,6 +124,11 @@ WORKDIR /workspace
 
 FROM runtime-hardware AS runtime-base
 
+ARG SOURCE_REVISION=unknown
+
+LABEL org.opencontainers.image.revision="${SOURCE_REVISION}" \
+      arx5.collection.source-revision="${SOURCE_REVISION}"
+
 COPY src/ /opt/arx5-runtime/src/
 COPY pyproject.toml /opt/arx5-runtime/pyproject.toml
 COPY config/fastdds-shm.xml /opt/arx5-dual-collection/config/fastdds-shm.xml
@@ -162,7 +167,7 @@ RUN apt-get update \
         /tmp/openpi-client \
         opencv-python-headless==4.11.0.86
 
-FROM runtime-hardware AS dagger-collector
+FROM runtime-base AS dagger-collector
 
 COPY --from=dagger-python-builder /tmp/dagger-wheels /tmp/dagger-wheels
 
@@ -173,17 +178,6 @@ RUN python3 -m pip install \
         openpi-client \
         opencv-python-headless==4.11.0.86 \
     && rm -rf /tmp/dagger-wheels
-
-COPY src/ /opt/arx5-runtime/src/
-COPY pyproject.toml /opt/arx5-runtime/pyproject.toml
-COPY config/fastdds-shm.xml /opt/arx5-dual-collection/config/fastdds-shm.xml
-COPY scripts/ /opt/arx5-dual-collection/scripts/
-
-RUN python3 -m pip install \
-        --break-system-packages \
-        --no-build-isolation \
-        --no-deps \
-        /opt/arx5-runtime
 
 ENTRYPOINT ["/ros_entrypoint.sh"]
 CMD ["arx5-collect", "--help"]

@@ -217,8 +217,10 @@ class ProductionSession:
         def stop_episode(stopping: RecordingStopping) -> None:
             if recording_stopping_hook is not None:
                 recording_stopping_hook(stopping)
-            elif stopping.outcome is EpisodeOutcome.ABORTED:
-                self._confirm_gravity_compensation("Episode aborted")
+            elif stopping.outcome is not EpisodeOutcome.SUCCESS:
+                self._confirm_gravity_compensation(
+                    f"Episode {stopping.outcome.value}"
+                )
 
         return EpisodeRuntime(
             store=EpisodeStore(request.output_root, min_free_bytes=self.min_free_bytes),
@@ -227,6 +229,7 @@ class ProductionSession:
             monitor=self.monitor,
             software_version=self.software_version,
             pre_episode_check=prepare_episode,
+            runtime_check=self.supervisor.require_running,
             metadata_context_provider=metadata_context_provider,
             recording_started_hook=recording_started_hook,
             recording_stopping_hook=stop_episode,

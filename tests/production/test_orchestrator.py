@@ -342,5 +342,39 @@ class ProductionSessionTest(unittest.TestCase):
 
         self.assertEqual(events, ["home:gcomp"])
 
+    def test_ordinary_failed_episode_stop_enters_gcomp(self) -> None:
+        events: list[str] = []
+        station = load_station_config(ROOT / "config" / "station.example.json")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            supervisor = FakeSupervisor(events)
+            session = ProductionSession(
+                station,
+                root / "episodes",
+                root / "logs",
+                "0.1.0",
+                min_free_bytes=0,
+                identity=FakeIdentity(),  # type: ignore[arg-type]
+                system=FakeSystem(events),  # type: ignore[arg-type]
+                supervisor=supervisor,  # type: ignore[arg-type]
+                readiness=FakeReadiness(events),  # type: ignore[arg-type]
+                commands=FakeCommands(),  # type: ignore[arg-type]
+                monitor=FakeSessionMonitor(events),
+                home_controller=FakeHomeController(events),
+            )
+            request = EpisodeRequest(
+                "test",
+                "test",
+                root / "episodes",
+                ROOT / "config" / "station.example.json",
+                (),
+            )
+            runtime = session.create_runtime(request, object())  # type: ignore[arg-type]
+            assert runtime.recording_stopping_hook is not None
+            assert runtime.runtime_check == supervisor.require_running
+            runtime.recording_stopping_hook(RecordingStopping(EpisodeOutcome.FAIL, 1))
+
+        self.assertEqual(events, ["home:gcomp"])
+
 if __name__ == "__main__":
     unittest.main()
