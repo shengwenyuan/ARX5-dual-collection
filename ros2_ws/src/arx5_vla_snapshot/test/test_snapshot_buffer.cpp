@@ -21,7 +21,7 @@ sensor_msgs::msg::Image::SharedPtr image(std::int64_t stamp_ns)
   set_stamp(message->header, stamp_ns);
   message->width = 2;
   message->height = 2;
-  message->encoding = "yuyv";
+  message->encoding = "rgb8";
   message->step = 4;
   message->data.resize(8);
   return message;

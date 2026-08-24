@@ -14,7 +14,8 @@ sys.path.insert(0, str(PACKAGE_ROOT))
 
 from arx5_camera_source.camera_config import load_station_cameras  # noqa: E402
 from arx5_camera_source.image_contract import (  # noqa: E402
-    color_contract,
+    RGB8_BYTES_PER_PIXEL,
+    RGB8_ENCODING,
     timestamp_parts,
     validate_image_buffer,
 )
@@ -58,11 +59,9 @@ class CameraConfigTest(unittest.TestCase):
 
 
 class ImageContractTest(unittest.TestCase):
-    def test_color_contracts(self) -> None:
-        self.assertEqual(color_contract("YUYV").ros_encoding, "yuv422_yuy2")
-        self.assertEqual(color_contract("rgb8").bytes_per_pixel, 3)
-        with self.assertRaises(ValueError):
-            color_contract("bgr8")
+    def test_color_contract_is_fixed_to_rgb8(self) -> None:
+        self.assertEqual(RGB8_ENCODING, "rgb8")
+        self.assertEqual(RGB8_BYTES_PER_PIXEL, 3)
 
     def test_timestamp_conversion(self) -> None:
         self.assertEqual(timestamp_parts(1_234.56789), (1, 234_567_890))
@@ -70,11 +69,11 @@ class ImageContractTest(unittest.TestCase):
             timestamp_parts(-1.0)
 
     def test_image_buffer_contract(self) -> None:
-        validate_image_buffer(848, 480, 1696, 814_080, 2)
+        validate_image_buffer(848, 480, 2544, 1_221_120, 3)
         with self.assertRaises(ValueError):
-            validate_image_buffer(848, 480, 1000, 480_000, 2)
+            validate_image_buffer(848, 480, 1000, 480_000, 3)
         with self.assertRaises(ValueError):
-            validate_image_buffer(848, 480, 1696, 10, 2)
+            validate_image_buffer(848, 480, 2544, 10, 3)
 
 
 if __name__ == "__main__":

@@ -8,7 +8,7 @@ services:
       target: production
       args:
         SOURCE_REVISION: "${ARX5_SOURCE_REVISION:-unknown}"
-    image: arx5-dual-collection:production
+    image: ${ARX5_COLLECTOR_IMAGE:-arx5-dual-collection:production}
     privileged: true
     network_mode: host
     shm_size: "1gb"

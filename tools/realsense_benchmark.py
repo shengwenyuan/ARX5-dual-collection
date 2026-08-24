@@ -15,7 +15,7 @@ from arx5_collection.metrics import timing_summary
 def stream_config(rs: Any, serial: str, width: int, height: int, fps: int) -> Any:
     config = rs.config()
     config.enable_device(serial)
-    config.enable_stream(rs.stream.color, width, height, rs.format.yuyv, fps)
+    config.enable_stream(rs.stream.color, width, height, rs.format.rgb8, fps)
     config.enable_stream(rs.stream.depth, width, height, rs.format.z16, fps)
     return config
 

@@ -6,11 +6,12 @@ from typing import Any
 from arx5_collection.cleaning.models import MessageRef
 
 
-SUPPORTED_ENCODINGS = {"yuv422_yuy2", "yuyv", "yuy2"}
+RGB8_ENCODING = "rgb8"
+LEGACY_YUYV_ENCODINGS = {"yuv422_yuy2", "yuyv", "yuy2"}
 
 
-def decode_yuyv(data: bytes, width: int, height: int, step: int):
-    """Decode packed YUYV using the BT.601 limited-range conversion."""
+def _decode_legacy_yuyv(data: bytes, width: int, height: int, step: int):
+    """Decode historical packed YUYV using BT.601 limited-range conversion."""
 
     import numpy as np
 
@@ -40,16 +41,28 @@ def decode_yuyv(data: bytes, width: int, height: int, step: int):
     return rgb
 
 
+def _read_rgb8(data: bytes, width: int, height: int, step: int):
+    """Read an RGB8 message while discarding only declared row padding."""
+
+    import numpy as np
+
+    if width <= 0 or height <= 0:
+        raise ValueError(f"RGB8 image dimensions must be positive: {width}x{height}")
+    if step < width * 3 or len(data) < step * height:
+        raise ValueError("RGB8 image payload is shorter than its declared dimensions")
+    rows = np.frombuffer(data, dtype=np.uint8, count=step * height).reshape(height, step)
+    return rows[:, : width * 3].reshape(height, width, 3)
+
+
 def decode_color_message(message: Any):
     encoding = str(message.encoding).lower()
-    if encoding not in SUPPORTED_ENCODINGS:
-        raise ValueError(f"unsupported color encoding: {message.encoding}")
-    return decode_yuyv(
-        bytes(message.data),
-        int(message.width),
-        int(message.height),
-        int(message.step),
-    )
+    dimensions = (int(message.width), int(message.height), int(message.step))
+    payload = bytes(message.data)
+    if encoding == RGB8_ENCODING:
+        return _read_rgb8(payload, *dimensions)
+    if encoding in LEGACY_YUYV_ENCODINGS:
+        return _decode_legacy_yuyv(payload, *dimensions)
+    raise ValueError(f"unsupported color encoding: {message.encoding}")
 
 
 def extract_selected_rgb(

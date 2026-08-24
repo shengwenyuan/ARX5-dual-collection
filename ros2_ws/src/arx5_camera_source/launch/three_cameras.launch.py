@@ -12,7 +12,6 @@ from arx5_camera_source.camera_config import load_station_cameras
 
 def _launch_cameras(context: LaunchContext) -> list[Node]:
     config_path = Path(LaunchConfiguration("station_config").perform(context))
-    color_format = LaunchConfiguration("color_format").perform(context)
     reliability = LaunchConfiguration("reliability").perform(context)
     frame_timeout_ms = int(LaunchConfiguration("frame_timeout_ms").perform(context))
     return [
@@ -30,7 +29,6 @@ def _launch_cameras(context: LaunchContext) -> list[Node]:
                     "width": 848,
                     "height": 480,
                     "fps": 30,
-                    "color_format": color_format,
                     "reliability": reliability,
                     "frame_timeout_ms": frame_timeout_ms,
                 }
@@ -44,7 +42,6 @@ def generate_launch_description() -> LaunchDescription:
     return LaunchDescription(
         [
             DeclareLaunchArgument("station_config"),
-            DeclareLaunchArgument("color_format", default_value="yuyv"),
             DeclareLaunchArgument("reliability", default_value="reliable"),
             DeclareLaunchArgument("frame_timeout_ms", default_value="5000"),
             OpaqueFunction(function=_launch_cameras),

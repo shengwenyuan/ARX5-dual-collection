@@ -37,6 +37,8 @@ using GetVlaSnapshot = arx5_collection_interfaces::srv::GetVlaSnapshot;
 constexpr int kRequiredWidth = 848;
 constexpr int kRequiredHeight = 480;
 constexpr int kRequiredFps = 30;
+constexpr std::size_t kRgbBytesPerPixel = 3;
+constexpr std::size_t kDepthBytesPerPixel = 2;
 
 std::int64_t timestamp_ns(double timestamp_ms)
 {
@@ -159,7 +161,7 @@ public:
     rs2::config config;
     config.enable_device(serial_);
     config.enable_stream(
-      RS2_STREAM_COLOR, width_, height_, RS2_FORMAT_YUYV, fps_);
+      RS2_STREAM_COLOR, width_, height_, RS2_FORMAT_RGB8, fps_);
     config.enable_stream(
       RS2_STREAM_DEPTH, width_, height_, RS2_FORMAT_Z16, fps_);
 
@@ -215,8 +217,8 @@ private:
         const auto frame_id = "camera_" + role_ + "_color_optical_frame";
         frame_sink_(CameraFrames{
           role_,
-          image_message(color, "yuv422_yuy2", 2, stamp, frame_id),
-          image_message(depth, "16UC1", 2, stamp, frame_id),
+          image_message(color, "rgb8", kRgbBytesPerPixel, stamp, frame_id),
+          image_message(depth, "16UC1", kDepthBytesPerPixel, stamp, frame_id),
           stamp});
       }
     } catch (const std::exception & error) {

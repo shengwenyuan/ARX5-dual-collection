@@ -22,7 +22,7 @@ from .config import DaggerCollectorSettings
 from .observation import Pi05ObservationEncoder
 from .openpi_transport import OpenPiDaggerTransport
 from .policy_client import AsyncPi05PolicyClient
-from .ros_snapshot import OpenCvYuyvConverter, RosVlaSnapshotClient
+from .ros_snapshot import OpenCvRgbResizer, RosVlaSnapshotClient
 from .shadow import (
     JsonlShadowLog,
     ShadowEpisodeHooks,
@@ -162,7 +162,7 @@ class ShadowApplication:
                 observations=observations,
                 encoder=Pi05ObservationEncoder(
                     self.settings.grippers,
-                    OpenCvYuyvConverter(
+                    OpenCvRgbResizer(
                         width=self.settings.checkpoint_profile.input.width,
                         height=self.settings.checkpoint_profile.input.height,
                     ),
@@ -336,7 +336,7 @@ class TakeoverApplication:
                 observations=observations,
                 encoder=Pi05ObservationEncoder(
                     self.settings.grippers,
-                    OpenCvYuyvConverter(
+                    OpenCvRgbResizer(
                         width=self.settings.checkpoint_profile.input.width,
                         height=self.settings.checkpoint_profile.input.height,
                     ),

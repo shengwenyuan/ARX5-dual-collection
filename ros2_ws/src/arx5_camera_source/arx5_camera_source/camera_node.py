@@ -17,8 +17,8 @@ from rclpy.qos import (
 from sensor_msgs.msg import Image
 
 from arx5_camera_source.image_contract import (
-    ColorContract,
-    color_contract,
+    RGB8_BYTES_PER_PIXEL,
+    RGB8_ENCODING,
     timestamp_parts,
     validate_image_buffer,
 )
@@ -37,9 +37,6 @@ class D405Source(Node):
         )
         self.status_period_s = float(
             self.declare_parameter("status_period_s", 1.0).value
-        )
-        self.color = color_contract(
-            str(self.declare_parameter("color_format", "yuyv").value)
         )
         self.reliability = str(
             self.declare_parameter("reliability", "reliable").value
@@ -116,14 +113,13 @@ class D405Source(Node):
             raise RuntimeError(f"RealSense {self.serial} does not expose Global Time")
 
     def _stream_config(self) -> Any:
-        realsense_format = getattr(rs.format, self.color.realsense_format)
         config = rs.config()
         config.enable_device(self.serial)
         config.enable_stream(
             rs.stream.color,
             self.width,
             self.height,
-            realsense_format,
+            rs.format.rgb8,
             self.fps,
         )
         config.enable_stream(
@@ -141,7 +137,7 @@ class D405Source(Node):
         self._verify_global_time(profile.get_device())
         self.get_logger().info(
             f"started {self.camera_name} D405 {self.serial} "
-            f"at {self.width}x{self.height}@{self.fps} {self.color.name} "
+            f"at {self.width}x{self.height}@{self.fps} {RGB8_ENCODING} "
             f"{self.reliability}"
         )
 
@@ -201,8 +197,8 @@ class D405Source(Node):
         frame_id = f"camera_{self.camera_name}_color_optical_frame"
         color_message = self._image_message(
             color_frame,
-            self.color.ros_encoding,
-            self.color.bytes_per_pixel,
+            RGB8_ENCODING,
+            RGB8_BYTES_PER_PIXEL,
             timestamp_ms,
             frame_id,
         )

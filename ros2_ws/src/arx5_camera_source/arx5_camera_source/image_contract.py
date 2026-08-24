@@ -1,29 +1,10 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
 
 
-@dataclass(frozen=True)
-class ColorContract:
-    name: str
-    realsense_format: str
-    ros_encoding: str
-    bytes_per_pixel: int
-
-
-_COLOR_CONTRACTS = {
-    "yuyv": ColorContract("yuyv", "yuyv", "yuv422_yuy2", 2),
-    "rgb8": ColorContract("rgb8", "rgb8", "rgb8", 3),
-}
-
-
-def color_contract(name: str) -> ColorContract:
-    try:
-        return _COLOR_CONTRACTS[name.lower()]
-    except KeyError as error:
-        choices = ", ".join(sorted(_COLOR_CONTRACTS))
-        raise ValueError(f"unsupported color format {name!r}; expected one of: {choices}") from error
+RGB8_ENCODING = "rgb8"
+RGB8_BYTES_PER_PIXEL = 3
 
 
 def timestamp_parts(timestamp_ms: float) -> tuple[int, int]:

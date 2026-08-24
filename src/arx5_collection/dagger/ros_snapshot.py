@@ -9,7 +9,6 @@ from .observation import (
     RawArmSample,
     RgbFrame,
     VlaObservationStep,
-    YuyvFrame,
 )
 
 
@@ -96,8 +95,8 @@ class RosVlaSnapshotClient:
         )
 
 
-class OpenCvYuyvConverter:
-    """Run sensor-format conversion in the headless OpenCV native runtime."""
+class OpenCvRgbResizer:
+    """Resize an RGB frame without changing its channel semantics."""
 
     def __init__(self, width: int = 640, height: int = 360) -> None:
         if width <= 0 or height <= 0:
@@ -105,14 +104,13 @@ class OpenCvYuyvConverter:
         self.width = width
         self.height = height
 
-    def convert(self, frame: YuyvFrame) -> RgbFrame:
+    def prepare(self, frame: RgbFrame) -> RgbFrame:
         import cv2
         import numpy as np
 
-        source = np.frombuffer(frame.data, dtype=np.uint8).reshape(
-            frame.height, frame.width, 2
+        rgb = np.frombuffer(frame.data, dtype=np.uint8).reshape(
+            frame.height, frame.width, 3
         )
-        rgb = cv2.cvtColor(source, cv2.COLOR_YUV2RGB_YUY2)
         if (frame.width, frame.height) != (self.width, self.height):
             rgb = cv2.resize(
                 rgb, (self.width, self.height), interpolation=cv2.INTER_AREA
@@ -145,16 +143,20 @@ def _optional_ns(value: int) -> int | None:
     return None if value < 0 else value
 
 
-def _camera_frame(message: Any) -> YuyvFrame:
+def _camera_frame(message: Any) -> RgbFrame:
     encoding = str(message.encoding).lower()
-    if encoding not in {"yuyv", "yuy2", "yuv422_yuy2"}:
+    if encoding != "rgb8":
         raise RuntimeError(f"snapshot image encoding is unsupported: {encoding!r}")
-    return YuyvFrame(
-        data=message.data,
+    width = int(message.width)
+    height = int(message.height)
+    step = int(message.step)
+    if step != width * 3:
+        raise RuntimeError("snapshot RGB8 image must be tightly packed")
+    return RgbFrame(
+        data=bytes(message.data),
         stamp_ns=_stamp_ns(message.header.stamp),
-        width=int(message.width),
-        height=int(message.height),
-        step=int(message.step),
+        width=width,
+        height=height,
     )
 
 

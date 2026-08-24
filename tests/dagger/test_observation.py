@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+from types import SimpleNamespace
 
 from arx5_collection.dagger.observation import (
     GripperCalibration,
@@ -8,9 +9,8 @@ from arx5_collection.dagger.observation import (
     RawArmSample,
     RgbFrame,
     VlaObservationStep,
-    YuyvFrame,
 )
-from arx5_collection.dagger.ros_snapshot import OpenCvYuyvConverter
+from arx5_collection.dagger.ros_snapshot import OpenCvRgbResizer, _camera_frame
 
 try:
     import cv2  # noqa: F401
@@ -18,16 +18,16 @@ except ImportError:
     cv2 = None
 
 
-def frame(stamp_ns: int) -> YuyvFrame:
-    return YuyvFrame(b"\x00" * 8, stamp_ns, width=2, height=2, step=4)
+def frame(stamp_ns: int) -> RgbFrame:
+    return RgbFrame(b"\x00" * 12, stamp_ns, width=2, height=2)
 
 
 def arm(stamp_ns: int, value: float = 0.0) -> RawArmSample:
     return RawArmSample((value,) * 6, value, stamp_ns)
 
 
-class Converter:
-    def convert(self, source: YuyvFrame) -> RgbFrame:
+class Preprocessor:
+    def prepare(self, source: RgbFrame) -> RgbFrame:
         return RgbFrame(b"\x00" * 12, source.stamp_ns, width=2, height=2)
 
 
@@ -42,7 +42,7 @@ class ObservationTest(unittest.TestCase):
             right_arm=arm(999, 0.0),
         )
         encoder = Pi05ObservationEncoder(
-            GripperCalibration(-3.0, 0.0, -3.0, 0.0), Converter()
+            GripperCalibration(-3.0, 0.0, -3.0, 0.0), Preprocessor()
         )
 
         observation = encoder.encode(step)
@@ -54,17 +54,51 @@ class ObservationTest(unittest.TestCase):
         self.assertEqual(observation.cutoff_ns, 1000)
 
     @unittest.skipIf(cv2 is None, "headless OpenCV is unavailable")
-    def test_headless_opencv_converter_preserves_black_and_white(self) -> None:
-        # Two rows of black followed by two rows of white; each YUYV pair shares UV.
-        black_pair = bytes((16, 128, 16, 128))
-        white_pair = bytes((235, 128, 235, 128))
-        payload = black_pair * 4 + white_pair * 4
-        source = YuyvFrame(payload, 10, width=4, height=4, step=8)
+    def test_headless_opencv_resizer_preserves_rgb_channel_order(self) -> None:
+        source = RgbFrame(
+            bytes((255, 0, 0, 0, 0, 255)),
+            10,
+            width=2,
+            height=1,
+        )
 
-        converted = OpenCvYuyvConverter(width=2, height=2).convert(source)
+        converted = OpenCvRgbResizer(width=2, height=1).prepare(source)
 
-        self.assertEqual(converted.data[:6], b"\x00" * 6)
-        self.assertEqual(converted.data[6:], b"\xff" * 6)
+        self.assertEqual(converted.data, source.data)
+        self.assertEqual(converted.stamp_ns, source.stamp_ns)
+
+    def test_snapshot_accepts_only_tightly_packed_rgb8(self) -> None:
+        message = SimpleNamespace(
+            encoding="rgb8",
+            data=bytes((255, 0, 0, 0, 0, 255)),
+            width=2,
+            height=1,
+            step=6,
+            header=SimpleNamespace(stamp=SimpleNamespace(sec=1, nanosec=2)),
+        )
+
+        converted = _camera_frame(message)
+
+        self.assertEqual(converted.data, message.data)
+        self.assertEqual(converted.stamp_ns, 1_000_000_002)
+
+    def test_snapshot_rejects_legacy_encoding_and_row_padding(self) -> None:
+        message = SimpleNamespace(
+            encoding="yuv422_yuy2",
+            data=b"\x00" * 4,
+            width=2,
+            height=1,
+            step=4,
+            header=SimpleNamespace(stamp=SimpleNamespace(sec=0, nanosec=1)),
+        )
+        with self.assertRaises(RuntimeError):
+            _camera_frame(message)
+
+        message.encoding = "rgb8"
+        message.data = b"\x00" * 8
+        message.step = 8
+        with self.assertRaises(RuntimeError):
+            _camera_frame(message)
 
 
 if __name__ == "__main__":

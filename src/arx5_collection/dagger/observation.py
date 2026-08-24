@@ -60,23 +60,6 @@ class ObservationConstraints:
 
 
 @dataclass(frozen=True, slots=True)
-class YuyvFrame:
-    data: object
-    stamp_ns: int
-    width: int
-    height: int
-    step: int
-
-    def __post_init__(self) -> None:
-        if self.stamp_ns < 0 or self.width <= 0 or self.height <= 0:
-            raise ValueError("image dimensions and timestamp are invalid")
-        if self.step != self.width * 2:
-            raise ValueError("YUYV frame must be tightly packed")
-        if len(self.data) != self.step * self.height:  # type: ignore[arg-type]
-            raise ValueError("YUYV frame buffer size is invalid")
-
-
-@dataclass(frozen=True, slots=True)
 class RgbFrame:
     data: bytes
     stamp_ns: int
@@ -111,9 +94,9 @@ class RawArmSample:
 @dataclass(frozen=True, slots=True)
 class VlaObservationStep:
     cutoff_ns: int
-    camera_left: YuyvFrame
-    camera_overview: YuyvFrame
-    camera_right: YuyvFrame
+    camera_left: RgbFrame
+    camera_overview: RgbFrame
+    camera_right: RgbFrame
     left_arm: RawArmSample
     right_arm: RawArmSample
 
@@ -172,16 +155,16 @@ class Pi05Observation:
             raise ValueError("observation cutoff must not be negative")
 
 
-class ImageConverter(Protocol):
-    def convert(self, frame: YuyvFrame) -> RgbFrame: ...
+class ImagePreprocessor(Protocol):
+    def prepare(self, frame: RgbFrame) -> RgbFrame: ...
 
 
 class Pi05ObservationEncoder:
     def __init__(
-        self, grippers: GripperCalibration, image_converter: ImageConverter
+        self, grippers: GripperCalibration, image_preprocessor: ImagePreprocessor
     ) -> None:
         self.grippers = grippers
-        self.image_converter = image_converter
+        self.image_preprocessor = image_preprocessor
 
     def encode(self, step: VlaObservationStep) -> Pi05Observation:
         state = (
@@ -192,9 +175,9 @@ class Pi05ObservationEncoder:
         )
         return Pi05Observation(
             state=state,
-            camera_high=self.image_converter.convert(step.camera_overview),
-            camera_left_wrist=self.image_converter.convert(step.camera_left),
-            camera_right_wrist=self.image_converter.convert(step.camera_right),
+            camera_high=self.image_preprocessor.prepare(step.camera_overview),
+            camera_left_wrist=self.image_preprocessor.prepare(step.camera_left),
+            camera_right_wrist=self.image_preprocessor.prepare(step.camera_right),
             cutoff_ns=step.cutoff_ns,
         )
 
