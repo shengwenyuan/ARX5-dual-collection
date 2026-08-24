@@ -181,7 +181,7 @@ class AuthorityTimeline:
         intervention_id: int,
         control_epoch: int,
         reason: str,
-    ) -> None:
+    ) -> int:
         monotonic_time_ns = self.clock_ns()
         self._close_active(self._offset_s(monotonic_time_ns))
         self._emit(
@@ -191,6 +191,7 @@ class AuthorityTimeline:
             reason=reason,
             monotonic_time_ns=monotonic_time_ns,
         )
+        return monotonic_time_ns
 
     def finish_episode(self, monotonic_time_ns: int) -> None:
         self._require_active()
@@ -273,6 +274,8 @@ class TakeoverController:
         self.episode_id: str | None = None
         self.intervention_id = 0
         self._safety_failure: RuntimeError | None = None
+        self._fault_detail: str | None = None
+        self._fault_time_ns: int | None = None
 
     def start_episode(self, started: RecordingStarted) -> None:
         if self.state is not TakeoverState.IDLE:
@@ -280,6 +283,8 @@ class TakeoverController:
         self.episode_id = started.episode_id
         self.intervention_id = 0
         self._safety_failure = None
+        self._fault_detail = None
+        self._fault_time_ns = None
         self.timeline.start_episode(self.control_epoch, started.monotonic_time_ns)
         self.state = TakeoverState.RESUME_PENDING
         try:
@@ -341,6 +346,17 @@ class TakeoverController:
             )
         return self.state
 
+    def episode_fault_signal(self) -> TriggerSignal | None:
+        if self.state is not TakeoverState.FAULT_HOLD:
+            return None
+        if self._fault_detail is None or self._fault_time_ns is None:
+            raise RuntimeError("FAULT_HOLD is missing its failure record")
+        return TriggerSignal(
+            TriggerEvent.FAIL,
+            self._fault_time_ns,
+            self._fault_detail,
+        )
+
     def stop_episode(self, stopping: RecordingStopping) -> None:
         if self.state is TakeoverState.IDLE:
             return
@@ -356,6 +372,8 @@ class TakeoverController:
         self.state = TakeoverState.IDLE
         self.episode_id = None
         self.intervention_id = 0
+        self._fault_detail = None
+        self._fault_time_ns = None
         if self._safety_failure is not None:
             failure, self._safety_failure = self._safety_failure, None
             raise failure
@@ -423,11 +441,13 @@ class TakeoverController:
                 f"{cleanup_error}"
             )
         reason = "; ".join(failures)
-        self.timeline.fault_hold(
+        fault_time_ns = self.timeline.fault_hold(
             self.intervention_id,
             self.control_epoch,
             reason,
         )
+        self._fault_detail = reason
+        self._fault_time_ns = fault_time_ns
         self.state = TakeoverState.FAULT_HOLD
         self.status_sink(f"DAGGER FAULT_HOLD: {reason}")
 
@@ -445,17 +465,22 @@ class TakeoverRecordTrigger:
 
     def wait(self, timeout_s: float) -> TriggerSignal | None:
         signal = self.trigger.wait(timeout_s)
+        self.controller.poll_runtime()
+        fault = self.controller.episode_fault_signal()
+        if fault is not None:
+            return fault
         if signal is None:
-            self.controller.poll_runtime()
             return None
         if signal.event is DaggerTriggerEvent.RECORD_TOGGLE:
             return TriggerSignal(TriggerEvent.ACTIVATE, signal.monotonic_time_ns)
         if signal.event is DaggerTriggerEvent.ABORT:
             return TriggerSignal(TriggerEvent.ABORT, signal.monotonic_time_ns)
-        self.controller.poll_runtime()
         if signal.event is DaggerTriggerEvent.OWNERSHIP_TOGGLE:
             if self.controller.state is TakeoverState.IDLE:
                 self.status_sink("DAgger ownership toggle ignored before Episode start")
             else:
                 self.controller.toggle_ownership(signal.monotonic_time_ns)
+                fault = self.controller.episode_fault_signal()
+                if fault is not None:
+                    return fault
         return None

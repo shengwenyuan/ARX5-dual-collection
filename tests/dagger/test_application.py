@@ -7,7 +7,9 @@ from pathlib import Path
 from arx5_collection.dagger.application import (
     DaggerApplicationBuilder,
     DaggerRunSpec,
+    DaggerSessionBuilder,
 )
+from arx5_collection.dagger.config import DaggerCollectorSettings
 
 
 ROOT = Path(__file__).parents[2]
@@ -27,6 +29,26 @@ class FakeSessionBuilder:
 
 
 class DaggerApplicationBuilderTest(unittest.TestCase):
+    def test_dagger_session_routes_failures_to_dagger_fail(self) -> None:
+        settings = DaggerCollectorSettings.load(
+            ROOT / "config" / "dagger.policy.example.toml"
+        )
+        spec = DaggerRunSpec(
+            station_config=ROOT / "config" / "station.example.json",
+            task_config=ROOT / "config" / "task.eight-stream.json",
+            policy_config=ROOT / "config" / "dagger.policy.example.toml",
+            output_root=Path("episodes"),
+            episodes=1,
+            min_free_gib=1,
+            readiness_timeout_s=30.0,
+            software_version="test",
+            session_id="session-1",
+        )
+
+        session = DaggerSessionBuilder().build(spec, settings)
+
+        self.assertEqual(session.fail_directory, "dagger_fail")
+
     def test_builds_shadow_from_profile_without_starting_resources(self) -> None:
         fake_session_builder = FakeSessionBuilder()
         with tempfile.TemporaryDirectory() as directory:

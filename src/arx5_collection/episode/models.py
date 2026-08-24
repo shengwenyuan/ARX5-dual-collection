@@ -114,6 +114,7 @@ class EpisodeResult:
     metadata_path: Path
     stream_metrics: tuple[StreamMetrics, ...] = ()
     errors: tuple[str, ...] = ()
+    session_blocked: bool = False
 
     def __post_init__(self) -> None:
         if not self.episode_id:

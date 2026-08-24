@@ -156,7 +156,7 @@ def run_episode_loop(
                 "recording interrupted",
             ):
                 return 0
-            if result.outcome is EpisodeOutcome.FAIL:
+            if result.outcome is EpisodeOutcome.FAIL and result.session_blocked:
                 render_session_blocked(
                     result="fail",
                     reason="; ".join(result.errors),
@@ -165,6 +165,12 @@ def run_episode_loop(
                         "G_COMPENSATION confirmed"
                     ),
                     output=error_output,
+                )
+            elif result.outcome is EpisodeOutcome.FAIL:
+                print(
+                    "EPISODE FAILED - SESSION READY: " + "; ".join(result.errors),
+                    file=error_output,
+                    flush=True,
                 )
     except KeyboardInterrupt:
         return 0

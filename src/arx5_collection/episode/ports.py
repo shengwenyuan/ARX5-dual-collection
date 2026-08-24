@@ -11,16 +11,22 @@ from .models import StreamMetrics, StreamSpec
 class TriggerEvent(str, Enum):
     ACTIVATE = "activate"
     ABORT = "abort"
+    FAIL = "fail"
 
 
 @dataclass(frozen=True, slots=True)
 class TriggerSignal:
     event: TriggerEvent
     monotonic_time_ns: int
+    detail: str | None = None
 
     def __post_init__(self) -> None:
         if self.monotonic_time_ns < 0:
             raise ValueError("monotonic_time_ns must not be negative")
+        if self.event is TriggerEvent.FAIL and not self.detail:
+            raise ValueError("fail trigger requires detail")
+        if self.event is not TriggerEvent.FAIL and self.detail is not None:
+            raise ValueError("only fail trigger may include detail")
 
 
 @runtime_checkable

@@ -73,6 +73,7 @@ class ProductionSession:
         home_timing_sink: HomeTimingSink | None = None,
         check_sink: CheckSink | None = None,
         warning_sink: WarningSink | None = None,
+        fail_directory: str = "fail",
     ) -> None:
         if min_free_bytes < 0:
             raise ValueError("min_free_bytes must not be negative")
@@ -102,6 +103,7 @@ class ProductionSession:
         )
         self.check_sink = check_sink or (lambda result: None)
         self.warning_sink = warning_sink or (lambda warning: None)
+        self.fail_directory = fail_directory
         self._system_started = False
         self._readiness_started = False
         self._monitor_open = False
@@ -223,7 +225,11 @@ class ProductionSession:
                 )
 
         return EpisodeRuntime(
-            store=EpisodeStore(request.output_root, min_free_bytes=self.min_free_bytes),
+            store=EpisodeStore(
+                request.output_root,
+                min_free_bytes=self.min_free_bytes,
+                fail_directory=self.fail_directory,
+            ),
             trigger=trigger,
             backend=self.backend,
             monitor=self.monitor,

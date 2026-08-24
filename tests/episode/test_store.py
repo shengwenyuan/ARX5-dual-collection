@@ -94,6 +94,19 @@ class EpisodeStoreTest(unittest.TestCase):
         self.assertEqual(stored.directory, self.root / "fail" / "episode-failed")
         self.assertTrue(stored.metadata_path.is_file())
 
+    def test_failed_commit_supports_mode_specific_subdirectory(self) -> None:
+        store = EpisodeStore(self.root, fail_directory="dagger_fail")
+        pending = store.prepare("episode-dagger-failed")
+        pending.mcap_path.write_bytes(b"mcap")
+        pending.metadata_path.write_text("{}")
+
+        stored = store.commit(pending, EpisodeOutcome.FAIL)
+
+        self.assertEqual(
+            stored.directory,
+            self.root / "dagger_fail" / "episode-dagger-failed",
+        )
+
     def test_list_partials_only_reports(self) -> None:
         first = self.store.prepare("first")
         second = self.store.prepare("second")

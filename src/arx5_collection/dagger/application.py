@@ -94,6 +94,7 @@ class DaggerSessionBuilder:
             warning_sink=lambda message: print(
                 f"WARNING {message}", file=self.stderr
             ),
+            fail_directory="dagger_fail",
         )
 
     def _render_check(self, result: CheckResult) -> None:

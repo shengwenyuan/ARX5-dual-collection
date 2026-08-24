@@ -23,6 +23,8 @@ DAgger 后处理位于通用清洗之后、模型 selector 之前。它不修改
 
 事件含义写死在 `dagger-authority-v1`，不允许 recipe 重映射。人工区间以 Episode 结束或 `FAULT_HOLD` 收尾但没有 `RESUME_REQUESTED` 时标记为 `incomplete_correction`，只审计。后续 fault 不否定此前已经闭合的 correction。
 
+Take-over fault Episode 保持 metadata `outcome=fail`，原始数据单独落入 `dagger_fail/<episode_id>`。发现 `FAULT_HOLD` 后只允许保留此前已经完整闭合的 `expert_correction`；未闭合纠正与 fault 后区间不得进入 selection。普通采集的 `fail/` 与 DAgger 的 `dagger_fail/` 不混用。
+
 ## 时间与一致性
 
 1. authority sequence 必须连续，monotonic、bag time 和 control epoch 不得回退。
@@ -62,7 +64,7 @@ clean
   → to-lerobot（单一混合训练集）
 ```
 
-DAgger selector 对每个完整 correction 独立运行原有 v2 等 EEF 距离配方；不跨 intervention 拼接，不增加 pre/post roll，不修改 idle、最短运动段、尾部裁剪、action 或 gripper 规则。`fail/aborted` 和 C 级 Episode 仍不进入训练。
+DAgger selector 对每个完整 correction 独立运行原有 v2 等 EEF 距离配方；不跨 intervention 拼接，不增加 pre/post roll，不修改 idle、最短运动段、尾部裁剪、action 或 gripper 规则。`dagger_fail/` 只贡献 fault 前已闭合的 correction；未闭合 correction、fault 区间、`aborted/` 和 C 级 Episode 均不进入训练。
 
 ## CLI 模板
 

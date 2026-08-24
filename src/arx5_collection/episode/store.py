@@ -25,11 +25,19 @@ class StoredEpisode:
 
 
 class EpisodeStore:
-    def __init__(self, root: Path, min_free_bytes: int = 0) -> None:
+    def __init__(
+        self,
+        root: Path,
+        min_free_bytes: int = 0,
+        fail_directory: str = "fail",
+    ) -> None:
         if min_free_bytes < 0:
             raise ValueError("min_free_bytes must not be negative")
+        if not fail_directory or Path(fail_directory).name != fail_directory:
+            raise ValueError("fail_directory must be a single path name")
         self.root = root
         self.min_free_bytes = min_free_bytes
+        self.fail_directory = fail_directory
 
     def prepare(self, episode_id: str) -> PendingEpisode:
         self._validate_episode_id(episode_id)
@@ -70,7 +78,7 @@ class EpisodeStore:
 
         outcome_roots = {
             EpisodeOutcome.SUCCESS: self.root,
-            EpisodeOutcome.FAIL: self.root / "fail",
+            EpisodeOutcome.FAIL: self.root / self.fail_directory,
             EpisodeOutcome.ABORTED: self.root / "aborted",
         }
         final_dir = outcome_roots[outcome] / pending.episode_id

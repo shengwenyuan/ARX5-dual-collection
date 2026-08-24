@@ -104,7 +104,7 @@ D1a 的本地纯逻辑与 Application 组装测试已通过。W3 无硬件集成
 - 已冻结 v2 首版参数：robot-space absolute `14D`、`50/10/25 Hz`、joint step/departure `0.25/1.5 rad`、normalized gripper `[0,1]`、Policy wait `0.5 s`、command watchdog `0.12 s`。顺序执行 10 步后才请求 fresh observation；间隙不重复发布，只由 Vendor 保持最后 target。
 - 新增 `FixedRateCommandExecutor` 与唯一 `RosDualArmControlPort`。paired publish 在 command lease 锁内完成；takeover 与旧 epoch Future/Publisher 线程并发时，gate close 返回后不会再产生旧 action。
 - Vendor patch 将 `remote_slave` command callback 默认锁死；GO_HOME 和 gravity compensation 都再次锁死，只有 Gateway 完成 fresh action、安全检查和双臂 `enable_policy_control` 后才能开放物理控制。
-- Episode 正常结束也执行 close gate、epoch++、clear action 和 G_COMP；任何 runtime fault 执行同一 fail-closed 路径、记录 `FAULT_HOLD`，但不自动结束 Episode。
+- Episode 正常结束也执行 close gate、epoch++、clear action 和 G_COMP；任何 Take-over runtime fault 执行同一 fail-closed 路径、记录 `FAULT_HOLD`，并立即 finalizing 到 `dagger_fail/`。这是 Episode 级 failure，不阻塞长生命周期 Session；共享采集链路 failure 仍使用 `fail/ + SESSION BLOCKED`。
 - w3 首版模型固定为 `stacking_five_paper_cups_pi05_v2/9999`，tree SHA-256 为 `6855485b55e04707d9c0aa96ad4ca1c8374afac5919d9f4777b71023ea7021a0`；宿主机路径不进入 profile，Compose 只挂载 checkpoint root。
 - 本地全仓 `251 passed, 2 skipped`。w3 Collector 镜像 `sha256:691c9cbf462ef55cf8c3c0f8e53ec77ddf977588117d6aee80d68b369b7444f5` 已完成固定 ARX commit、Vendor patch 和六个 ROS package 编译；60 项 Container DAgger tests、CLI、ROS feedback/paired-command loopback 与重复 Publisher guard 通过。
 - w3 完整 Policy 镜像重建受当前 PyPI DNS 阻断；在旧已验收 OpenPI 镜像上只覆盖本仓 Python 层得到临时候选 `arx5-dual-policy:dagger-d1b`，ID `sha256:d71c999f247f25a26ac9bbfd8fd67c51fcd1c7f88ef21a493c754f43a78f2ca8`。双容器均已静态确认同一 checkpoint、SHA 和 `50/14/10/25 Hz`，未加载模型。

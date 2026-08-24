@@ -92,7 +92,9 @@ class EpisodeRuntime:
                 except BaseException:
                     self._stop_components()
                     raise
-            outcome, errors, stopping_monotonic_ns = self._wait_for_end()
+            outcome, errors, stopping_monotonic_ns, session_blocked = (
+                self._wait_for_end()
+            )
             ended_at = self.wall_clock()
             duration_s = max(
                 0.0,
@@ -129,6 +131,7 @@ class EpisodeRuntime:
                 metadata_path=pending.metadata_path,
                 stream_metrics=stream_metrics,
                 errors=errors,
+                session_blocked=session_blocked,
             )
             metadata = build_metadata(
                 request,
@@ -161,14 +164,16 @@ class EpisodeRuntime:
             if signal is not None and signal.event is TriggerEvent.ACTIVATE:
                 return
 
-    def _wait_for_end(self) -> tuple[EpisodeOutcome, tuple[str, ...], int]:
+    def _wait_for_end(
+        self,
+    ) -> tuple[EpisodeOutcome, tuple[str, ...], int, bool]:
         try:
             while True:
                 if self.runtime_check is not None:
                     self.runtime_check()
                 failure = self.monitor.required_failure()
                 if failure is not None:
-                    return EpisodeOutcome.FAIL, (failure,), self._monotonic_ns()
+                    return EpisodeOutcome.FAIL, (failure,), self._monotonic_ns(), True
                 signal = self.trigger.wait(self.poll_interval_s)
                 if signal is None:
                     continue
@@ -177,17 +182,32 @@ class EpisodeRuntime:
                         EpisodeOutcome.ABORTED,
                         ("operator requested abort",),
                         signal.monotonic_time_ns,
+                        False,
                     )
                 if signal.event is TriggerEvent.ACTIVATE:
-                    return EpisodeOutcome.SUCCESS, (), signal.monotonic_time_ns
+                    return (
+                        EpisodeOutcome.SUCCESS,
+                        (),
+                        signal.monotonic_time_ns,
+                        False,
+                    )
+                if signal.event is TriggerEvent.FAIL:
+                    assert signal.detail is not None
+                    return (
+                        EpisodeOutcome.FAIL,
+                        (signal.detail,),
+                        signal.monotonic_time_ns,
+                        False,
+                    )
         except KeyboardInterrupt:
             return (
                 EpisodeOutcome.ABORTED,
                 ("recording interrupted",),
                 self._monotonic_ns(),
+                False,
             )
         except Exception as error:
-            return EpisodeOutcome.FAIL, (str(error),), self._monotonic_ns()
+            return EpisodeOutcome.FAIL, (str(error),), self._monotonic_ns(), True
 
     def _monotonic_ns(self) -> int:
         return round(self.monotonic_clock() * 1e9)

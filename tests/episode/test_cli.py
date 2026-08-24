@@ -13,7 +13,7 @@ from arx5_collection.episode.store import EpisodeStore
 
 from .fakes import FakeBackend, FakeMonitor, FakeTrigger
 from arx5_collection.episode.models import EpisodeBlocked, StreamMetrics
-from arx5_collection.episode.ports import TriggerEvent
+from arx5_collection.episode.ports import TriggerEvent, TriggerSignal
 
 
 ROOT = Path(__file__).parents[2]
@@ -148,6 +148,34 @@ class EpisodeCliTest(unittest.TestCase):
         self.assertEqual(errors.getvalue().count("\a"), 1)
         self.assertIn("EPISODE FAILED - SESSION BLOCKED", errors.getvalue())
         self.assertIn("result: fail", errors.getvalue())
+
+    def test_episode_scoped_failure_returns_ready_without_block_banner(self) -> None:
+        trigger = ContextTrigger(
+            [
+                True,
+                TriggerSignal(TriggerEvent.FAIL, 1, "policy rejected action"),
+                True,
+                True,
+            ]
+        )
+        request = load_request(self.task_config, self.output_root, STATION_PATH)
+        runtime = self.runtime_factory()(request, trigger)
+        output = io.StringIO()
+        errors = io.StringIO()
+
+        exit_code = run_episode_loop(
+            runtime,
+            request,
+            episodes=2,
+            stdout=output,
+            stderr=errors,
+        )
+
+        rows = [json.loads(line) for line in output.getvalue().splitlines()]
+        self.assertEqual(exit_code, 0)
+        self.assertEqual([row["outcome"] for row in rows], ["fail", "success"])
+        self.assertNotIn("SESSION BLOCKED", errors.getvalue())
+        self.assertIn("EPISODE FAILED - SESSION READY", errors.getvalue())
 
     def test_pre_episode_block_does_not_create_an_empty_episode(self) -> None:
         trigger = ContextTrigger([True, True, True])

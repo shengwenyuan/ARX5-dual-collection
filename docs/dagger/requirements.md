@@ -136,7 +136,7 @@ Gateway 是模型命令到 ARX Vendor Controller 的唯一入口，持有双臂�
 - 相邻 action 最大 joint step 为 `0.25 rad`，相对 ticket 验证时实际状态的最大 departure 为 `1.5 rad`。
 - 当前 v2 profile 为 50-step chunk、执行前 10 步、25 Hz。10 步结束后才以新 observation 请求下一 chunk，间隙保持最后 Vendor target。
 - Gateway 只接受不超过 `0.1 s` 的 canonical 双臂实际状态；该阈值与执行参数一样由模型 profile 配置。
-- Policy 等待最多 `0.5 s`；有待执行 action 时 command deadline 为 `0.12 s`。超限与 Observation、Policy、安全检查或 Publisher 故障均 fail closed，进入 `G_COMPENSATION + FAULT_HOLD`，但不自动结束 Episode。
+- Policy 等待最多 `0.5 s`；有待执行 action 时 command deadline 为 `0.12 s`。超限与 Observation、Policy、安全检查或 Publisher 故障均 fail closed，进入 `G_COMPENSATION + FAULT_HOLD`，并以 fault 事件时刻立即结束当前 Episode。该 Episode 以 `outcome=fail` 落入 `dagger_fail/`，Session 回到 `READY` 等待右踏板；相机、CAN、ROS 等共享链路故障仍进入 `SESSION BLOCKED`。
 - Vendor `remote_slave` command callback 默认物理锁死；只有 fresh action 完整通过后，Gateway 才同时确认双臂 `enable_policy_control`。GO_HOME、人工接管、Episode 结束和任何 fault 都重新锁死。
 
 ## metadata

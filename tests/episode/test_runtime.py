@@ -20,7 +20,7 @@ from arx5_collection.episode.models import (
     StreamSpec,
 )
 from arx5_collection.episode.runtime import EpisodeRuntime
-from arx5_collection.episode.ports import TriggerEvent
+from arx5_collection.episode.ports import TriggerEvent, TriggerSignal
 from arx5_collection.episode.store import EpisodeStore
 
 from .fakes import FakeBackend, FakeMonitor, FakeTrigger
@@ -85,6 +85,7 @@ class EpisodeRuntimeTest(unittest.TestCase):
         result = runtime.run_once(self.request())
         self.assertEqual(result.outcome, EpisodeOutcome.FAIL)
         self.assertEqual(result.errors, ("left_arm stopped",))
+        self.assertTrue(result.session_blocked)
         self.assertTrue(result.committed)
         self.assertEqual(result.mcap_path.parent.parent, self.output_root / "fail")
         self.assertEqual(json.loads(result.metadata_path.read_text())["outcome"], "fail")
@@ -101,6 +102,29 @@ class EpisodeRuntimeTest(unittest.TestCase):
 
         self.assertEqual(result.outcome, EpisodeOutcome.FAIL)
         self.assertEqual(result.errors, ("d405-source exited",))
+        self.assertTrue(result.session_blocked)
+
+    def test_episode_scoped_failure_commits_without_blocking_session(self) -> None:
+        runtime = self.runtime(
+            trigger=FakeTrigger(
+                [
+                    True,
+                    TriggerSignal(
+                        TriggerEvent.FAIL,
+                        20_000_000_000,
+                        "DAgger policy rejected action",
+                    ),
+                ]
+            ),
+            monotonic_clock=lambda: 10.0,
+        )
+
+        result = runtime.run_once(self.request())
+
+        self.assertEqual(result.outcome, EpisodeOutcome.FAIL)
+        self.assertEqual(result.errors, ("DAgger policy rejected action",))
+        self.assertFalse(result.session_blocked)
+        self.assertEqual(result.duration_s, 10.0)
 
     def test_pre_episode_check_runs_after_start_before_recorder(self) -> None:
         events: list[str] = []

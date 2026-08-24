@@ -280,6 +280,20 @@ class TakeoverControllerTest(unittest.TestCase):
         self.assertIs(events[-1].event_type, AuthorityEventType.FAULT_HOLD)
         self.assertIn("watchdog expired", events[-1].reason)
 
+    def test_runtime_fault_requests_immediate_episode_failure(self) -> None:
+        controller, clock, _ = self.make_controller(
+            FaultGateway(RuntimeError("policy rejected action"))
+        )
+        self.start(controller, clock)
+        trigger = TakeoverRecordTrigger(Trigger(), controller)
+
+        signal = trigger.wait(0)
+
+        assert signal is not None
+        self.assertIs(signal.event, TriggerEvent.FAIL)
+        self.assertEqual(signal.monotonic_time_ns, clock.value)
+        self.assertIn("policy rejected action", signal.detail or "")
+
     def test_gravity_compensation_failure_is_safety_critical(self) -> None:
         human = HumanMode(fail=True)
         controller, clock, events = self.make_controller(
