@@ -1,7 +1,7 @@
 # 三 D405 统一 C++ Source 计划
 
-- Status: `ordinary production and DAgger Shadow validated at 848x480`
-- Updated: 2026-08-19
+- Status: `RGB8 ordinary production validated at 848x480; DAgger RGB8 runtime statically validated`
+- Updated: 2026-08-24
 - Parent: `meta_plan.md`、`docs/sdk-ros2-core/implementation.md`、`docs/dagger/requirements.md`
 
 ## 目标
@@ -24,13 +24,13 @@ multi_d405_source
 ## 边界
 
 - 一个进程、三条独立采集线程和三个独立 Pipeline；每颗相机只被一个 Pipeline 占用。
-- 每相机继续执行 Depth-to-Color align；当前固定 848x480@30、YUYV、Z16、可靠 Topic 和 Global Time Header。
+- 每相机继续执行 Depth-to-Color align；当前固定 848x480@30、RGB8、Z16、可靠 Topic 和 Global Time Header。
 - 六路主线发布彼此独立，不等待跨相机配组；普通采集不启用 Snapshot service。
 - D405 没有多机硬同步。`syncer` 或邻近匹配只从真实帧中选择，不改变曝光时刻；不插值、不补帧、不重复伪造帧。
 - SDK 待处理队列容量为 1，避免消费端滞后；Snapshot Matcher 保留极小真实历史以适应独立 30 Hz 相位。
 - Snapshot 仍使用 camera 40 ms、arm 2 ms、age 100 ms，不因失败放宽标准。
 - Source 不包含 PI 协议、图像缩放、Policy、Recorder、metadata、控制权或动作下发。
-- Python D405 Source 暂留作回归/回退实现，但不再由生产编排启动。
+- Python D405 Source 仅留作固定 RGB8 回归实现，不再由生产编排启动；在线链路不保留 YUYV 开关或回退分支。
 
 ## 已确认依据
 
@@ -45,7 +45,7 @@ multi_d405_source
 - DAgger Snapshot/Policy 成功率不低于 95%，不得连续超过 2 秒 Observation 失败，且每个成功组满足 40/2/100 ms。
 - 单路失败使受控进程退出并由 Session 回收全部 Pipeline；退出后无相机残留占用。
 
-## 当前结果
+## 初始实现结果（2026-08-19）
 
 - 新增 `arx5_d405_source_cpp/multi_d405_source`，C++ 编译通过。
 - 生产编排已从三个 Python Source 改为一个统一 Source；DAgger 不再启动独立高带宽 Snapshot Subscriber。
@@ -75,3 +75,12 @@ multi_d405_source
 - 双臂约 1000 Hz；三路 RGB-D 约 30 Hz。left/right 完全配对，overview 在 Recorder 边界多 1 帧 Color；right 出现一次 66.67 ms 孤立 gap。
 - 离线复算三相机 40 ms 配组通过率 100%，最大跨度 28.53 ms；双臂因果年龄最大约 1.14 ms。
 - 单 Episode 普通模式回归判定 PASS。提升为正式 production image 前，仍需在同一 Session 完成一条 45–60 秒和一条 15–30 秒连续 Episode，确认相机不在 Episode 间重启。
+
+## 2026-08-24 RGB8 统一验收
+
+- 提交 `c4f3841` 将 C++/Python D405 Source、Station 启流校验和 DAgger Observation 固定为 RGB8；在线 YUYV 实现全部删除，历史 YUYV 只由离线数据读取器兼容。
+- W3 在同一普通 Session 完成两条 success 与一条 aborted。两条 success 分别录得三路各 1375 帧和 1060 帧 RGB-D；Color 全部为 `rgb8`、848x480、step 2544，Depth 保持 `16UC1`、848x480、step 1696。
+- 三路相机均约 29.992 Hz，无重复或倒退 Header。两条 success 的同机 Color/Depth 全部逐帧同时间戳配对；aborted 仅在停止边界多一帧 overview Depth。
+- 离线因果配组覆盖率为 100%，三条 Episode 最大跨相机跨度分别为 6.51、6.42、6.43 ms；没有跨相机或 arm age 拒绝。
+- RGB 样帧确认通道顺序正确；未发现相机 fault、timeout 或 transport loss。一个 Source 连续覆盖三条 Episode，退出后容器、相机、CAN 和 ROS 子进程全部释放。
+- 本轮不修改 Reliable QoS、队列、40/2/100 ms 因果标准或 Depth 数据面。普通采集通过；DAgger RGB8 Snapshot/resize 已通过静态与单元测试，真机 DAgger 验收另行执行。

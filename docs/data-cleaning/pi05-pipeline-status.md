@@ -102,7 +102,7 @@
 | Idle 清洗 | 长 idle 删除 | enabled | 相邻 14 维 action 每维变化均 `<1e-3` 视为 idle；连续至少 24 帧删除 | `pi05_dataset.selection.select_nonidle_segments` | OpenPI DROID 时间尺度适配 |
 | 片段筛选 | 短运动和尾部裁剪 | enabled | 运动段至少 54 帧；每段末尾裁 34 帧 | `select_nonidle_segments` | OpenPI DROID 时间尺度适配 |
 | 片段索引 | 来源与训练资格记录 | enabled | 输出 `sample_index.jsonl`、`segments.jsonl`、`selection.json` | `pi05_dataset.artifact_codec.write_selection_artifacts` | 项目可追溯契约 |
-| RGB 转换 | YUYV 到 RGB | enabled | BT.601 limited-range；导出 `640x360` RGB | `pi05_dataset.images.decode_yuyv`、`extract_selected_rgb` | 项目相机适配 |
+| RGB 读取 | RGB8 + 历史 YUYV | enabled | 新 RGB8 原样读取；历史 YUYV 以 BT.601 limited-range 解码；导出 `640x360` RGB | `pi05_dataset.images.decode_color_message`、`extract_selected_rgb` | 项目相机适配 |
 | LeRobot | 三相机 video dataset | verified | `cam_high`、左右 wrist、14 维 state/action、task、50 Hz | `pi05_dataset.openpi_contract`、`exporter.export_lerobot` | OpenPI/LeRobot 字段契约 |
 | LeRobot | segment 到 episode | verified | 每个连续有效 segment 单独调用一次 `save_episode()` | `pi05_dataset.exporter.export_lerobot` | 保持时间连续性 |
 | OpenPI adapter | 数据字段 repack | verified | 三路图像、state、actions、task prompt 映射到 OpenPI | `pi05_dataset.openpi_adapter.make_arx5_data_config` | OpenPI 官方 DataConfig |

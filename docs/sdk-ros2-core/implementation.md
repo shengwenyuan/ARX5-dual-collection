@@ -1,6 +1,6 @@
 # SDK 与 ROS 2 数据面实施计划
 
-- Status: `in-progress`（数据 Source、逻辑 ArmState、频率遥测与 ROS Runtime Adapter 已验证，等待物理映射和完整 Episode）
+- Status: `validated`（当前生产数据面使用统一 C++ D405 Source、RGB8 Color、Z16 aligned Depth）
 - Parent: `meta_plan.md`
 - Branch: `main`
 - Target: `w3-arx5`、ROS 2 Jazzy、单一 Privileged Docker Image
@@ -35,8 +35,8 @@
 - ARX5 只使用 `ARXroboticsX/ARX_X5:main`，排除 `ARX5_beta`。
 - 双臂采用官方 `v2_collect`、`remote_master` 和重力补偿；采集侧不发布 `/arx_joy` 或运动指令。
 - RealSense 使用稳定 `librealsense v2.54.2`；当前三路 848×480 RGB-D @ 30 Hz。
-- v0.1 相机 Source 使用 `rclpy + pyrealsense2` 且每颗相机独立进程；C++ 迁移按 `docs/optimization/d405-cpp-source.md` 后续实施。
-- 彩色图固定为设备 YUYV，ROS 编码为 `yuv422_yuy2`；Depth 为 `16UC1`。RGB8 不增加原始信息，只在消费侧按需转换。
+- v0.1 最初使用 `rclpy + pyrealsense2` 完成基线；当前生产编排使用一个 `rclcpp + librealsense` 进程统一拥有三颗 D405。
+- 彩色图固定为设备 RGB8，ROS 编码为 `rgb8`；Depth 保持 `16UC1`。在线链路不保留 YUYV 分支，历史 YUYV MCAP 只在离线读取时兼容。
 - 图像 Topic 使用 Reliable QoS；Fast DDS 使用 64 MiB SHM Segment、2048 消息队列，容器 `/dev/shm` 固定为 1 GiB。
 - Depth 与同机彩色帧做空间对齐；禁止时间插值、补帧、重复帧和伪造同步帧。
 - D405 不支持多机硬件同步。三台设备使用独立 Pipeline 与 Global Time 时间戳，不做跨设备 frameset 重组。
@@ -84,7 +84,7 @@
 ## 主线保留内容
 
 - 保留：ROS 2 Source、消息定义、Launch、站点配置、MCAP Adapter、频率监督、可重复真机脚本及测试。
-- 保留：YUYV/RGB8 A/B 工具和结果摘要，便于后续设备或参数变更时复测；动态 JSON 报告不进 Git。
+- 保留：历史 YUYV/RGB8 A/B 结果摘要；当前基准工具只验证正式 RGB8 契约，动态 JSON 报告不进 Git。
 - 不保留：一次性远端命令、临时 Topic dump、试验 MCAP 和为本轮操作临时生成的文件。
 - 不移植：历史 node010 的 `ARX5_beta` 控制流程、序列号 Topic、RGB-only 数据契约和位置控制逻辑。
 
@@ -153,6 +153,14 @@
 - 停止 telemetry 但保持数据继续发布时，2.107 秒后得到 `required stream smoke_arm_state telemetry stopped`；异常链路仍干净关闭为 171 条可读 MCAP。
 - 全仓 50 个单元测试通过；正式 Dockerfile 已打包 Python Runtime Adapter，并由 SDK 自检验证 import。
 
-数据 Source、逻辑 ArmState、轻量频率遥测、ROS Runtime Adapter 与物理相机映射验收通过；关闭路径、两树合并接线和完整 Episode 仍未完成，计划保持 `in-progress`。
+截至 2026-08-16，数据 Source、逻辑 ArmState、轻量频率遥测与 ROS Runtime Adapter 已通过阶段验收；后续完整 Episode、统一 C++ Source 和 RGB8 结论见下文及对应专项文档。
 
 2026-08-16 八路 ROS 2 数据面已完成 43.925 秒联合 MCAP 验收，结论见 `docs/milestones/eight-stream-mcap.md`。该结果标记短时联合录制里程碑，不替代 150 秒稳定性与完整 Episode 验收。
+
+2026-08-24 完成 RGB8 生产链路验收：
+
+- 在线 D405、Station 和 DAgger Observation 删除 YUYV 分支并统一为 RGB8；Depth Topic、Z16 编码、对齐、时间戳和频率标准不变。
+- W3 单 Session 连续录制两条 success 和一条 aborted。两条 success 的三路 Color/Depth 分别各 1375 和 1060 帧，均约 29.992 Hz、逐帧同时间戳配对且无非单调 Header。
+- 所有 Color 均为 `rgb8`、848x480、step 2544；所有 Depth 均为 `16UC1`、848x480、step 1696。RGB 样帧通道顺序正常。
+- 三条 Episode 的跨相机配组覆盖率均为 100%，最大跨度不超过 6.51 ms；未调整 Reliable QoS 或任何因果门槛。
+- 相机 Source 未在 Episode 间重启，Session 退出后资源全部回收。结论：RGB8 普通生产链路 PASS。
