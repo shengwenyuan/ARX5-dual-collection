@@ -182,7 +182,7 @@ src/arx5_collection/production/
 
 ## 实施记录
 
-- 2026-08-25：本地完成 schema v3、显式 Domain ID、原子迁移命令和普通/DAgger Session 统一环境注入；尚未部署，不触碰正在生产的 W3/W4。
+- 2026-08-25：revision `d10ca4a` 的 production/DAgger Collector 已统一部署到 W3/W4；用户通过原子迁移入口将 W3 配置为 schema v3、`station_id=w3`、`ros_domain_id=53`，W4 配置为 schema v3、`station_id=w4`、`ros_domain_id=54`。两台 production Session 均已用新镜像启动；这些值仅是部署验收事实，不进入代码默认值或站点映射规则。
 - 双踏板 W3 验收已通过，Station Initialization 已开始实现。
 - 已实现 schema v2 原子 Store、统一 Inventory、踏板顺序绑定、D405 顺序绑定与真实 720p RGB-D 验证、左臂移动识别、统一 CLI 和运行期七设备身份复核。
 - 仓库真实 W3 配置已替换为无真实编号的 `station.example.json`；Compose 已移除 W3 容器名和报告路径，主机配置挂载允许 configure 原子写入。
