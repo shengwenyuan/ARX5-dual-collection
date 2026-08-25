@@ -83,6 +83,7 @@ deploy_station.sh
   station inspect
 
 arx5-collect station configure
+  显式 ROS Domain ID
   USB2CAN 左右臂识别
   D405 空间角色绑定与真实流验证
   双踏板语义绑定

@@ -5,7 +5,11 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Protocol
 
-from arx5_collection.production.config import CameraConfig, StationConfig
+from arx5_collection.production.config import (
+    CameraConfig,
+    StationConfig,
+    set_process_ros_domain_id,
+)
 
 from .arm_identifier import ArmIdentifier
 from .camera_identifier import CAMERA_BINDING_ORDER, CameraIdentifier
@@ -16,6 +20,7 @@ from .store import StationConfigStore
 
 class StationInteraction(Protocol):
     def choose_station_id(self, default: str) -> str: ...
+    def choose_ros_domain_id(self) -> int: ...
     def prompt_left_arm_movement(self) -> None: ...
     def choose_camera(
         self,
@@ -58,6 +63,7 @@ class StationInitializationService:
         station_id = interaction.choose_station_id(socket.gethostname())
         if not station_id.strip():
             raise StationInitializationError("station_id must not be empty")
+        ros_domain_id = set_process_ros_domain_id(interaction.choose_ros_domain_id())
 
         interaction.report("ARX5: enabling gravity compensation for role binding")
         arms = self.arm_identifier_factory(self.log_dir).identify(
@@ -90,8 +96,9 @@ class StationInitializationService:
         )
 
         station = StationConfig(
-            schema_version=2,
+            schema_version=3,
             station_id=station_id.strip(),
+            ros_domain_id=ros_domain_id,
             sdk_type=2,
             arms=arms,
             cameras=tuple(

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -64,6 +65,10 @@ class FakeInteraction:
     def choose_station_id(self, default):
         return "new-station"
 
+    def choose_ros_domain_id(self):
+        self.events.append("ros-domain")
+        return 31
+
     def prompt_left_arm_movement(self):
         self.events.append("move-left")
 
@@ -110,13 +115,18 @@ class StationInitializationServiceTest(unittest.TestCase):
             pedal_identifier_factory=FakePedalIdentifier,
         )
 
+        old_ros_domain_id = os.environ.get("ROS_DOMAIN_ID")
+        self.addCleanup(self._restore_ros_domain_id, old_ros_domain_id)
         result = service.configure(interaction)  # type: ignore[arg-type]
 
         self.assertEqual(result.station_id, "new-station")
+        self.assertEqual(result.ros_domain_id, 31)
+        self.assertEqual(os.environ["ROS_DOMAIN_ID"], "31")
         self.assertTrue(path.exists())
         self.assertEqual(
             interaction.events,
             [
+                "ros-domain",
                 "move-left",
                 "camera:left",
                 "camera:overview",
@@ -125,6 +135,13 @@ class StationInitializationServiceTest(unittest.TestCase):
                 "pedal:abort",
             ],
         )
+
+    @staticmethod
+    def _restore_ros_domain_id(value: str | None) -> None:
+        if value is None:
+            os.environ.pop("ROS_DOMAIN_ID", None)
+        else:
+            os.environ["ROS_DOMAIN_ID"] = value
 
 
 if __name__ == "__main__":

@@ -131,11 +131,21 @@
       "properties": {
         "id": {"type": ["string", "null"], "minLength": 1},
         "config_schema_version": {"type": "integer", "minimum": 1},
+        "ros_domain_id": {"type": "integer", "minimum": 0, "maximum": 232},
         "devices": {
           "type": "array",
           "items": {"$ref": "#/$defs/device"}
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": ["config_schema_version"],
+            "properties": {"config_schema_version": {"minimum": 3}}
+          },
+          "then": {"required": ["ros_domain_id"]}
+        }
+      ]
     },
     "device": {
       "type": "object",

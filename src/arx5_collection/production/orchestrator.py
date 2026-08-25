@@ -25,7 +25,7 @@ from arx5_collection.ros2_adapters.recording import RosbagRecordingBackend
 from arx5_collection.ros2_adapters.reset import RosDualArmResetController
 
 from .checks import CheckFailure, CheckPhase, CheckResult, require_passed
-from .config import StationConfig
+from .config import StationConfig, set_process_ros_domain_id
 from .devices import DeviceIdentityVerifier
 from .processes import (
     CameraSnapshotConfig,
@@ -77,6 +77,7 @@ class ProductionSession:
     ) -> None:
         if min_free_bytes < 0:
             raise ValueError("min_free_bytes must not be negative")
+        set_process_ros_domain_id(station.ros_domain_id)
         self.station = station
         self.output_root = output_root
         self.log_dir = log_dir

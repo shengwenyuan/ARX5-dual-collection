@@ -13,7 +13,7 @@
 
 - Episode Models、Ports、Store、metadata、Runtime、双踏板/键盘 Trigger 和 CLI Core 均已进入 main。
 - `RosbagRecordingBackend`、`RosStreamMonitor`、三路 D405 Source、双臂 Adapter、telemetry 与归位前置检查均已接入生产 Session。
-- Station schema v2、统一 `station configure`/`devices`、真实 Runtime factory、进程管理、八路任务配置和 Docker 生产入口均已实现。
+- Station schema v3、统一 `station configure`/`devices`、真实 Runtime factory、进程管理、八路任务配置和 Docker 生产入口均已实现。
 - W3 完成分模块与异常路径回归，W4 完成从零 Station 初始化和生产 success 链路验收。
 
 ## 冻结架构
@@ -110,7 +110,7 @@ src/arx5_collection/production/
 
 ### 1. 配置与设备身份
 
-1. 冻结 Station v2 解析模型和八路 Task 配置。
+1. 冻结 Station v3 解析模型和八路 Task 配置；ROS Domain ID 由 Station 显式提供并在任何 ROS 子进程前生效。
 2. 实现统一 `devices` 命令，并覆盖缺失、重复、错配、非 USB3 与 CAN 未就绪。
 3. metadata 改用统一模型，保证序列号正确写入 JSON。
 

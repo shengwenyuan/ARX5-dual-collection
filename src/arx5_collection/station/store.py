@@ -3,10 +3,15 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
-from arx5_collection.production.config import StationConfig, load_station_config
+from arx5_collection.production.config import (
+    StationConfig,
+    load_station_config,
+    validate_ros_domain_id,
+)
 
 
 DEFAULT_STATION_CONFIG = Path("/var/lib/arx5-collection/station.json")
@@ -39,6 +44,8 @@ def station_config_payload(station: StationConfig) -> dict[str, Any]:
             }
             for pedal in (station.triggers.activate, station.triggers.abort)
         }
+    if station.ros_domain_id is not None:
+        payload["ros_domain_id"] = station.ros_domain_id
     return payload
 
 
@@ -81,3 +88,20 @@ class StationConfigStore:
                 pass
             temporary_path.unlink(missing_ok=True)
             raise
+
+    def set_ros_domain_id(self, ros_domain_id: int) -> StationConfig:
+        if not self.path.is_file():
+            raise ValueError(f"station configuration is missing: {self.path}")
+        station = load_station_config(self.path)
+        if station.triggers is None:
+            raise ValueError(
+                "station schema v1 cannot be upgraded in place; run "
+                "'arx5-collect station configure'"
+            )
+        updated = replace(
+            station,
+            schema_version=3,
+            ros_domain_id=validate_ros_domain_id(ros_domain_id),
+        )
+        self.commit(updated)
+        return updated

@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 
 from arx5_collection.production.config import CameraConfig
-from arx5_collection.production.cli import load_configured_station
+from arx5_collection.production.cli import build_parser, load_configured_station
 from arx5_collection.production.processes import CameraSnapshotConfig, RosCommandSet
 from arx5_collection.production.profiles import (
     DAGGER_ARM_PROFILE,
@@ -17,6 +17,11 @@ class RosCommandSetTest(unittest.TestCase):
     def test_missing_station_points_to_single_initialization_entry(self) -> None:
         with self.assertRaisesRegex(ValueError, "arx5-collect station configure"):
             load_configured_station(Path("/definitely/missing/station.json"))
+
+    def test_station_domain_migration_command_is_explicit(self) -> None:
+        args = build_parser().parse_args(["station", "set-ros-domain-id", "31"])
+        self.assertEqual(args.station_command, "set-ros-domain-id")
+        self.assertEqual(args.ros_domain_id, 31)
 
     def test_unified_camera_argv_is_explicit_and_preserves_serials(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

@@ -42,6 +42,7 @@ def station(with_triggers: bool = True) -> StationConfig:
     return StationConfig(
         schema_version=2 if with_triggers else 1,
         station_id="test",
+        ros_domain_id=None,
         sdk_type=2,
         arms=(ArmConfig("left", "left", "can1"), ArmConfig("right", "right", "can3")),
         cameras=(

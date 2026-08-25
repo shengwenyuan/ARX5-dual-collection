@@ -32,10 +32,11 @@ arx5-collect station configure
 
 ## 最终 Station 配置
 
-schema v2 至少包含：
+schema v3 至少包含：
 
 ```text
 station_id
+ros_domain_id
 sdk_type
 arms
   left  -> USB2CAN serial, can1
@@ -47,7 +48,10 @@ triggers
   abort    -> pedal VID/PID/serial
 ```
 
-- `station_id` 默认使用主机名并允许用户在提交前修改。
+- `station_id` 默认使用主机名并允许用户在提交前修改；它是外部命名，项目不解释其格式。
+- `ros_domain_id` 由用户显式输入，合法范围为 `0..232`，不从 `station_id` 推导，也不由项目跨工作站分配或查重。
+- 初始化在启动任何 ROS 进程前应用该 Domain ID；普通采集与 DAgger 随后只从 Station 配置继承。
+- schema v1/v2 只允许读取和迁移；生产启动缺少 `ros_domain_id` 时明确失败，不静默使用 domain 0。
 - `can1/can3` 是生成器内部固定策略，不要求用户理解或填写 CAN 接口编号。
 - 所有硬件序列号在各自类别内必须完整、非空、唯一，并与当前探测结果一致。
 - 运行期每次启动仍重新验证配置与实物，不因初始化成功而跳过设备检查。
@@ -108,7 +112,7 @@ triggers
 
 ```text
 src/arx5_collection/station/
-  models.py                # schema v2 与严格验证
+  models.py                # schema v3 与严格验证
   inventory.py             # udev、librealsense、hidraw 统一盘点
   arm_identifier.py        # 左臂移动信号与 USB2CAN 角色判断
   camera_identifier.py     # 顺序选择、手工编号校验、真实流验证
@@ -134,7 +138,7 @@ src/arx5_collection/production/
 
 ## 迭代步骤
 
-1. 冻结 schema v2、默认路径、原子 Store 和无 W3 的示例配置。
+1. 冻结 schema v3、默认路径、原子 Store 和无 W3 的示例配置。
 2. 实现统一 Inventory，覆盖 USB2CAN、D405 和 hidraw，并复用现有探测代码。
 3. 实现踏板顺序绑定和 D405 顺序选择/手工编号校验。
 4. 实现受控 ARX5 左臂移动识别；真机动作步骤停下，由用户启动并监督。
@@ -154,6 +158,8 @@ src/arx5_collection/production/
 - 成功配置可被 `devices`、`run` 和 metadata 同一模型读取，不出现字段语义分叉。
 - 容器重启、USB 枚举顺序和 `hidrawN` 变化后仍按稳定身份恢复全部角色。
 - 默认路径缺失时 `run` 给出明确的先执行 configure 提示。
+- schema v2 可在 Collector 停止时通过 `arx5-collect station set-ros-domain-id <id>` 原子升级；不得重新绑定硬件。
+- Domain ID 缺失、非整数或超出 `0..232` 时生产 Session 必须在启动硬件前失败。
 
 ## W4 从零验收
 
@@ -176,6 +182,7 @@ src/arx5_collection/production/
 
 ## 实施记录
 
+- 2026-08-25：本地完成 schema v3、显式 Domain ID、原子迁移命令和普通/DAgger Session 统一环境注入；尚未部署，不触碰正在生产的 W3/W4。
 - 双踏板 W3 验收已通过，Station Initialization 已开始实现。
 - 已实现 schema v2 原子 Store、统一 Inventory、踏板顺序绑定、D405 顺序绑定与真实 720p RGB-D 验证、左臂移动识别、统一 CLI 和运行期七设备身份复核。
 - 仓库真实 W3 配置已替换为无真实编号的 `station.example.json`；Compose 已移除 W3 容器名和报告路径，主机配置挂载允许 configure 原子写入。

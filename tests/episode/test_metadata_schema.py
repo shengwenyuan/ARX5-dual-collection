@@ -89,6 +89,12 @@ class MetadataSchemaTest(unittest.TestCase):
         del metadata["collection_type"]
         self.validator.validate(metadata)
 
+    def test_station_schema_v3_requires_ros_domain_id(self) -> None:
+        metadata = valid_metadata()
+        metadata["station"]["config_schema_version"] = 3
+        with self.assertRaises(ValidationError):
+            self.validator.validate(metadata)
+
     def test_dagger_summary_is_conditional_on_collection_type(self) -> None:
         dagger = valid_metadata()
         dagger["collection_type"] = "dagger"

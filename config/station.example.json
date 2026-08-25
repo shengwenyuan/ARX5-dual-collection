@@ -1,6 +1,7 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "station_id": "station-example",
+  "ros_domain_id": 31,
   "sdk_type": 2,
   "arms": [
     {

@@ -19,8 +19,9 @@ from arx5_collection.station.store import StationConfigStore
 
 def station() -> StationConfig:
     return StationConfig(
-        schema_version=2,
+        schema_version=3,
         station_id="station-a",
+        ros_domain_id=31,
         sdk_type=2,
         arms=(
             ArmConfig("left", "arm-left", "can1"),
@@ -44,7 +45,7 @@ class StationConfigStoreTest(unittest.TestCase):
         self.addCleanup(directory.cleanup)
         self.path = Path(directory.name) / "state" / "station.json"
 
-    def test_writes_schema_v2_that_production_loader_reads(self) -> None:
+    def test_writes_schema_v3_that_production_loader_reads(self) -> None:
         StationConfigStore(self.path).commit(station())
 
         loaded = load_station_config(self.path)
@@ -71,10 +72,38 @@ class StationConfigStoreTest(unittest.TestCase):
     def test_serialized_payload_contains_no_runtime_paths(self) -> None:
         StationConfigStore(self.path).commit(station())
         payload = json.loads(self.path.read_text())
-        self.assertEqual(set(payload), {
-            "schema_version", "station_id", "sdk_type", "arms", "cameras", "triggers"
-        })
+        self.assertEqual(
+            set(payload),
+            {
+                "schema_version",
+                "station_id",
+                "ros_domain_id",
+                "sdk_type",
+                "arms",
+                "cameras",
+                "triggers",
+            },
+        )
         self.assertNotIn("hidraw", self.path.read_text())
+
+    def test_set_ros_domain_id_atomically_upgrades_schema_v2(self) -> None:
+        legacy = station()
+        legacy = StationConfig(
+            schema_version=2,
+            station_id=legacy.station_id,
+            ros_domain_id=None,
+            sdk_type=legacy.sdk_type,
+            arms=legacy.arms,
+            cameras=legacy.cameras,
+            triggers=legacy.triggers,
+        )
+        StationConfigStore(self.path).commit(legacy)
+
+        updated = StationConfigStore(self.path).set_ros_domain_id(42)
+
+        self.assertEqual(updated.schema_version, 3)
+        self.assertEqual(updated.ros_domain_id, 42)
+        self.assertEqual(load_station_config(self.path), updated)
 
 
 if __name__ == "__main__":

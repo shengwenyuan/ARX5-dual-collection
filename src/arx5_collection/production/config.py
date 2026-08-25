@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -19,6 +20,8 @@ EXPECTED_STREAMS = {
     "camera_overview_color": "/sensors/camera_overview/color/image_raw",
     "camera_overview_aligned_depth": "/sensors/camera_overview/aligned_depth/image_raw",
 }
+MIN_ROS_DOMAIN_ID = 0
+MAX_ROS_DOMAIN_ID = 232
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,6 +55,7 @@ class TriggerConfig:
 class StationConfig:
     schema_version: int
     station_id: str
+    ros_domain_id: int | None
     sdk_type: int
     arms: tuple[ArmConfig, ...]
     cameras: tuple[CameraConfig, ...]
@@ -92,11 +96,14 @@ class StationConfig:
                 }
                 for pedal in (self.triggers.activate, self.triggers.abort)
             )
-        return {
+        metadata = {
             "id": self.station_id,
             "config_schema_version": self.schema_version,
             "devices": devices,
         }
+        if self.ros_domain_id is not None:
+            metadata["ros_domain_id"] = self.ros_domain_id
+        return metadata
 
 
 def load_station_config(path: Path) -> StationConfig:
@@ -121,9 +128,28 @@ def load_station_config(path: Path) -> StationConfig:
             },
             "station",
         )
+    elif schema_version == 3:
+        _require_exact_keys(
+            payload,
+            {
+                "schema_version",
+                "station_id",
+                "ros_domain_id",
+                "sdk_type",
+                "arms",
+                "cameras",
+                "triggers",
+            },
+            "station",
+        )
     else:
-        raise ValueError("station schema_version must be 1 or 2")
+        raise ValueError("station schema_version must be 1, 2, or 3")
     station_id = _non_empty_string(payload["station_id"], "station_id")
+    ros_domain_id = (
+        validate_ros_domain_id(payload["ros_domain_id"])
+        if schema_version == 3
+        else None
+    )
     sdk_type = payload["sdk_type"]
     if sdk_type not in {1, 2}:
         raise ValueError("sdk_type must be 1 or 2")
@@ -158,7 +184,7 @@ def load_station_config(path: Path) -> StationConfig:
     )
 
     triggers = None
-    if schema_version == 2:
+    if schema_version >= 2:
         triggers = _trigger_config(payload["triggers"])
 
     all_serials = [arm.usb_serial for arm in arms_by_role.values()]
@@ -172,6 +198,7 @@ def load_station_config(path: Path) -> StationConfig:
     return StationConfig(
         schema_version=schema_version,
         station_id=station_id,
+        ros_domain_id=ros_domain_id,
         sdk_type=sdk_type,
         arms=tuple(arms_by_role[role] for role in ARM_ROLES),
         cameras=cameras,
@@ -185,7 +212,28 @@ def load_configured_station(path: Path) -> StationConfig:
             f"station configuration is missing: {path}; "
             "run 'arx5-collect station configure' first"
         )
-    return load_station_config(path)
+    station = load_station_config(path)
+    if station.ros_domain_id is None:
+        raise ValueError(
+            "station configuration has no ros_domain_id; run "
+            "'arx5-collect station set-ros-domain-id <id>'"
+        )
+    return station
+
+
+def validate_ros_domain_id(value: object) -> int:
+    if type(value) is not int or not MIN_ROS_DOMAIN_ID <= value <= MAX_ROS_DOMAIN_ID:
+        raise ValueError(
+            f"ros_domain_id must be an integer from {MIN_ROS_DOMAIN_ID} "
+            f"through {MAX_ROS_DOMAIN_ID}"
+        )
+    return value
+
+
+def set_process_ros_domain_id(value: object) -> int:
+    ros_domain_id = validate_ros_domain_id(value)
+    os.environ["ROS_DOMAIN_ID"] = str(ros_domain_id)
+    return ros_domain_id
 
 
 def validate_task_streams(path: Path) -> None:

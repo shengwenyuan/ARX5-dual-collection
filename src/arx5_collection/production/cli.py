@@ -16,7 +16,11 @@ from arx5_collection.episode.cli import (
 from arx5_collection.reset import ResetState
 
 from .checks import CheckFailure, CheckResult
-from .config import load_configured_station, validate_task_streams
+from .config import (
+    load_configured_station,
+    validate_ros_domain_id,
+    validate_task_streams,
+)
 from .devices import DeviceIdentityVerifier
 from .lifecycle import termination_as_interrupt
 from .orchestrator import GIB, ProductionSession
@@ -46,6 +50,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     configure.add_argument(
         "--log-dir", type=Path, default=Path("/tmp/arx5-station-configure")
+    )
+    set_ros_domain_id = station_commands.add_parser(
+        "set-ros-domain-id",
+        help="atomically set the station ROS Domain ID without rebinding hardware",
+    )
+    set_ros_domain_id.add_argument("ros_domain_id", type=ros_domain_id_argument)
+    set_ros_domain_id.add_argument(
+        "--station-config", type=Path, default=DEFAULT_STATION_CONFIG
     )
 
     devices = subcommands.add_parser("devices", help="verify configured device identities")
@@ -97,6 +109,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "devices":
             return run_devices(args.station_config)
         if args.command == "station":
+            if args.station_command == "set-ros-domain-id":
+                return run_station_set_ros_domain_id(
+                    args.station_config,
+                    args.ros_domain_id,
+                )
             return run_station_configure(args.station_config, args.log_dir)
         if args.command == "dagger":
             if args.dagger_command == "checkpoint-sha":
@@ -157,6 +174,9 @@ class ConsoleStationInteraction(StationInteraction):
     def choose_station_id(self, default: str) -> str:
         return self._input(f"Station ID [{default}]: ") or default
 
+    def choose_ros_domain_id(self) -> int:
+        return validate_ros_domain_id(int(self._input("ROS Domain ID: ")))
+
     def prompt_left_arm_movement(self) -> None:
         self._input(
             "Both arms are in gravity compensation. Press ENTER, then gently move "
@@ -215,6 +235,20 @@ def run_station_configure(
         log_dir=log_dir,
     )
     service.configure(interaction)
+    return 0
+
+
+def run_station_set_ros_domain_id(
+    station_path: Path,
+    ros_domain_id: int,
+    stdout: TextIO | None = None,
+) -> int:
+    station = StationConfigStore(station_path).set_ros_domain_id(ros_domain_id)
+    print(
+        f"Station ROS Domain ID committed: {station.ros_domain_id} "
+        f"({station_path})",
+        file=stdout or sys.stdout,
+    )
     return 0
 
 
@@ -324,6 +358,13 @@ def positive_int(value: str) -> int:
     if result <= 0:
         raise argparse.ArgumentTypeError("must be positive")
     return result
+
+
+def ros_domain_id_argument(value: str) -> int:
+    try:
+        return validate_ros_domain_id(int(value))
+    except ValueError as error:
+        raise argparse.ArgumentTypeError(str(error)) from error
 
 
 def absolute_path(value: str) -> Path:

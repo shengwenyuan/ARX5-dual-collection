@@ -7,6 +7,7 @@ from pathlib import Path
 
 from arx5_collection.production.config import (
     EXPECTED_STREAMS,
+    load_configured_station,
     load_station_config,
     validate_task_streams,
 )
@@ -34,6 +35,7 @@ class ProductionConfigTest(unittest.TestCase):
     def test_example_station_has_fixed_logical_identity(self) -> None:
         station = load_station_config(ROOT / "config" / "station.example.json")
         self.assertEqual(station.station_id, "station-example")
+        self.assertEqual(station.ros_domain_id, 31)
         self.assertEqual([arm.role for arm in station.arms], ["left", "right"])
         self.assertEqual(
             [camera.serial_number for camera in station.cameras],
@@ -50,6 +52,7 @@ class ProductionConfigTest(unittest.TestCase):
     def test_station_v2_loads_two_distinct_pedal_bindings(self) -> None:
         payload = json.loads((ROOT / "config" / "station.example.json").read_text())
         payload["schema_version"] = 2
+        payload.pop("ros_domain_id")
         payload["triggers"] = trigger_payload()
         station = load_station_config(self.write_json(payload))
         assert station.triggers is not None
@@ -59,6 +62,7 @@ class ProductionConfigTest(unittest.TestCase):
     def test_station_v2_rejects_same_pedal_for_both_roles(self) -> None:
         payload = json.loads((ROOT / "config" / "station.example.json").read_text())
         payload["schema_version"] = 2
+        payload.pop("ros_domain_id")
         payload["triggers"] = trigger_payload()
         payload["triggers"]["abort"]["serial_number"] = "pedal-one"
         with self.assertRaisesRegex(ValueError, "different serial numbers"):
@@ -67,10 +71,26 @@ class ProductionConfigTest(unittest.TestCase):
     def test_station_v2_rejects_obsolete_event_code(self) -> None:
         payload = json.loads((ROOT / "config" / "station.example.json").read_text())
         payload["schema_version"] = 2
+        payload.pop("ros_domain_id")
         payload["triggers"] = trigger_payload()
         payload["triggers"]["activate"]["event_code"] = 57
         with self.assertRaisesRegex(ValueError, "keys must be exactly"):
             load_station_config(self.write_json(payload))
+
+    def test_station_v3_rejects_invalid_ros_domain_id(self) -> None:
+        payload = json.loads((ROOT / "config" / "station.example.json").read_text())
+        for value in (-1, 233, "31", True):
+            with self.subTest(value=value):
+                payload["ros_domain_id"] = value
+                with self.assertRaisesRegex(ValueError, "ros_domain_id"):
+                    load_station_config(self.write_json(payload))
+
+    def test_production_rejects_legacy_station_without_ros_domain_id(self) -> None:
+        payload = json.loads((ROOT / "config" / "station.example.json").read_text())
+        payload["schema_version"] = 2
+        payload.pop("ros_domain_id")
+        with self.assertRaisesRegex(ValueError, "station set-ros-domain-id"):
+            load_configured_station(self.write_json(payload))
 
     def test_production_task_is_exactly_eight_required_streams(self) -> None:
         path = ROOT / "config" / "task.eight-stream.json"
