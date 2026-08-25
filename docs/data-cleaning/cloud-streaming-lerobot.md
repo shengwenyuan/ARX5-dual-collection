@@ -1,6 +1,6 @@
 # 云端 Episode 流式转换与 LeRobot Fragment 计划
 
-- Status: `unit-3-verified`
+- Status: `unit-4-verified`
 - Date: `2026-08-25`
 - Parent: `docs/data-cleaning/pi05-mcap-to-lerobot.md`
 - DAgger recipe: `docs/data-cleaning/dagger-postprocess.md`
@@ -508,6 +508,19 @@ src/arx5_collection/dataset_cli.py
 - 本地：`26` 个流式模块测试、`34` 个相关回归测试通过；覆盖源文件复制前/中变化、目标冲突、损坏 staging、source root 逃逸和异常清理。
 - 云端：`pi05-cpu` 从 BOS 只读暂存一条 `9,244,689,012 bytes` Episode 到 PFS，用时 `17.432 s`，实测 `505.770 MiB/s`；`stage.json`、两文件大小及恢复校验均通过。
 - 云端 smoke 的精确临时 staging 已在复核后删除；BOS 未写入，W3/W4 未连接。
+
+### 单位 4：Pinned Conversion Recipe / DAgger Fail Selection
+
+本单位先冻结 Worker 将要复用的转换参数，不实现 Worker、Fragment 或 Builder：
+
+- 新增 task 无关的 `pi05-equal-eef-v2` conversion recipe，显式记录 cleaning、等 EEF 采样、左右夹爪标定和 LeRobot v2.1 backend；不再把训练 profile 当转换 profile。
+- 流式 profile 的 `recipe.name` 必须与 conversion recipe 一致；`recipe.task` 继续是本批 legacy Episode 的原样 prompt，两者不混为一个配置。
+- recipe loader 使用严格 schema 和字段集合，拒绝未知字段、缺字段和隐式版本升级。
+- DAgger selector 接受 `outcome=success`，以及已被 authority classifier 判定有效的 `outcome=fail`；两者都只选择完整闭合的 expert correction。
+- `outcome=aborted` 继续排除；普通 demonstration fail 不经过 DAgger selector。DAgger aborted 的未来规则沿用独立 TODO，不在本单位扩张。
+- 用现有 W3 v2 验收值冻结首版参数；参数变化必须产生新的 recipe name/schema，不原地改变历史转换语义。
+- 本地：`63` 个流式、DAgger、π0.5 与清洗相关回归测试通过。
+- 云端：`pi05-cpu` 上 `31` 个定向测试通过；严格加载 `pi05-equal-eef-v2 + lerobot-v2.1 + 5 mm + horizon 50` 契约，无 MCAP 读取、PFS 写入或 W3/W4 连接。
 
 ## 待补信息
 

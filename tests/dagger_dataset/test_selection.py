@@ -77,9 +77,6 @@ class DaggerSelectionTest(unittest.TestCase):
             audit = root / "audit" / "episode-a"
             authority = audit / "authority"
             authority.mkdir(parents=True)
-            (audit / "quality.json").write_text(
-                json.dumps({"outcome": "success", "grade": "A"})
-            )
             (audit / "frame_index.jsonl").touch()
             (authority / "quality.json").write_text(json.dumps({"valid": True}))
             (authority / "segments.jsonl").write_text(
@@ -102,28 +99,47 @@ class DaggerSelectionTest(unittest.TestCase):
                 min_motion_frames=1,
                 trim_segment_end_frames=0,
             )
-            with (
-                patch(
-                    "arx5_collection.dagger_dataset.selection.read_episode_scan",
-                    return_value=scan,
-                ),
-                patch(
-                    "arx5_collection.dagger_dataset.selection.load_frame_groups",
-                    return_value=groups,
-                ),
-            ):
-                result = select_equal_eef_dagger_dataset(
-                    [episode],
-                    root / "audit",
-                    root / "derived",
-                    "task",
-                    GripperCalibration(-1, 0),
-                    GripperCalibration(-1, 0),
-                    policy,
+            for outcome in ("success", "fail"):
+                (audit / "quality.json").write_text(
+                    json.dumps({"outcome": outcome, "grade": "A"})
                 )
+                with (
+                    patch(
+                        "arx5_collection.dagger_dataset.selection.read_episode_scan",
+                        return_value=scan,
+                    ),
+                    patch(
+                        "arx5_collection.dagger_dataset.selection.load_frame_groups",
+                        return_value=groups,
+                    ),
+                ):
+                    result = select_equal_eef_dagger_dataset(
+                        [episode],
+                        root / "audit",
+                        root / f"derived-{outcome}",
+                        "task",
+                        GripperCalibration(-1, 0),
+                        GripperCalibration(-1, 0),
+                        policy,
+                    )
+                self.assertEqual(len(result.episodes), 1)
 
-            self.assertEqual(len(result.episodes), 1)
-            output = root / "derived" / "selection"
+            (audit / "quality.json").write_text(
+                json.dumps({"outcome": "aborted", "grade": "A"})
+            )
+            aborted = select_equal_eef_dagger_dataset(
+                [episode],
+                root / "audit",
+                root / "derived-aborted",
+                "task",
+                GripperCalibration(-1, 0),
+                GripperCalibration(-1, 0),
+                policy,
+            )
+            self.assertEqual(aborted.episodes, ())
+            self.assertEqual(aborted.excluded_episodes[0]["reason"], "outcome_aborted")
+
+            output = root / "derived-fail" / "selection"
             sources = read_jsonl(output / "source_manifest.jsonl")
             samples = read_jsonl(output / "sample_index.jsonl")
 

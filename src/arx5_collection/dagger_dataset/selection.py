@@ -107,7 +107,7 @@ def select_equal_eef_dagger_dataset(
             audit_root / episode_id / "authority" / "quality.json"
         )
         reason = None
-        if quality.get("outcome") != "success":
+        if quality.get("outcome") not in {"success", "fail"}:
             reason = f"outcome_{quality.get('outcome', 'missing')}"
         elif quality.get("grade") == "C":
             reason = "quality_grade_C"
