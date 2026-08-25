@@ -25,6 +25,8 @@ DAgger 后处理位于通用清洗之后、模型 selector 之前。它不修改
 
 Take-over fault Episode 保持 metadata `outcome=fail`，原始数据单独落入 `dagger_fail/<episode_id>`。发现 `FAULT_HOLD` 后只允许保留此前已经完整闭合的 `expert_correction`；未闭合纠正与 fault 后区间不得进入 selection。普通采集的 `fail/` 与 DAgger 的 `dagger_fail/` 不混用。
 
+DAgger aborted 与普通 aborted 的目录分离尚未实现，见 `docs/episode-runtime/dagger-outcome-directory-todo.md`。在目录名和终止语义完成真机验收前，不预设 aborted Episode 的 correction 训练资格。
+
 ## 时间与一致性
 
 1. authority sequence 必须连续，monotonic、bag time 和 control epoch 不得回退。

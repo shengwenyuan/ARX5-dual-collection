@@ -4,6 +4,7 @@
 - Date: `2026-08-25`
 - Parent: `docs/data-cleaning/pi05-mcap-to-lerobot.md`
 - DAgger recipe: `docs/data-cleaning/dagger-postprocess.md`
+- DAgger outcome routing TODO: `docs/episode-runtime/dagger-outcome-directory-todo.md`
 - Scope: 云端 Episode 选择、暂存、并行转换、Fragment 提交与最终 LeRobot 组装
 - Non-goal: 修改采集链路、原始 MCAP 或既有清洗/选择语义
 
@@ -112,6 +113,7 @@ BOS 作为原始 Episode 的长期存储和分发层，首版根路径固定为 
 - path、MCAP 文件名中的保留字只用于发现和冲突检查，不作为 collection type 的唯一事实。
 - 普通/DAgger 语义最终由 metadata `collection_type`、`outcome` 与 authority stream 共同确认。
 - `dagger_fail/` 候选必须验证为 `collection_type=dagger` 且 `outcome=fail`，否则拒绝。
+- DAgger aborted 的独立目录标记尚未冻结；采集侧 TODO 完成前不得仅凭现有 `aborted/` 路径把它识别为 DAgger 数据。
 - `aborted/` 和普通 `fail/` 默认只审计、不生成训练 Fragment；DAgger fault Episode 仍可按既有规则提取 fault 前已闭合 correction。
 - 同一个规范 source Episode 路径只能出现一次；重复发现属于配置错误，不静默去重。
 - 同一个 `episode_id` 指向多个云端路径时视为 blocking conflict，不自动选一个。
