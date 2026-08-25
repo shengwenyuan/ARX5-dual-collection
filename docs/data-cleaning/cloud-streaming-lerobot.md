@@ -1,6 +1,6 @@
 # 云端 Episode 流式转换与 LeRobot Fragment 计划
 
-- Status: `unit-2-verified`
+- Status: `unit-3-verified`
 - Date: `2026-08-25`
 - Parent: `docs/data-cleaning/pi05-mcap-to-lerobot.md`
 - DAgger recipe: `docs/data-cleaning/dagger-postprocess.md`
@@ -185,7 +185,7 @@ discover(include_paths, block) -> EpisodeCandidate[]
 stage(candidate, pfs_staging_dir) -> StageReceipt
 ```
 
-它只允许从 `/mnt/bos/datainfra-demo` 读取，逐 Episode 复制 `episode.mcap`、`metadata.json` 和必要旁车文件，不复制整段任务或日期目录。复制先写 `.partial`，文件 identity 和大小复核通过后再提交 staging。
+它只允许从配置的只读 source root 读取，逐 Episode 复制 `episode.mcap` 与 `metadata.json`，不复制整段任务、日期目录或未冻结契约的旁车文件。复制先写目标同级隐藏临时目录，文件 identity 和大小复核通过后再原子提交 staging。
 
 `BcecmdEpisodeSource` 降为未来无挂载环境的备选 Adapter，不进入 `pi05-cpu` 首版实现，也不要求凭据或 bcecmd 配置。Coordinator 与 Worker 只依赖 `EpisodeSource` Port，因此未来切换传输方式不影响选择、转换和 Fragment 契约。
 
@@ -337,7 +337,7 @@ discovered
 恢复规则：
 
 - 仅在显式恢复同一个 `run-id` 时，已提交 Fragment 才跳过。
-- `.partial` 且没有活动 lease：清理临时 staging 后重试，不发布。
+- 未提交的隐藏临时 staging 且没有活动 lease：清理后重试，不发布。
 - source identity 在确认后改变：标记 `discarded/source_changed_after_confirmation`，不重新发现或替换。
 - failed：保留结构化错误，可按稳定 reason code 选择重试。
 - excluded/discarded：同一 run 恢复时不重复转换。
@@ -417,7 +417,7 @@ src/arx5_collection/dataset_cli.py
 - 确认后 Worker 只消费冻结 manifest；源 identity 改变则 discarded，不静默替换。
 - 普通目录、DAgger 目录和 `dagger_fail/` 路由正确。
 - duplicate Episode ID、metadata/path 冲突和非法 DAgger fail 被拒绝。
-- MountedEpisodeSource 的 `.partial`、复核、提交与清理行为正确。
+- MountedEpisodeSource 的隐藏临时目录、复核、提交与清理行为正确。
 - spawn Worker 不共享 ROS/LeRobot writer 状态。
 - committed/excluded/discarded/failed 的同 run resume 行为幂等。
 - source Session/task 与 split group 规则保持现有语义。
@@ -488,10 +488,24 @@ src/arx5_collection/dataset_cli.py
 - 非终态可以进入 `excluded/discarded/failed`；终态不接受普通迁移。
 - `failed` 只允许通过显式 retry 进入新 attempt 的 `staging`；`committed/excluded/discarded` 恢复时保持 SKIP。
 - reason code 使用稳定的小写路径格式，例如 `discarded/source_changed_after_confirmation`；自由文本 detail 只供诊断，不参与控制判断。
-- 本单位的 resume 只恢复冻结选择与当前 Job 状态，不清理 `.partial`、不判断活动 lease；这些属于 Mounted Source/Coordinator 后续单位。
+- 本单位的 resume 只恢复冻结选择与当前 Job 状态，不清理未提交的临时 staging、不判断活动 lease；这些属于 Mounted Source/Coordinator 后续单位。
 - 本地：`27` 个流式与相关数据处理回归测试通过。
 - 云端：`pi05-cpu` 上 `19` 个定向测试通过；两条真实 BOS Episode 完成只读冻结。模拟结果分别恢复为 `committed/attempt=0` 与 `staging/attempt=1`，证明终态 SKIP 和显式 retry 语义正确。
 - 云端 smoke 只创建精确命名的临时 PFS run manifest，未复制 MCAP、未创建目标 LeRobot；验证后已清理该临时目录。
+
+### 单位 3：Mounted Source / Atomic Staging
+
+本单位只实现冻结候选到 PFS 的单 Episode 暂存，不读取 MCAP 内容、不运行 selector、不生成 Fragment：
+
+- `MountedEpisodeSource` 显式绑定 source root，只允许读取 root 内的规范路径；输入为冻结的 `EpisodeCandidate`，输出为不可变 `StageReceipt`。
+- 首版只复制 `episode.mcap` 与 `metadata.json`。没有已冻结契约的旁车文件不做隐式递归复制。
+- 复制前、复制完成后均复核源文件 `size + mtime_ns`；任何变化统一抛出 `SourceChangedError`，由后续 Coordinator 映射为 `discarded/source_changed_after_confirmation`。
+- 写入目标同级隐藏临时目录，文件 flush + fsync 后写 `stage.json`，最后复用项目原子目录提交；异常时不留下可见 staging。
+- 已存在的目标目录拒绝覆盖。恢复逻辑只能显式复用经过 `stage.json` 和文件 identity 校验的完整 staging；本单位不做自动清理或猜测。
+- `StageReceipt` 只记录 Episode ID、规范 source/staged 路径及两份文件 identity，不记录 SHA，也不承载清洗或训练语义。
+- 本地：`26` 个流式模块测试、`34` 个相关回归测试通过；覆盖源文件复制前/中变化、目标冲突、损坏 staging、source root 逃逸和异常清理。
+- 云端：`pi05-cpu` 从 BOS 只读暂存一条 `9,244,689,012 bytes` Episode 到 PFS，用时 `17.432 s`，实测 `505.770 MiB/s`；`stage.json`、两文件大小及恢复校验均通过。
+- 云端 smoke 的精确临时 staging 已在复核后删除；BOS 未写入，W3/W4 未连接。
 
 ## 待补信息
 

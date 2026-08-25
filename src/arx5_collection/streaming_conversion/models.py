@@ -96,3 +96,12 @@ class JobSnapshot:
     event_index: int
     reason_code: str | None = None
     detail: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class StageReceipt:
+    episode_id: str
+    source_dir: Path
+    stage_dir: Path
+    mcap: FileIdentity
+    metadata: FileIdentity
