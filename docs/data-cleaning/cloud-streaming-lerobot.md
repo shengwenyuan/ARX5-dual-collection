@@ -1,6 +1,6 @@
 # 云端 Episode 流式转换与 LeRobot Fragment 计划
 
-- Status: `unit-1-verified`
+- Status: `unit-2-verified`
 - Date: `2026-08-25`
 - Parent: `docs/data-cleaning/pi05-mcap-to-lerobot.md`
 - DAgger recipe: `docs/data-cleaning/dagger-postprocess.md`
@@ -476,6 +476,22 @@ src/arx5_collection/dataset_cli.py
 - 已验证白名单互斥、任意深度 Episode 边界、精确 block、重复 ID、metadata/path 冲突和符号链接逃逸。
 - 真实 metadata task 是通用采集描述，而既有训练数据通过转换参数写入 `folding the cloth`。首版已冻结为 recipe 显式 task；采集侧逐 Episode task 缺口独立记录在 `docs/episode-runtime/task-description-todo.md`。
 - `pi05-cpu` 上 `13` 个定向测试和两条真实 BOS Episode 的无副作用对齐 smoke 通过，单位 1 收口。
+
+### 单位 2：Frozen Manifest / Job State / Resume
+
+本单位只实现确认后的控制面持久化，不暂存 MCAP、不启动转换 Worker：
+
+- 新 run 使用同文件系统临时目录写入 `run.json`、`selection_manifest.jsonl` 与初始 `jobs.jsonl`，完整后一次 rename 提交；已存在 run-id 拒绝覆盖。
+- `run.json` 冻结 recipe name/profile/task 与目标 snapshot；selection row 冻结规范 source path、Episode metadata 摘要和 MCAP/metadata size + mtime；不计算内容 SHA，也不在每条 Episode 重复运行级字段。
+- `jobs.jsonl` 是单 Coordinator 写入的 append-only 事件流；每次追加后 flush + fsync，恢复时重放并严格验证迁移。
+- 正常迁移固定为 `discovered -> staging -> converting -> validating -> committed`。
+- 非终态可以进入 `excluded/discarded/failed`；终态不接受普通迁移。
+- `failed` 只允许通过显式 retry 进入新 attempt 的 `staging`；`committed/excluded/discarded` 恢复时保持 SKIP。
+- reason code 使用稳定的小写路径格式，例如 `discarded/source_changed_after_confirmation`；自由文本 detail 只供诊断，不参与控制判断。
+- 本单位的 resume 只恢复冻结选择与当前 Job 状态，不清理 `.partial`、不判断活动 lease；这些属于 Mounted Source/Coordinator 后续单位。
+- 本地：`27` 个流式与相关数据处理回归测试通过。
+- 云端：`pi05-cpu` 上 `19` 个定向测试通过；两条真实 BOS Episode 完成只读冻结。模拟结果分别恢复为 `committed/attempt=0` 与 `staging/attempt=1`，证明终态 SKIP 和显式 retry 语义正确。
+- 云端 smoke 只创建精确命名的临时 PFS run manifest，未复制 MCAP、未创建目标 LeRobot；验证后已清理该临时目录。
 
 ## 待补信息
 

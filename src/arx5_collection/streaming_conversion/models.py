@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 
 
@@ -48,3 +49,50 @@ class DiscoveryResult:
         return dict(
             sorted(Counter(item.task_description for item in self.candidates).items())
         )
+
+
+class JobState(str, Enum):
+    DISCOVERED = "discovered"
+    STAGING = "staging"
+    CONVERTING = "converting"
+    VALIDATING = "validating"
+    COMMITTED = "committed"
+    EXCLUDED = "excluded"
+    DISCARDED = "discarded"
+    FAILED = "failed"
+
+
+@dataclass(frozen=True, slots=True)
+class SelectionEntry:
+    episode_id: str
+    source_dir: Path
+    relative_dir: Path
+    collection_type: str
+    outcome: str
+    metadata_task_id: str
+    metadata_task_description: str
+    training_task: str
+    mcap: FileIdentity
+    metadata: FileIdentity
+
+
+@dataclass(frozen=True, slots=True)
+class JobEvent:
+    event_index: int
+    episode_id: str
+    previous_state: JobState | None
+    state: JobState
+    attempt: int
+    recorded_at: str
+    reason_code: str | None = None
+    detail: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class JobSnapshot:
+    episode_id: str
+    state: JobState
+    attempt: int
+    event_index: int
+    reason_code: str | None = None
+    detail: str | None = None
