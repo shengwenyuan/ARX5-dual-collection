@@ -1,6 +1,6 @@
 # 云端 Episode 流式转换与 LeRobot Fragment 计划
 
-- Status: `unit-6-verified`
+- Status: `unit-7-verified`
 - Date: `2026-08-25`
 - Updated: `2026-08-26`
 - Parent: `docs/data-cleaning/pi05-mcap-to-lerobot.md`
@@ -558,6 +558,28 @@ src/arx5_collection/dataset_cli.py
 - 本地：`44` 个流式定向测试、全项目 `353 passed / 2 skipped`；覆盖两阶段调度、并发上限、转换优先、源变化与未知 station 分类、staging 释放、终态跳过、失败显式重试和中断 attempt 恢复。
 - 云端：`pi05-cpu` 上 `44` 个定向测试通过。两条真实 BOS Episode 使用 `2` 个 spawn Worker 完成只读暂存与完整性复核，合计约 `18 GB`，总耗时 `37.182 s`；两条均按 smoke 设计进入 `excluded/selection/unit6_smoke`，attempt 均为 `0`，最终 staging 为空。
 - 云端 smoke 只创建精确命名的临时 run；复核后已清理。BOS 未写入，目标 LeRobot 未创建，W3/W4 未连接。
+
+### 单位 7：Pinned LeRobot v2.1 Builder
+
+本单位只组装当前 run 已提交的 Fragments，不增加 CLI，也不改变 Worker 转换语义：
+
+- Builder 只接受同一 `RunManifest` 中、按冻结 selection 顺序排列的 committed Fragments；`excluded/discarded` 写入汇总，存在 `failed` 或非终态时拒绝组装。
+- 首版 backend 显式命名为 `lerobot-v2.1`。不通过平台工具合并，也不隐式升级格式；未来 v3 使用新的 backend 与 schema。
+- 每个 Fragment 先独立复核 `COMMITTED.json`、`fragment.json`、LeRobot `info/episodes/tasks/stats`、Parquet、视频、source manifest 和计数闭合。
+- 全局 LeRobot episode 顺序固定为 selection 顺序，再按 Fragment 内 local episode index 排序；全局 frame/index/task index 确定性重写。
+- Parquet 只重写索引列，不解码或重编码 RGB 视频；视频优先同文件系统 hard-link，无法 hard-link 时复制。最终 snapshot 不依赖 Fragment 生命周期。
+- task 字符串原样合并，允许 snapshot 包含多个 task；同一 source Episode 和同一 source Session 内仍必须唯一一致。`split_group` 必须保持 source Episode ID。
+- 不同 station 允许使用 recipe 中各自冻结的标定数值；Builder 必须拒绝 gripper normalization、state/action、采样、相机、fps、颜色、LeRobot/OpenPI commit 等训练契约漂移。
+- 输出在同级隐藏目录完整构建并通过现有 LeRobot validator 后一次 rename 发布；已存在目标拒绝覆盖。
+- 发布成功后才删除本 run 的 staging 与 Fragments；保留 `run.json`、selection/jobs manifest 及最终 source/discarded/snapshot 报告。失败时完整保留 run 供诊断和恢复。
+- 本单位验收使用两个真实 committed Fragment 组装一个 v2.1 snapshot，复核 LeRobot 与 OpenPI loader、task、source lineage、总 episode/frame 数和 Fragment 清理边界。
+- 实现采用文件级 v2.1 backend：Parquet 逐 Episode 重写 `episode_index/index/task_index`，视频优先 hard-link、跨文件系统才复制，不做二次视频编解码；输出始终以隐藏目录构建并原子发布。
+- 本地：`49` 个流式定向测试、全项目 `358 passed / 2 skipped`；覆盖确定性顺序、多 task、同 Session task 冲突、不同 station 标定共存、契约漂移、failed 阻断、既有输出保护和临时路径清理。
+- 云端：`pi05-cpu` 上 `49` 个定向测试通过。首轮 W3/W4 混合 smoke 正确把一条超出冻结 W3 夹爪标定的数据判为 `discarded/episode_data_contract`，并用另一条 W4 Fragment 成功组装 `1 episode / 2,223 frames`；discarded 汇总与 source lineage 均正确。
+- 最终双 Fragment smoke 使用两条 W4 Episode，源 MCAP 合计 `18,255,438,493 bytes`；并行转换耗时 `618.805 s`，两个 Fragment 分别为 `2,223` 与 `2,146` frames。Builder 耗时 `3.658 s`，输出 `2 episodes / 4,369 frames / 6 videos`。
+- 最终 snapshot 通过 LeRobot v2.1 独立加载，检查帧 `0/2184/4368`、`50 Hz`、action horizon `50` 和原样 task `folding the cloth`；两个 Parquet 的全局 Episode/frame/index/task index 连续，source Episode/session 与 `split_group` 闭合。
+- 真实 smoke 首轮发现 `validation.json` 暂存路径泄漏并修正为最终输出路径；修正后本地与云端回归通过。视频在 Fragment 清理后 link count 为 `1`，证明最终 snapshot 不依赖已删除缓存。
+- `pi05-cpu` 当前虚拟环境未安装 OpenPI，因此实际 OpenPI loader 验收保留到下一端到端单位的既有训练环境；本单位不为 smoke 临时改变云端依赖。所有精确命名 smoke run、snapshot 与临时脚本均已清理，BOS 未写入，W3/W4 未连接。
 
 ## 待补信息
 
