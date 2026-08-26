@@ -1,6 +1,6 @@
 # 云端 Episode 流式转换与 LeRobot Fragment 计划
 
-- Status: `unit-7-verified`
+- Status: `unit-8-verified`
 - Date: `2026-08-25`
 - Updated: `2026-08-26`
 - Parent: `docs/data-cleaning/pi05-mcap-to-lerobot.md`
@@ -166,7 +166,7 @@ BOS 作为原始 Episode 的长期存储和分发层，首版根路径固定为 
   fragment.json
   COMMITTED.json               # run 内最后提交
 
-<lerobot-root>/<dataset-name>_<YYYY-MM-DD>/
+<lerobot-root>/<owner>/<dataset-name>_<YYYY-MM-DD>/
   data/
   meta/
   videos/
@@ -371,7 +371,7 @@ workers = 4
 [output]
 lerobot_root = "/mnt/pfs/swy/dataset/1011/arx5/fold_cloth/lerobot"
 dataset_name = "fold_cloth"
-repo_id = "<owner>/<dataset>"
+repo_id = "<owner>/<dataset_name>"
 
 [recipe]
 name = "pi05-equal-eef-v2"
@@ -383,7 +383,7 @@ task = "folding the cloth"
 
 首版 recipe 的 `task` 是临时兼容字段，字符串原样进入全部训练 Segment。真实 Episode metadata 目前仍写入通用采集描述；采集侧修复见 `docs/episode-runtime/task-description-todo.md`。该 TODO 验收前不允许从目录名猜测 task；验收后再以显式 schema 版本迁移到逐 Episode metadata task。
 
-未提供 `--output` 时，默认输出为 `<lerobot_root>/<dataset_name>_<YYYY-MM-DD>`，日期取运行当天。`--output` 必须是绝对路径。默认路径或覆盖路径已存在时直接拒绝，不自动覆盖、合并或添加随机后缀。
+未提供 `--output` 时，默认输出为 `<lerobot_root>/<owner>/<dataset_name>_<YYYY-MM-DD>`，有效 repo ID 同步冻结为 `<owner>/<dataset_name>_<YYYY-MM-DD>`，可由 `HF_LEROBOT_HOME=<lerobot_root>` 的训练入口直接定位。`--output` 必须是绝对路径；覆盖时使用其 basename 作为有效 dataset 名。默认路径或覆盖路径已存在时直接拒绝，不自动覆盖、合并或添加随机后缀。recipe `profile` 的相对路径以 streaming config 所在目录为基准解析。
 
 ## 代码边界
 
@@ -580,6 +580,37 @@ src/arx5_collection/dataset_cli.py
 - 最终 snapshot 通过 LeRobot v2.1 独立加载，检查帧 `0/2184/4368`、`50 Hz`、action horizon `50` 和原样 task `folding the cloth`；两个 Parquet 的全局 Episode/frame/index/task index 连续，source Episode/session 与 `split_group` 闭合。
 - 真实 smoke 首轮发现 `validation.json` 暂存路径泄漏并修正为最终输出路径；修正后本地与云端回归通过。视频在 Fragment 清理后 link count 为 `1`，证明最终 snapshot 不依赖已删除缓存。
 - `pi05-cpu` 当前虚拟环境未安装 OpenPI，因此实际 OpenPI loader 验收保留到下一端到端单位的既有训练环境；本单位不为 smoke 临时改变云端依赖。所有精确命名 smoke run、snapshot 与临时脚本均已清理，BOS 未写入，W3/W4 未连接。
+
+### 单位 8：Application Wiring / Thin CLI / End-to-end
+
+本单位只连接已经验收的组件，不向 CLI 搬运发现、Worker、Builder 或状态机业务逻辑：
+
+- 新命令为 `arx5-dataset stream-to-lerobot --config <profile>`；可选 `--output <absolute-path>` 与 `--run-id <id>` 只覆盖运行身份和最终位置。
+- 恢复使用 `--resume <run-id>`，只读取该 run 已冻结的 selection；不重新 discovery、不再次等待 ENTER。`--retry-failed` 只能与 resume 同用，并显式把本 run 全部 failed job 提升到新 attempt。
+- 新 run 固定顺序为：加载并交叉校验 streaming/recipe profile → 只读 discovery → 输出 alignment → ENTER → 原子创建 manifest → Coordinator → Builder → 输出单个结构化摘要。
+- resume 必须校验 config 的 source/streaming root、workers、recipe name/profile/task 与 `run.json` 一致；`--output` 不得改写既有 run 的冻结目标。
+- CLI handler 只负责 argparse、标准输入输出和取消退出码；应用编排位于独立 `streaming_conversion/application.py`。
+- 本地使用依赖注入测试 ENTER 前无副作用、new run、resume、显式 retry 和参数冲突；云端使用两条小批 Episode 完成命令级端到端，仍只读 BOS。
+- 默认输出与训练路径统一为 `<lerobot_root>/<owner>/<dataset_name>_<date>`，有效 repo ID 同名写入 run schema `2`。绝对 output override 使用其 basename，避免目录名与 LeRobot repo ID 分离。
+- 提供 `config/streaming.fold-cloth.example.toml`；用户只需复制后编辑白名单、block 与 workers。recipe 相对路径以该 config 文件目录解析。
+- 本地：`59` 个 streaming/CLI 测试及全项目 `365 passed / 2 skipped`；覆盖 ENTER 前无副作用、自动日期 repo、显式 output/run-id、resume 不重新 discovery、failed 显式 retry、冻结配置漂移、路径逃逸和 CLI 参数互斥。
+- 云端：`pi05-cpu` 上 `59` 个定向测试通过。真实 CLI 展示并确认 `2 Episodes / 9,247,178,168 MCAP bytes / 2 workers` 后才创建 run；立即输出冻结 run/output/repo ID。
+- 命令级结果为 `1 committed + 1 quality exclusion -> 1 LeRobot episode / 2,223 frames`；最终 repo ID 为 `local/unit8_cli_smoke_2026-08-26`，validation 报告引用最终路径，run schema `2` 与 source/session lineage 正确，staging/Fragments 均已释放。
+- smoke 暴露并修正 selector 的 `quality_grade_C` 非法 reason code：固定为 `selection/quality_grade_c`，Worker 同时增加稳定 reason component 校验，防止未来二次状态异常覆盖原始原因。真实短 Episode 单独复测已返回正确 `excluded` 结果。
+- 实际 resume/retry 的状态迁移由本地真实 manifest 测试覆盖；云端不重复执行 10 分钟转换。所有 Unit 8 smoke snapshot、run、probe 和临时 profile 已清理，BOS 未写入，W3/W4 未连接。
+
+当前入口：
+
+```bash
+cp config/streaming.fold-cloth.example.toml /tmp/fold-cloth.toml
+# 编辑 include_paths / block / workers
+arx5-dataset stream-to-lerobot --config /tmp/fold-cloth.toml
+
+# 中断恢复；只有确需重试 failed 时才追加 --retry-failed
+arx5-dataset stream-to-lerobot \
+  --config /tmp/fold-cloth.toml \
+  --resume <run-id>
+```
 
 ## 待补信息
 

@@ -75,7 +75,7 @@ def _select_dataset(
         if quality.get("outcome") != "success":
             reason = f"outcome_{quality.get('outcome', 'missing')}"
         elif quality.get("grade") == "C":
-            reason = "quality_grade_C"
+            reason = "quality_grade_c"
         if reason is not None:
             excluded.append(ExcludedEpisodeArtifact(episode_id=episode_id, reason=reason))
             continue

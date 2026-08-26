@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
+import re
 
 from arx5_collection.artifacts import read_json
 from arx5_collection.artifacts import read_jsonl
@@ -26,6 +27,7 @@ from .source import validate_stage
 
 
 FRAGMENT_SCHEMA_VERSION = 1
+_REASON_COMPONENT = re.compile(r"^[a-z][a-z0-9_]*$")
 
 
 class _Excluded(RuntimeError):
@@ -205,8 +207,8 @@ def _excluded_result(
     if exclusion.get("episode_id") != receipt.episode_id:
         raise RuntimeError("selector exclusion references another Episode")
     reason = exclusion.get("reason")
-    if not isinstance(reason, str) or not reason:
-        raise RuntimeError("selector exclusion has no stable reason")
+    if not isinstance(reason, str) or not _REASON_COMPONENT.fullmatch(reason):
+        raise RuntimeError("selector exclusion has no stable reason code")
     return EpisodeConversionResult(
         episode_id=receipt.episode_id,
         status=ConversionStatus.EXCLUDED,

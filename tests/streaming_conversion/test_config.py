@@ -28,7 +28,13 @@ class StreamingConfigTest(unittest.TestCase):
         self.assertEqual(config.recipe.task, "folding the cloth")
         self.assertEqual(
             config.output.dated_path(date(2026, 8, 25)),
-            Path("/mnt/pfs/swy/dataset/lerobot/fold_cloth_2026-08-25"),
+            Path("/mnt/pfs/swy/dataset/lerobot/local/fold_cloth_2026-08-25"),
+        )
+        self.assertEqual(
+            config.output.repo_id_for(
+                Path("/mnt/pfs/swy/dataset/lerobot/local/custom")
+            ),
+            "local/custom",
         )
 
     def test_rejects_non_positive_worker_count(self) -> None:
@@ -58,6 +64,19 @@ class StreamingConfigTest(unittest.TestCase):
             path.write_text(_profile().replace('block = ["aborted", "logs"]', 'block = ["bad/logs"]'))
 
             with self.assertRaisesRegex(ValueError, "one path component"):
+                StreamingConversionConfig.load(path)
+
+    def test_repo_dataset_base_must_match_dataset_name(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "streaming.toml"
+            path.write_text(
+                _profile().replace(
+                    'repo_id = "local/fold_cloth"',
+                    'repo_id = "local/another_name"',
+                )
+            )
+
+            with self.assertRaisesRegex(ValueError, "must equal"):
                 StreamingConversionConfig.load(path)
 
 

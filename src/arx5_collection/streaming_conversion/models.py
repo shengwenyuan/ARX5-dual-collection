@@ -64,6 +64,19 @@ class JobState(str, Enum):
 
 
 @dataclass(frozen=True, slots=True)
+class RunDefinition:
+    run_id: str
+    source_root: Path
+    streaming_root: Path
+    output_path: Path
+    repo_id: str
+    workers: int
+    recipe_name: str
+    recipe_profile: str
+    recipe_task: str
+
+
+@dataclass(frozen=True, slots=True)
 class SelectionEntry:
     episode_id: str
     source_session_id: str

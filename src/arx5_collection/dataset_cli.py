@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import sys
 from typing import Callable
 from typing import Sequence
 
@@ -22,6 +23,9 @@ from arx5_collection.pi05_dataset.selection_pipeline import select_equal_eef_dat
 from arx5_collection.pi05_dataset.validate import compute_openpi_norm_stats
 from arx5_collection.pi05_dataset.validate import validate_lerobot
 from arx5_collection.pi05_dataset.validate import validate_openpi
+from arx5_collection.streaming_conversion.alignment import AlignmentCancelled
+from arx5_collection.streaming_conversion.application import StreamingRunRequest
+from arx5_collection.streaming_conversion.application import execute_streaming_conversion
 
 
 CommandHandler = Callable[[argparse.Namespace], int]
@@ -248,6 +252,39 @@ def _handle_norm_stats(args: argparse.Namespace) -> int:
     return 0
 
 
+def _handle_stream_to_lerobot(args: argparse.Namespace) -> int:
+    request = StreamingRunRequest(
+        config_path=args.config,
+        output_override=args.output,
+        run_id=args.run_id,
+        resume_run_id=args.resume,
+        retry_failed=args.retry_failed,
+    )
+    try:
+        result = execute_streaming_conversion(request, sys.stdin, sys.stdout)
+    except AlignmentCancelled as error:
+        print(f"cancelled: {error}", file=sys.stderr)
+        return 2
+    print(
+        json.dumps(
+            {
+                "run_id": result.run_id,
+                "output": str(result.snapshot.output_path),
+                "repo_id": result.snapshot.repo_id,
+                "source_episodes": result.snapshot.source_episode_count,
+                "lerobot_episodes": result.snapshot.episode_count,
+                "frames": result.snapshot.frame_count,
+                "committed": result.committed,
+                "excluded": result.excluded,
+                "discarded": result.discarded,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
+    return 0
+
+
 def _add_selection_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--input-root", type=Path, action="append", required=True)
     parser.add_argument("--audit-root", type=Path, required=True)
@@ -383,6 +420,18 @@ def build_parser() -> argparse.ArgumentParser:
     norm_parser.add_argument("--output-dir", type=Path, required=True)
     norm_parser.add_argument("--max-frames", type=int)
     norm_parser.set_defaults(handler=_handle_norm_stats)
+
+    stream_parser = subparsers.add_parser(
+        "stream-to-lerobot",
+        help="stream frozen cloud Episodes into one immutable LeRobot snapshot",
+    )
+    stream_parser.add_argument("--config", type=Path, required=True)
+    stream_parser.add_argument("--output", type=Path)
+    run_identity = stream_parser.add_mutually_exclusive_group()
+    run_identity.add_argument("--run-id")
+    run_identity.add_argument("--resume", metavar="RUN_ID")
+    stream_parser.add_argument("--retry-failed", action="store_true")
+    stream_parser.set_defaults(handler=_handle_stream_to_lerobot)
     return parser
 
 

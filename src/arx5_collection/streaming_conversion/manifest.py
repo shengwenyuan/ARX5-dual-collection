@@ -16,10 +16,11 @@ from .models import FileIdentity
 from .models import JobEvent
 from .models import JobSnapshot
 from .models import JobState
+from .models import RunDefinition
 from .models import SelectionEntry
 
 
-RUN_SCHEMA_VERSION = 1
+RUN_SCHEMA_VERSION = 2
 SELECTION_SCHEMA_VERSION = 2
 JOB_EVENT_SCHEMA_VERSION = 1
 _REASON_CODE = re.compile(r"^[a-z][a-z0-9_]*(/[a-z][a-z0-9_]*)*$")
@@ -67,12 +68,14 @@ class RunManifest:
         self,
         run_dir: Path,
         run_id: str,
+        definition: RunDefinition,
         selection: tuple[SelectionEntry, ...],
         events: list[JobEvent],
         clock: Callable[[], datetime] | None = None,
     ) -> None:
         self.run_dir = run_dir
         self.run_id = run_id
+        self.definition = definition
         self.selection = selection
         self._events = events
         self._clock = clock or _utc_now
@@ -85,6 +88,7 @@ class RunManifest:
         discovery: DiscoveryResult,
         output_path: Path,
         run_id: str,
+        repo_id: str | None = None,
         *,
         clock: Callable[[], datetime] | None = None,
     ) -> RunManifest:
@@ -132,6 +136,7 @@ class RunManifest:
             "source_root": str(discovery.source_root),
             "streaming_root": str(config.runtime.streaming_root),
             "output_path": str(output_path),
+            "repo_id": repo_id or config.output.repo_id_for(output_path),
             "workers": config.runtime.workers,
             "recipe": {
                 "name": config.recipe.name,
@@ -168,6 +173,7 @@ class RunManifest:
                 "source_root",
                 "streaming_root",
                 "output_path",
+                "repo_id",
                 "workers",
                 "recipe",
             },
@@ -185,7 +191,14 @@ class RunManifest:
         if not selection:
             raise ValueError("selection manifest must not be empty")
         events = [_job_event(value) for value in _read_jsonl(run_dir / "jobs.jsonl")]
-        return cls(run_dir, run_id, selection, events, clock)
+        return cls(
+            run_dir,
+            run_id,
+            _run_definition(run_value),
+            selection,
+            events,
+            clock,
+        )
 
     @property
     def jobs(self) -> dict[str, JobSnapshot]:
@@ -356,6 +369,30 @@ def _validate_reason(state: JobState, reason_code: str | None) -> None:
             raise ValueError(f"state={state.value} requires a stable reason_code")
     elif reason_code is not None:
         raise ValueError(f"state={state.value} must not contain reason_code")
+
+
+def _run_definition(value: dict[str, Any]) -> RunDefinition:
+    recipe = value["recipe"]
+    _exact_keys(recipe, {"name", "profile", "task"}, "run recipe")
+    source_root = Path(_string(value["source_root"], "run source_root"))
+    streaming_root = Path(_string(value["streaming_root"], "run streaming_root"))
+    output_path = Path(_string(value["output_path"], "run output_path"))
+    if not all(path.is_absolute() for path in (source_root, streaming_root, output_path)):
+        raise ValueError("run paths must be absolute")
+    workers = _non_negative_int(value["workers"], "run workers")
+    if workers == 0:
+        raise ValueError("run workers must be positive")
+    return RunDefinition(
+        run_id=_path_component(value["run_id"], "run_id"),
+        source_root=source_root,
+        streaming_root=streaming_root,
+        output_path=output_path,
+        repo_id=_string(value["repo_id"], "run repo_id"),
+        workers=workers,
+        recipe_name=_string(recipe["name"], "run recipe name"),
+        recipe_profile=_string(recipe["profile"], "run recipe profile"),
+        recipe_task=_string(recipe["task"], "run recipe task"),
+    )
 
 
 def _selection_value(item: SelectionEntry) -> dict[str, object]:

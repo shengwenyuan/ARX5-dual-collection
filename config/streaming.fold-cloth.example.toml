@@ -1,0 +1,23 @@
+schema_version = 1
+
+[source]
+root = "/mnt/bos/datainfra-demo"
+include_paths = [
+  "fold_cloth/2026-08-21",
+  "fold_cloth/2026-08-22",
+]
+block = ["aborted", "fail", "test", "logs"]
+
+[runtime]
+streaming_root = "/mnt/pfs/swy/dataset/1011/arx5/fold_cloth/streaming"
+workers = 25
+
+[output]
+lerobot_root = "/mnt/pfs/swy/dataset/1011/arx5/fold_cloth/lerobot"
+dataset_name = "fold_cloth"
+repo_id = "local/fold_cloth"
+
+[recipe]
+name = "pi05-equal-eef-v2"
+profile = "conversion.pi05-equal-eef-v2.toml"
+task = "folding the cloth"

@@ -27,7 +27,20 @@ class OutputConfig:
 
     def dated_path(self, today: date | None = None) -> Path:
         value = today or date.today()
-        return self.lerobot_root / f"{self.dataset_name}_{value.isoformat()}"
+        return (
+            self.lerobot_root
+            / self.repo_owner
+            / f"{self.dataset_name}_{value.isoformat()}"
+        )
+
+    @property
+    def repo_owner(self) -> str:
+        return self.repo_id.partition("/")[0]
+
+    def repo_id_for(self, output_path: Path) -> str:
+        if not output_path.is_absolute():
+            raise ValueError("LeRobot output path must be absolute")
+        return f"{self.repo_owner}/{output_path.name}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,6 +86,12 @@ class StreamingConversionConfig:
         workers = runtime["workers"]
         if isinstance(workers, bool) or not isinstance(workers, int) or workers < 1:
             raise ValueError("runtime.workers must be a positive integer")
+        dataset_name = _single_component(
+            output["dataset_name"], "output.dataset_name"
+        )
+        repo_id = _repo_id(output["repo_id"])
+        if repo_id.partition("/")[2] != dataset_name:
+            raise ValueError("output.repo_id dataset must equal output.dataset_name")
         return cls(
             schema_version=1,
             source=SourceConfig(
@@ -90,10 +109,8 @@ class StreamingConversionConfig:
                 lerobot_root=_absolute_path(
                     output["lerobot_root"], "output.lerobot_root"
                 ),
-                dataset_name=_single_component(
-                    output["dataset_name"], "output.dataset_name"
-                ),
-                repo_id=_non_empty_string(output["repo_id"], "output.repo_id"),
+                dataset_name=dataset_name,
+                repo_id=repo_id,
             ),
             recipe=RecipeConfig(
                 name=_non_empty_string(recipe["name"], "recipe.name"),
@@ -157,3 +174,13 @@ def _block_names(value: object) -> tuple[str, ...]:
     if len(names) != len(set(names)):
         raise ValueError("source.block entries must be unique")
     return names
+
+
+def _repo_id(value: object) -> str:
+    text = _non_empty_string(value, "output.repo_id")
+    owner, separator, dataset = text.partition("/")
+    if not separator or not owner or not dataset or "/" in dataset:
+        raise ValueError("output.repo_id must use the '<owner>/<dataset>' form")
+    _single_component(owner, "output.repo_id owner")
+    _single_component(dataset, "output.repo_id dataset")
+    return text

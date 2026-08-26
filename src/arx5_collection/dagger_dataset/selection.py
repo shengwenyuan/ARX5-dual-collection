@@ -113,7 +113,7 @@ def select_equal_eef_dagger_dataset(
         if quality.get("outcome") not in {"success", "fail"}:
             reason = f"outcome_{quality.get('outcome', 'missing')}"
         elif quality.get("grade") == "C":
-            reason = "quality_grade_C"
+            reason = "quality_grade_c"
         elif not authority_quality.get("valid"):
             reason = "invalid_authority_timeline"
         if reason is not None:

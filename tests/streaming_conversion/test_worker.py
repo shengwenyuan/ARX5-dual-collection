@@ -94,6 +94,38 @@ class ConvertEpisodeFragmentTest(unittest.TestCase):
         self.assertFalse(target.exists())
         export.assert_not_called()
 
+    def test_rejects_unstable_selector_exclusion_reason(self) -> None:
+        receipt = self._stage("demonstration", "success", "success")
+        target = self.root / "fragments" / receipt.episode_id
+        excluded = SimpleNamespace(
+            episodes=(),
+            excluded_episodes=(
+                {"episode_id": receipt.episode_id, "reason": "quality_grade_C"},
+            ),
+            output_dir=target.parent / "unused",
+        )
+
+        with (
+            patch(
+                "arx5_collection.streaming_conversion.worker.clean_episode",
+                side_effect=self._fake_clean,
+            ),
+            patch(
+                "arx5_collection.streaming_conversion.worker.select_equal_eef_dataset",
+                return_value=excluded,
+            ),
+            self.assertRaisesRegex(RuntimeError, "stable reason code"),
+        ):
+            convert_episode_fragment(
+                receipt,
+                target,
+                self.recipe,
+                "folding the cloth",
+                "local/fragment-test",
+            )
+
+        self.assertFalse(target.exists())
+
     def test_dagger_fail_routes_through_authority_pipeline(self) -> None:
         receipt = self._stage("dagger", "fail", "dagger_fail")
         target = self.root / "fragments" / receipt.episode_id

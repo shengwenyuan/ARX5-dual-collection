@@ -72,6 +72,7 @@ class DatasetCliTest(unittest.TestCase):
                 "--repo-id", "local/data",
                 "--output-dir", "/stats",
             ],
+            ["stream-to-lerobot", "--config", "/config.toml"],
         )
 
         parser = build_parser()
