@@ -62,3 +62,5 @@ services:
       - /config/task.json
       - --output-root
       - "${ARX5_OUTPUT_ROOT:-}"
+      - --task-description
+      - "${ARX5_TASK_DESCRIPTION:-}"

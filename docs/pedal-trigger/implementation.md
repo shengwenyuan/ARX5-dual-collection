@@ -10,7 +10,7 @@
 将两只独立 LinkStone 连拓 A096H USB 踏板接入现有 Trigger 边界：
 
 - 1 号踏板完全替代 `SPACE`：`READY` 时开始 Episode，`RECORDING` 时以 `success` 结束。
-- 2 号踏板完全替代 `A`：仅在 `RECORDING` 时以 `operator requested abort` 结束当前 Episode，提交到 `aborted/` 后返回 `READY`。
+- 2 号踏板完全替代 `A`：仅在 `RECORDING` 时以 `operator requested abort` 结束当前 Episode，提交到 `abort/` 后返回 `READY`；metadata outcome 为 `aborted`。
 - 保留键盘作为踏板不完整时的整组回退，不改变 Episode 状态机、Recorder、Store 或 MCAP 语义。
 - 踏板属于站点硬件，其身份最终写入 `/var/lib/arx5-collection/station.json`，不进入 Git。
 

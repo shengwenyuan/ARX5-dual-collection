@@ -6,7 +6,7 @@ include_paths = [
   "fold_cloth/2026-08-21",
   "fold_cloth/2026-08-22",
 ]
-block = ["aborted", "fail", "test", "logs"]
+block = ["abort", "fail", "test", "logs"]
 
 [runtime]
 streaming_root = "/mnt/pfs/swy/dataset/1011/arx5/fold_cloth/streaming"

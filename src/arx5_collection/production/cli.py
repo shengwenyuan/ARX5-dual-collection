@@ -98,6 +98,7 @@ def add_session_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--station-config", type=Path, default=DEFAULT_STATION_CONFIG)
     parser.add_argument("--task-config", type=Path, required=True)
     parser.add_argument("--output-root", type=absolute_path, required=True)
+    parser.add_argument("--task-description", type=non_empty_text, required=True)
     parser.add_argument("--episodes", type=non_negative_int, default=0)
     parser.add_argument("--min-free-gib", type=positive_int, default=80)
     parser.add_argument("--readiness-timeout-s", type=positive_float, default=30.0)
@@ -255,7 +256,12 @@ def run_station_set_ros_domain_id(
 def run_session(args: argparse.Namespace) -> int:
     station = load_configured_station(args.station_config)
     validate_task_streams(args.task_config)
-    request = load_request(args.task_config, args.output_root, args.station_config)
+    request = load_request(
+        args.task_config,
+        args.output_root,
+        args.station_config,
+        task_description=args.task_description,
+    )
     session_log_dir = args.output_root / "logs" / _session_id()
 
     def check_sink(result: CheckResult) -> None:
@@ -319,6 +325,7 @@ def _dagger_run_spec(args: argparse.Namespace):
     return DaggerRunSpec(
         station_config=args.station_config,
         task_config=args.task_config,
+        task_description=args.task_description,
         policy_config=args.policy_config,
         output_root=args.output_root,
         episodes=args.episodes,
@@ -379,6 +386,12 @@ def positive_float(value: str) -> float:
     if result <= 0:
         raise argparse.ArgumentTypeError("must be positive")
     return result
+
+
+def non_empty_text(value: str) -> str:
+    if not value.strip():
+        raise argparse.ArgumentTypeError("must not be empty")
+    return value
 
 
 def _software_version() -> str:

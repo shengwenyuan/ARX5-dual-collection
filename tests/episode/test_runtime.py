@@ -157,16 +157,16 @@ class EpisodeRuntimeTest(unittest.TestCase):
         result = runtime.run_once(self.request())
         self.assertEqual(result.outcome, EpisodeOutcome.ABORTED)
         self.assertEqual(result.errors, ("recording interrupted",))
-        self.assertEqual(result.mcap_path.parent.parent.name, "aborted")
+        self.assertEqual(result.mcap_path.parent.parent.name, "abort")
 
-    def test_operator_abort_commits_under_aborted(self) -> None:
+    def test_operator_abort_commits_under_abort(self) -> None:
         runtime = self.runtime(
             trigger=FakeTrigger([True, TriggerEvent.ABORT]),
         )
         result = runtime.run_once(self.request())
         self.assertEqual(result.outcome, EpisodeOutcome.ABORTED)
         self.assertEqual(result.errors, ("operator requested abort",))
-        self.assertEqual(result.mcap_path.parent.parent, self.output_root / "aborted")
+        self.assertEqual(result.mcap_path.parent.parent, self.output_root / "abort")
 
     def test_stream_warning_does_not_change_success(self) -> None:
         metrics = (StreamMetrics(STREAM.id, 4_500, 90.0, 50.0, 40.0, ("low rate",)),)

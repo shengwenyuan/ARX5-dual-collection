@@ -13,12 +13,12 @@ DAgger 异常 Episode 必须与普通采集异常 Episode 在目录层显式区�
 DAgger fail/aborted         -> DAgger 异常来源，保留 authority 审计能力
 ```
 
-当前 DAgger `fail` 已通过配置落入 `dagger_fail/<episode_id>`；DAgger `aborted` 仍复用普通 `aborted/`。后续应把两类 DAgger 异常都改为显式、稳定且互不混淆的目录标记。`dagger_fail/` 名称保持；DAgger aborted 的最终目录名在实现前单独对齐。
+当前 DAgger `fail` 已通过配置落入 `dagger_fail/<episode_id>`；DAgger `aborted` 仍复用普通 `abort/`。后续应把两类 DAgger 异常都改为显式、稳定且互不混淆的目录标记。`dagger_fail/` 名称保持；DAgger aborted 的最终目录名在实现前单独对齐。
 
 ## 实现边界
 
 - 不在 DAgger application 中增加散落的路径判断；扩展 `EpisodeStore` 的 outcome 目录映射，由普通 Session 与 DAgger Session 分别注入 profile。
-- 普通采集现有 `fail/`、`aborted/` 语义和路径不变。
+- 普通采集现有 `fail/`、`abort/` 路径不变；中止结果的 metadata outcome 保持 `aborted`。
 - metadata 的 `collection_type` 与 `outcome` 始终是事实来源；目录名只用于发现边界、来源约束和人工审计。
 - `dagger_fail/` 必须验证为 `collection_type=dagger + outcome=fail`，不匹配时拒绝转换。
 - `dagger_fail` 可提取 `FAULT_HOLD` 前已经完整闭合的 expert correction；未闭合 correction 和 fault 后区间排除。

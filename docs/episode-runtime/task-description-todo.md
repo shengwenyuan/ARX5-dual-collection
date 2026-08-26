@@ -1,6 +1,6 @@
 # 采集入口显式 Task Description TODO
 
-- Status: `todo`
+- Status: `implemented / local verified / live multi-Episode pending`
 - Date: `2026-08-25`
 - Scope: 普通采集与 DAgger 采集入口、Episode metadata
 - Non-goal: 在离线清洗阶段推断、归一化或改写任务语义
@@ -46,3 +46,11 @@ arx5-collect dagger ... --output-root ... --task-description "folding the cloth"
 3. task 中包含空格、大小写和非 ASCII 字符时能够逐字保留。
 4. 输出根名称与 task description 不同时，两者各自保持原值。
 5. 离线清洗与 LeRobot 转换可直接使用新 metadata task，不再需要任务语义覆盖。
+
+## 实现结论
+
+- 普通与 DAgger Session 都要求 `--task-description`；缺失或仅含空白时在启动硬件前失败。
+- Compose 统一从 `ARX5_TASK_DESCRIPTION` 传入，构建镜像时无需设置该变量。
+- `load_request()` 仅覆盖静态 Task 配置中的通用 description；`task_id` 与八路 stream 契约保持不变。
+- 参数只做非空判断，原字符串不经 trim、归一化或路径推断，继续由共享 metadata writer 写入。
+- 普通 CLI、DAgger builder 与 metadata 定向测试已通过；连续两条真机 Episode 验收待下一轮采集完成。

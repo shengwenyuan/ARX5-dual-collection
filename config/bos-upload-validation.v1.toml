@@ -1,0 +1,19 @@
+schema_version = 1
+
+[coarse]
+min_mcap_bytes = 2147483648
+
+[sample]
+fraction = 0.10
+max_count = 15
+
+[deep]
+conversion_profile = "conversion.pi05-equal-eef-v2.toml"
+rgb_encoding = "rgb8"
+depth_encoding = "16UC1"
+width = 848
+height = 480
+
+[upload]
+stall_seconds = 180
+retry_delays_seconds = [10, 30, 60, 300, 900]

@@ -83,6 +83,7 @@ class MetadataWriterTest(unittest.TestCase):
         metadata = build_metadata(request(), result(), load_station(STATION_PATH), "0.1.0")
         self.assertEqual(metadata["timing"]["started_at"], "2026-08-16T01:00:00Z")
         self.assertEqual(metadata["timing"]["duration_s"], 90.25)
+        self.assertEqual(metadata["task"]["description"], "Pick the object")
         self.assertEqual(metadata["streams"][1]["message_count"], 2_700)
         self.assertEqual(metadata["streams"][1]["warnings"], ["late"])
         self.assertNotIn("duration_s", metadata["streams"][1])

@@ -37,6 +37,7 @@ from .topics import DAGGER_RECORDING_TOPICS
 class DaggerRunSpec:
     station_config: Path
     task_config: Path
+    task_description: str
     policy_config: Path
     output_root: Path
     episodes: int
@@ -468,5 +469,6 @@ class DaggerApplicationBuilder:
             spec.task_config,
             spec.output_root,
             spec.station_config,
+            task_description=spec.task_description,
         )
         return settings, request

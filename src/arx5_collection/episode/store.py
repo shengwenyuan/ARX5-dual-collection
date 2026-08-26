@@ -79,7 +79,7 @@ class EpisodeStore:
         outcome_roots = {
             EpisodeOutcome.SUCCESS: self.root,
             EpisodeOutcome.FAIL: self.root / self.fail_directory,
-            EpisodeOutcome.ABORTED: self.root / "aborted",
+            EpisodeOutcome.ABORTED: self.root / "abort",
         }
         final_dir = outcome_roots[outcome] / pending.episode_id
         if final_dir.exists():

@@ -29,3 +29,5 @@ services:
       - /workspace/config/task.eight-stream.json
       - --output-root
       - "${ARX5_OUTPUT_ROOT:-}"
+      - --task-description
+      - "${ARX5_TASK_DESCRIPTION:-}"

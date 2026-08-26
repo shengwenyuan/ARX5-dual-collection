@@ -55,8 +55,14 @@ class EpisodeCliTest(unittest.TestCase):
         self.temporary_directory.cleanup()
 
     def test_load_request_is_strict(self) -> None:
-        request = load_request(self.task_config, self.output_root, STATION_PATH)
+        request = load_request(
+            self.task_config,
+            self.output_root,
+            STATION_PATH,
+            task_description=" Folding 衣服 ",
+        )
         self.assertEqual(request.streams[0].expected_hz, 60.0)
+        self.assertEqual(request.task_description, " Folding 衣服 ")
 
         invalid = json.loads(self.task_config.read_text())
         invalid["frame_count"] = 1
@@ -124,7 +130,7 @@ class EpisodeCliTest(unittest.TestCase):
         rows = [json.loads(line) for line in output.getvalue().splitlines()]
         self.assertEqual(exit_code, 0)
         self.assertEqual([row["outcome"] for row in rows], ["aborted", "success"])
-        self.assertIn("/aborted/", rows[0]["mcap_path"])
+        self.assertIn("/abort/", rows[0]["mcap_path"])
 
     def test_failed_episode_keeps_the_session_ready(self) -> None:
         trigger = ContextTrigger([True, True, True])

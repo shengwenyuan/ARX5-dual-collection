@@ -36,6 +36,7 @@ class DaggerApplicationBuilderTest(unittest.TestCase):
         spec = DaggerRunSpec(
             station_config=ROOT / "config" / "station.example.json",
             task_config=ROOT / "config" / "task.eight-stream.json",
+            task_description="folding the cloth",
             policy_config=ROOT / "config" / "dagger.policy.example.toml",
             output_root=Path("episodes"),
             episodes=1,
@@ -59,6 +60,7 @@ class DaggerApplicationBuilderTest(unittest.TestCase):
             spec = DaggerRunSpec(
                 station_config=ROOT / "config" / "station.example.json",
                 task_config=ROOT / "config" / "task.eight-stream.json",
+                task_description="folding the cloth",
                 policy_config=policy_config,
                 output_root=Path(directory) / "episodes",
                 episodes=1,
@@ -79,6 +81,7 @@ class DaggerApplicationBuilderTest(unittest.TestCase):
         self.assertEqual(application.settings.execution.control_rate_hz, 25.0)
         self.assertEqual(application.settings.arm_profile.name, "dagger")
         self.assertEqual(application.request.task_id, "eight-stream-collection")
+        self.assertEqual(application.request.task_description, "folding the cloth")
 
     def test_takeover_dry_run_adds_only_sparse_authority_topic(self) -> None:
         fake_session_builder = FakeSessionBuilder()
@@ -90,6 +93,7 @@ class DaggerApplicationBuilderTest(unittest.TestCase):
             spec = DaggerRunSpec(
                 station_config=ROOT / "config" / "station.example.json",
                 task_config=ROOT / "config" / "task.eight-stream.json",
+                task_description="folding the cloth",
                 policy_config=policy_config,
                 output_root=Path(directory) / "episodes",
                 episodes=1,
@@ -118,6 +122,7 @@ class DaggerApplicationBuilderTest(unittest.TestCase):
             spec = DaggerRunSpec(
                 station_config=ROOT / "config" / "station.example.json",
                 task_config=ROOT / "config" / "task.eight-stream.json",
+                task_description="folding the cloth",
                 policy_config=policy_config,
                 output_root=Path(directory) / "episodes",
                 episodes=1,

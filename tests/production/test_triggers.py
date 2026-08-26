@@ -126,10 +126,13 @@ class AutoTriggerFactoryTest(unittest.TestCase):
                 "task.json",
                 "--output-root",
                 "/reports/episodes",
+                "--task-description",
+                " Folding 衣服 ",
             ]
         )
         self.assertEqual(run.station_config, Path("/var/lib/arx5-collection/station.json"))
         self.assertEqual(run.output_root, Path("/reports/episodes"))
+        self.assertEqual(run.task_description, " Folding 衣服 ")
         shadow = parser.parse_args(
             [
                 "dagger",
@@ -140,6 +143,8 @@ class AutoTriggerFactoryTest(unittest.TestCase):
                 "policy.toml",
                 "--output-root",
                 "/reports/episodes",
+                "--task-description",
+                "folding the cloth",
             ]
         )
         self.assertEqual(shadow.dagger_command, "shadow")
@@ -153,6 +158,8 @@ class AutoTriggerFactoryTest(unittest.TestCase):
                 "policy.toml",
                 "--output-root",
                 "/reports/episodes",
+                "--task-description",
+                "folding the cloth",
             ]
         )
         self.assertEqual(dry_run.dagger_command, "takeover-dry-run")
@@ -174,6 +181,8 @@ class AutoTriggerFactoryTest(unittest.TestCase):
                     "task.json",
                     "--output-root",
                     "/reports/episodes",
+                    "--task-description",
+                    "folding the cloth",
                     "--trigger-key",
                     "x",
                 ]
@@ -186,6 +195,19 @@ class AutoTriggerFactoryTest(unittest.TestCase):
                     "task.json",
                     "--output-root",
                     "episodes",
+                    "--task-description",
+                    "folding the cloth",
+                ]
+            )
+
+        with self.assertRaises(SystemExit):
+            parser.parse_args(
+                [
+                    "run",
+                    "--task-config",
+                    "task.json",
+                    "--output-root",
+                    "/reports/episodes",
                 ]
             )
 

@@ -38,6 +38,8 @@ def load_request(
     task_config: Path,
     output_root: Path,
     station_config: Path,
+    *,
+    task_description: str | None = None,
 ) -> EpisodeRequest:
     config = json.loads(task_config.read_text())
     require_exact_keys(config, {"task_id", "task_description", "streams"}, "task")
@@ -62,7 +64,11 @@ def load_request(
 
     return EpisodeRequest(
         task_id=config["task_id"],
-        task_description=config["task_description"],
+        task_description=(
+            config["task_description"]
+            if task_description is None
+            else task_description
+        ),
         output_root=output_root,
         station_config=station_config,
         streams=tuple(streams),

@@ -66,7 +66,7 @@ clean
   → to-lerobot（单一混合训练集）
 ```
 
-DAgger selector 对每个完整 correction 独立运行原有 v2 等 EEF 距离配方；不跨 intervention 拼接，不增加 pre/post roll，不修改 idle、最短运动段、尾部裁剪、action 或 gripper 规则。`dagger_fail/` 只贡献 fault 前已闭合的 correction；未闭合 correction、fault 区间、`aborted/` 和 C 级 Episode 均不进入训练。
+DAgger selector 对每个完整 correction 独立运行原有 v2 等 EEF 距离配方；不跨 intervention 拼接，不增加 pre/post roll，不修改 idle、最短运动段、尾部裁剪、action 或 gripper 规则。`dagger_fail/` 只贡献 fault 前已闭合的 correction；未闭合 correction、fault 区间、`abort/` 和 C 级 Episode 均不进入训练。
 
 ## CLI 模板
 
