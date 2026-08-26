@@ -117,6 +117,7 @@ def _candidate(
         raise ValueError(f"Episode metadata task must be an object: {metadata_path}")
     task_id = _metadata_string(task, "id", metadata_path)
     task_description = _metadata_string(task, "description", metadata_path)
+    relative_dir = directory.relative_to(source_root)
     collection_type = metadata.get("collection_type", "demonstration")
     if not isinstance(collection_type, str) or not collection_type:
         raise ValueError(f"invalid collection_type in {metadata_path}")
@@ -125,9 +126,10 @@ def _candidate(
     metadata_stat = metadata_path.stat()
     return EpisodeCandidate(
         source_dir=directory,
-        relative_dir=directory.relative_to(source_root),
+        relative_dir=relative_dir,
         include_path=include_path,
         episode_id=episode_id,
+        source_session_id=_source_session_id(metadata, relative_dir),
         collection_type=collection_type,
         outcome=outcome,
         task_id=task_id,
@@ -135,6 +137,17 @@ def _candidate(
         mcap=FileIdentity(mcap_stat.st_size, mcap_stat.st_mtime_ns),
         metadata=FileIdentity(metadata_stat.st_size, metadata_stat.st_mtime_ns),
     )
+
+
+def _source_session_id(metadata: dict[str, object], relative_dir: Path) -> str:
+    station = metadata.get("station")
+    timing = metadata.get("timing")
+    station_id = station.get("id") if isinstance(station, dict) else None
+    started_at = timing.get("started_at") if isinstance(timing, dict) else None
+    day = started_at[:10] if isinstance(started_at, str) and len(started_at) >= 10 else None
+    parent = relative_dir.parent.as_posix()
+    parts = [station_id, day, parent]
+    return "/".join(str(part) for part in parts if part)
 
 
 def _metadata_string(payload: dict[str, object], key: str, path: Path) -> str:

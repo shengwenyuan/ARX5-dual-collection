@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from pathlib import Path
+from typing import Mapping
 
 from arx5_collection.artifacts import ExcludedEpisodeArtifact
 from arx5_collection.artifacts import read_json
@@ -93,6 +94,8 @@ def select_equal_eef_dagger_dataset(
     left_gripper: GripperCalibration,
     right_gripper: GripperCalibration,
     policy: EqualEefPolicy = EqualEefPolicy(),
+    *,
+    source_session_ids: Mapping[str, str] | None = None,
 ) -> DatasetSelection:
     """Apply the unchanged v2 recipe independently inside complete corrections."""
 
@@ -189,7 +192,11 @@ def select_equal_eef_dagger_dataset(
                 samples=tuple(episode_samples),
                 segments=tuple(episode_segments),
                 segment_provenance=tuple(provenance),
-                source_session_id=derive_source_session_id(episode_dir),
+                source_session_id=(
+                    source_session_ids[episode_id]
+                    if source_session_ids is not None
+                    else derive_source_session_id(episode_dir)
+                ),
             )
         )
     result = DatasetSelection(tuple(selected), tuple(excluded))

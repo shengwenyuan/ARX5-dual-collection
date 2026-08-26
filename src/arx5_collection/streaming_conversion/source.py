@@ -13,7 +13,7 @@ from .models import FileIdentity
 from .models import StageReceipt
 
 
-STAGE_SCHEMA_VERSION = 1
+STAGE_SCHEMA_VERSION = 2
 _MCAP_NAME = "episode.mcap"
 _METADATA_NAME = "metadata.json"
 
@@ -54,6 +54,7 @@ class MountedEpisodeSource:
             self._assert_source_identity(source_metadata, candidate.metadata)
             receipt = StageReceipt(
                 episode_id=candidate.episode_id,
+                source_session_id=candidate.source_session_id,
                 source_dir=source_dir,
                 stage_dir=target,
                 mcap=candidate.mcap,
@@ -93,6 +94,7 @@ def validate_stage(stage_dir: Path) -> StageReceipt:
     if not isinstance(value, dict) or set(value) != {
         "schema_version",
         "episode_id",
+        "source_session_id",
         "source_dir",
         "mcap",
         "metadata",
@@ -102,6 +104,7 @@ def validate_stage(stage_dir: Path) -> StageReceipt:
         raise StageValidationError("unsupported stage manifest schema_version")
     receipt = StageReceipt(
         episode_id=_string(value["episode_id"], "episode_id"),
+        source_session_id=_string(value["source_session_id"], "source_session_id"),
         source_dir=_absolute_path(value["source_dir"], "source_dir"),
         stage_dir=stage_dir,
         mcap=_manifest_identity(value["mcap"], "mcap"),
@@ -140,6 +143,7 @@ def _write_stage_manifest(path: Path, receipt: StageReceipt) -> None:
     value = {
         "schema_version": STAGE_SCHEMA_VERSION,
         "episode_id": receipt.episode_id,
+        "source_session_id": receipt.source_session_id,
         "source_dir": str(receipt.source_dir),
         "mcap": _identity_value(receipt.mcap),
         "metadata": _identity_value(receipt.metadata),

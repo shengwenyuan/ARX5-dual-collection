@@ -121,6 +121,7 @@ class DaggerSelectionTest(unittest.TestCase):
                         GripperCalibration(-1, 0),
                         GripperCalibration(-1, 0),
                         policy,
+                        source_session_ids={"episode-a": "frozen/session"},
                     )
                 self.assertEqual(len(result.episodes), 1)
 
@@ -145,7 +146,7 @@ class DaggerSelectionTest(unittest.TestCase):
 
         self.assertEqual({row["collection_type"] for row in sources}, {"dagger"})
         self.assertEqual({row["intervention_id"] for row in sources}, {1})
-        self.assertEqual({row["source_session_id"] for row in sources}, {"w3/2026-08-20/raw"})
+        self.assertEqual({row["source_session_id"] for row in sources}, {"frozen/session"})
         self.assertTrue(all(row["training_eligible"] for row in samples))
         self.assertEqual(len(samples), 4)
 

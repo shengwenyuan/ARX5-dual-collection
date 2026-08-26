@@ -1,7 +1,8 @@
 # 云端 Episode 流式转换与 LeRobot Fragment 计划
 
-- Status: `unit-4-verified`
+- Status: `unit-5-verified`
 - Date: `2026-08-25`
+- Updated: `2026-08-26`
 - Parent: `docs/data-cleaning/pi05-mcap-to-lerobot.md`
 - DAgger recipe: `docs/data-cleaning/dagger-postprocess.md`
 - DAgger outcome routing TODO: `docs/episode-runtime/dagger-outcome-directory-todo.md`
@@ -70,6 +71,7 @@ PFS 中转与产物根：/mnt/pfs/swy/
 12. 同一次请求的白名单路径必须两两互斥：规范化后不得相同，也不得存在祖先/后代包含关系。
 13. 对齐阶段不复制 Episode、不创建 Fragment、不启动 Worker；只有用户输入空行 ENTER 后才能执行。
 14. 确认后冻结精确的 Episode 清单。Worker 只消费该清单，不在运行中重新发现目录。
+15. Legacy metadata 没有显式 Session ID。首版 discovery 以 `station.id + timing.started_at 日期 + source-relative parent` 生成并冻结 source Session identity；暂存和 Worker 不得从 staging 路径重新推导。未来采集侧增加显式 Session ID 时必须升级 schema。
 
 ## 源文件完整性边界
 
@@ -513,14 +515,32 @@ src/arx5_collection/dataset_cli.py
 
 本单位先冻结 Worker 将要复用的转换参数，不实现 Worker、Fragment 或 Builder：
 
-- 新增 task 无关的 `pi05-equal-eef-v2` conversion recipe，显式记录 cleaning、等 EEF 采样、左右夹爪标定和 LeRobot v2.1 backend；不再把训练 profile 当转换 profile。
+- 新增 task 无关的 `pi05-equal-eef-v2` conversion recipe，显式记录 cleaning、等 EEF 采样、按 `station.id` 冻结的夹爪标定和 LeRobot v2.1 backend；不再把训练 profile 当转换 profile。
 - 流式 profile 的 `recipe.name` 必须与 conversion recipe 一致；`recipe.task` 继续是本批 legacy Episode 的原样 prompt，两者不混为一个配置。
 - recipe loader 使用严格 schema 和字段集合，拒绝未知字段、缺字段和隐式版本升级。
+- Worker 必须从 Episode metadata 读取 `station.id` 并选择精确 calibration profile；未知 station 直接拒绝，不使用默认值。W3/W4 可以使用不同数值，但都冻结为 `linear_open_closed_0_1` 归一化语义。
 - DAgger selector 接受 `outcome=success`，以及已被 authority classifier 判定有效的 `outcome=fail`；两者都只选择完整闭合的 expert correction。
 - `outcome=aborted` 继续排除；普通 demonstration fail 不经过 DAgger selector。DAgger aborted 的未来规则沿用独立 TODO，不在本单位扩张。
-- 用现有 W3 v2 验收值冻结首版参数；参数变化必须产生新的 recipe name/schema，不原地改变历史转换语义。
+- 用现有 W3 v2 与 W4 fold-cloth 验收值冻结首版参数；参数变化必须产生新的 recipe name/schema，不原地改变历史转换语义。
 - 本地：`63` 个流式、DAgger、π0.5 与清洗相关回归测试通过。
 - 云端：`pi05-cpu` 上 `31` 个定向测试通过；严格加载 `pi05-equal-eef-v2 + lerobot-v2.1 + 5 mm + horizon 50` 契约，无 MCAP 读取、PFS 写入或 W3/W4 连接。
+
+### 单位 5：Single Episode Conversion / Immutable Fragment
+
+本单位实现 Worker 的唯一业务函数，不实现进程池、调度循环或最终 Builder：
+
+- 输入固定为一个已验证 `StageReceipt`、一个 pinned conversion recipe、原样 task、Fragment 目标与合法 repo ID。
+- 函数只组合现有 `clean_episode`、DAgger authority classifier、普通/DAgger equal-EEF selector、v2.1 exporter 和 validator；不复制任何 MCAP、配组、action、gripper、图像或 authority 算法。
+- demonstration 使用普通 selector；DAgger success/fail 使用 DAgger selector；DAgger fail 还必须来自 `dagger_fail/` 标记路径。普通 fail/aborted 与 DAgger aborted 返回 `excluded`，不创建空 Fragment。
+- 所有工作先发生在 Fragment 目标同级隐藏目录。只有 selection 非空、v2.1 export 和 validator 全部通过后，才写 `fragment.json`、最后写 `COMMITTED.json` 并一次 rename 发布。
+- Fragment 内保留 audit、selection、独立 LeRobot v2.1、conversion/source reports；报告中的绝对路径在发布前改写为最终 Fragment 路径，不泄漏临时目录。
+- Fragment 明确记录 `station.id` 对应的 calibration profile 和统一归一化语义。Builder 允许不同 station 的冻结标定数值不同，但必须拒绝归一化语义、state/action 或其他训练契约漂移。
+- 业务可判定的无有效 segment 返回结构化 `excluded` reason；读取、契约、I/O 或程序异常继续抛给后续 Coordinator 分类，不在 Worker 内吞掉。
+- 本单位的 Fragment 是当前 run 内 immutable 中间态，不实现跨 run 缓存；成功 Builder 后的清理规则保持原计划。
+- 为避免 staging 改写 lineage，`EpisodeCandidate -> selection manifest -> StageReceipt -> selector` 显式传递冻结的 source Session identity；selection schema 升为 `2`，stage schema 升为 `2`，不兼容旧 smoke 状态。
+- 本地：`80` 个流式、DAgger、π0.5 与 cleaning 相关测试通过；覆盖正常提交、excluded 无空 Fragment、DAgger fail 路由、未知 station、来源标记、异常原子清理和 source Session 传递。
+- 云端：`pi05-cpu` 上 `38` 个定向测试通过。真实 W4 Episode `20260825T050901952462Z-5398c9f5` 完成 `9,244,689,012 bytes` 暂存与完整 v2.1 Fragment：`1 segment / 2,223 frames`，staging `15.996 s`，转换与验证 `594.325 s`。
+- Fragment 二次独立加载通过：task 原样为 `folding the cloth`，calibration profile 为 `w4`，source Session 为 `w4/2026-08-25/fold_cloth/2026-08-25`，报告无临时路径泄漏；精确 smoke staging/Fragment 已清理，BOS 未写入，W3/W4 未连接。
 
 ## 待补信息
 

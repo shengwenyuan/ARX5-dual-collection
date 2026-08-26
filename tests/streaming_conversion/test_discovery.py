@@ -36,6 +36,10 @@ class EpisodeDiscoveryTest(unittest.TestCase):
         )
         self.assertEqual(result.total_mcap_bytes, 20)
         self.assertEqual(result.blocked_dirs, (Path("task/date/abort"),))
+        self.assertEqual(
+            result.candidates[0].source_session_id,
+            "w4/2026-08-25/task/date/nested",
+        )
 
     def test_episode_boundary_stops_recursive_descent(self) -> None:
         parent = self.root / "task" / "episode-parent"
@@ -100,6 +104,8 @@ def _episode(path: Path, episode_id: str, mcap_bytes: int) -> None:
                 "episode_id": episode_id,
                 "collection_type": "demonstration",
                 "outcome": "success",
+                "station": {"id": "w4"},
+                "timing": {"started_at": "2026-08-25T01:02:03Z"},
                 "task": {"id": "fold", "description": "folding the cloth"},
             }
         )

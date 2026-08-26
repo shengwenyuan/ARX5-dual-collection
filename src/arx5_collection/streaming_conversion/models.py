@@ -18,6 +18,7 @@ class EpisodeCandidate:
     relative_dir: Path
     include_path: Path
     episode_id: str
+    source_session_id: str
     collection_type: str
     outcome: str
     task_id: str
@@ -65,6 +66,7 @@ class JobState(str, Enum):
 @dataclass(frozen=True, slots=True)
 class SelectionEntry:
     episode_id: str
+    source_session_id: str
     source_dir: Path
     relative_dir: Path
     collection_type: str
@@ -101,7 +103,23 @@ class JobSnapshot:
 @dataclass(frozen=True, slots=True)
 class StageReceipt:
     episode_id: str
+    source_session_id: str
     source_dir: Path
     stage_dir: Path
     mcap: FileIdentity
     metadata: FileIdentity
+
+
+class ConversionStatus(str, Enum):
+    COMMITTED = "committed"
+    EXCLUDED = "excluded"
+
+
+@dataclass(frozen=True, slots=True)
+class EpisodeConversionResult:
+    episode_id: str
+    status: ConversionStatus
+    fragment_dir: Path | None
+    segment_count: int
+    frame_count: int
+    reason_code: str | None = None

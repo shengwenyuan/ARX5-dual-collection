@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
+from typing import Mapping
 
 from arx5_collection.artifacts import ExcludedEpisodeArtifact
 from arx5_collection.artifacts import read_json
@@ -61,6 +62,7 @@ def _select_dataset(
     policy: Pi05Policy | EqualEefPolicy,
     sample_builder: SampleBuilder,
     artifact_writer: ArtifactWriter,
+    source_session_ids: Mapping[str, str] | None = None,
 ) -> DatasetSelection:
     if not task.strip():
         raise ValueError("task must not be empty")
@@ -97,7 +99,11 @@ def _select_dataset(
                 task,
                 samples,
                 segments,
-                source_session_id=derive_source_session_id(episode_dir),
+                source_session_id=(
+                    source_session_ids[episode_id]
+                    if source_session_ids is not None
+                    else derive_source_session_id(episode_dir)
+                ),
             )
         )
     result = DatasetSelection(tuple(selected), tuple(excluded))
@@ -113,6 +119,8 @@ def select_dataset(
     left_gripper: GripperCalibration,
     right_gripper: GripperCalibration,
     policy: Pi05Policy = Pi05Policy(),
+    *,
+    source_session_ids: Mapping[str, str] | None = None,
 ) -> DatasetSelection:
     return _select_dataset(
         episode_dirs,
@@ -124,6 +132,7 @@ def select_dataset(
         policy,
         build_samples,
         write_selection_artifacts,
+        source_session_ids,
     )
 
 
@@ -135,6 +144,8 @@ def select_equal_eef_dataset(
     left_gripper: GripperCalibration,
     right_gripper: GripperCalibration,
     policy: EqualEefPolicy = EqualEefPolicy(),
+    *,
+    source_session_ids: Mapping[str, str] | None = None,
 ) -> DatasetSelection:
     return _select_dataset(
         episode_dirs,
@@ -146,4 +157,5 @@ def select_equal_eef_dataset(
         policy,
         build_equal_eef_samples,
         write_equal_eef_selection_artifacts,
+        source_session_ids,
     )

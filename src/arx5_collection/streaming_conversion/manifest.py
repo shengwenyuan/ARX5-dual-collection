@@ -20,7 +20,7 @@ from .models import SelectionEntry
 
 
 RUN_SCHEMA_VERSION = 1
-SELECTION_SCHEMA_VERSION = 1
+SELECTION_SCHEMA_VERSION = 2
 JOB_EVENT_SCHEMA_VERSION = 1
 _REASON_CODE = re.compile(r"^[a-z][a-z0-9_]*(/[a-z][a-z0-9_]*)*$")
 _TERMINAL = {
@@ -101,6 +101,7 @@ class RunManifest:
         selection = tuple(
             SelectionEntry(
                 episode_id=item.episode_id,
+                source_session_id=item.source_session_id,
                 source_dir=item.source_dir,
                 relative_dir=item.relative_dir,
                 collection_type=item.collection_type,
@@ -329,6 +330,7 @@ def _selection_value(item: SelectionEntry) -> dict[str, object]:
     return {
         "schema_version": SELECTION_SCHEMA_VERSION,
         "episode_id": item.episode_id,
+        "source_session_id": item.source_session_id,
         "source_dir": str(item.source_dir),
         "relative_dir": str(item.relative_dir),
         "collection_type": item.collection_type,
@@ -352,6 +354,7 @@ def _selection_entry(value: dict[str, Any]) -> SelectionEntry:
         {
             "schema_version",
             "episode_id",
+            "source_session_id",
             "source_dir",
             "relative_dir",
             "collection_type",
@@ -371,6 +374,9 @@ def _selection_entry(value: dict[str, Any]) -> SelectionEntry:
     metadata = _file_identity(value["metadata"], "selection metadata")
     return SelectionEntry(
         episode_id=_string(value["episode_id"], "selection episode_id"),
+        source_session_id=_string(
+            value["source_session_id"], "selection source_session_id"
+        ),
         source_dir=Path(_string(value["source_dir"], "selection source_dir")),
         relative_dir=Path(_string(value["relative_dir"], "selection relative_dir")),
         collection_type=_string(value["collection_type"], "selection collection_type"),

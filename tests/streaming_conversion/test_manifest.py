@@ -161,6 +161,7 @@ def _discovery(source_root: Path) -> DiscoveryResult:
             relative_dir=Path("task") / episode_id,
             include_path=Path("task"),
             episode_id=episode_id,
+            source_session_id="w4/2026-08-25/task",
             collection_type="demonstration",
             outcome="success",
             task_id="eight-stream-collection",

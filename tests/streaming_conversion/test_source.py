@@ -116,6 +116,7 @@ class MountedEpisodeSourceTest(unittest.TestCase):
             relative_dir=Path("task/episode-a"),
             include_path=Path("task"),
             episode_id="episode-a",
+            source_session_id="w4/2026-08-25/task",
             collection_type="demonstration",
             outcome="success",
             task_id="eight-stream-collection",
