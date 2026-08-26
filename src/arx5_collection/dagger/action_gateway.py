@@ -11,7 +11,7 @@ from time import monotonic
 from typing import Protocol
 
 from .models import InferenceTicket
-from .observation import GripperCalibration
+from arx5_collection.gripper import GripperCalibration
 from .policy_client import RtcPolicyContext
 
 
@@ -204,14 +204,10 @@ class Pi05JointActionContract:
             )
 
     def _denormalize_left(self, value: float) -> float:
-        return self.grippers.left_open_raw + value * (
-            self.grippers.left_closed_raw - self.grippers.left_open_raw
-        )
+        return self.grippers.denormalize(value)
 
     def _denormalize_right(self, value: float) -> float:
-        return self.grippers.right_open_raw + value * (
-            self.grippers.right_closed_raw - self.grippers.right_open_raw
-        )
+        return self.grippers.denormalize(value)
 
 
 class PolicyActionGateway:

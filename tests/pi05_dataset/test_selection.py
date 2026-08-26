@@ -45,8 +45,8 @@ class SelectionTest(unittest.TestCase):
         samples = build_samples(
             scan,
             groups,
-            GripperCalibration(0, 1, tolerance=1),
-            GripperCalibration(0, 1, tolerance=1),
+            GripperCalibration(0, 1, open_tolerance=1, closed_tolerance=1),
+            GripperCalibration(0, 1, open_tolerance=1, closed_tolerance=1),
             policy,
         )
 

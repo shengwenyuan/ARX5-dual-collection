@@ -23,7 +23,11 @@ def make_selection(
     contract = {
         "filter_version": "pi05-arx-filter-v2-equal-eef-distance",
         "state_action_version": "arx5-measured-position-proxy-v1",
-        "gripper_calibration": {"left": {}, "right": {}},
+        "gripper_calibration": {
+            "contract_id": "arx5-gripper-v1",
+            "left": {},
+            "right": {},
+        },
         "sampling_contract": {"mode": "equal_eef_distance"},
         "excluded_episodes": [],
     }

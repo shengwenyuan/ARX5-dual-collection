@@ -5,6 +5,8 @@ import re
 from dataclasses import dataclass
 from enum import Enum
 
+from arx5_collection.gripper import ARX5_GRIPPER_CONTRACT_ID
+
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
@@ -110,6 +112,7 @@ class Pi05CheckpointProfile:
     hard_prefix_tolerance: float = 1e-5
     model_action_dimension: int = 32
     gripper_normalization: str = "linear_open_closed_0_1"
+    gripper_contract: str = ARX5_GRIPPER_CONTRACT_ID
 
     def __post_init__(self) -> None:
         if self.policy_type not in {"sequential", "training_time_rtc"}:
@@ -122,6 +125,8 @@ class Pi05CheckpointProfile:
             raise ValueError("only absolute joint actions are supported")
         if self.gripper_normalization != "linear_open_closed_0_1":
             raise ValueError("unsupported gripper normalization contract")
+        if self.gripper_contract != ARX5_GRIPPER_CONTRACT_ID:
+            raise ValueError("unsupported ARX5 gripper contract")
         if self.policy_type == "training_time_rtc":
             if self.max_delay_steps <= 0 or self.prefix_mode != "hard_prefix":
                 raise ValueError("training-time RTC requires hard-prefix delay")

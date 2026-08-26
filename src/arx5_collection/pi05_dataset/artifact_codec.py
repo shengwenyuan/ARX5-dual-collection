@@ -31,6 +31,7 @@ from arx5_collection.cleaning.models import LEFT_ARM_TOPIC
 from arx5_collection.cleaning.models import MessageRef
 from arx5_collection.cleaning.models import RIGHT_ARM_TOPIC
 from arx5_collection.pi05_dataset.actions import GripperCalibration
+from arx5_collection.gripper import ARX5_GRIPPER_CONTRACT_ID
 from arx5_collection.pi05_dataset.eef_selection import EqualEefPolicy
 from arx5_collection.pi05_dataset.eef_selection import EqualEefSample
 from arx5_collection.pi05_dataset.selection import Pi05Policy
@@ -265,6 +266,7 @@ def _write_selection_artifacts(
         for sample in episode.samples
     ]
     calibrations = GripperCalibrationsArtifact(
+        contract_id=ARX5_GRIPPER_CONTRACT_ID,
         left=_calibration_artifact(left_gripper),
         right=_calibration_artifact(right_gripper),
     )

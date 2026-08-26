@@ -293,6 +293,7 @@ def serve(settings: PolicyServerSettings) -> None:
             "gripper_normalization": (
                 settings.checkpoint_profile.gripper_normalization
             ),
+            "gripper_contract": settings.checkpoint_profile.gripper_contract,
             "model_input_width": settings.checkpoint_profile.input.model_width,
             "model_input_height": settings.checkpoint_profile.input.model_height,
             "model_input_resize": settings.checkpoint_profile.input.model_resize,

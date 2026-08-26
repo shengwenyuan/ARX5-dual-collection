@@ -51,7 +51,7 @@ class AlignmentTest(unittest.TestCase):
                 runtime=RuntimeConfig(Path("/tmp/streaming"), 25),
                 output=OutputConfig(Path("/tmp/lerobot"), "fold_cloth", "local/fold"),
                 recipe=RecipeConfig(
-                    "pi05-equal-eef-v2",
+                    "pi05-equal-eef-v3",
                     "recipe.toml",
                     "folding the cloth",
                 ),

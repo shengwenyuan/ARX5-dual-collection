@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from dataclasses import asdict
 from dataclasses import dataclass
 import errno
 import math
@@ -24,7 +25,7 @@ from .worker import FRAGMENT_SCHEMA_VERSION
 from .worker import load_committed_fragment
 
 
-SNAPSHOT_SCHEMA_VERSION = 1
+SNAPSHOT_SCHEMA_VERSION = 2
 _ACTIVE_STATES = {
     JobState.DISCOVERED,
     JobState.STAGING,
@@ -41,6 +42,7 @@ _COMPATIBLE_CONTRACT_KEYS = (
     "state_action_order",
     "state_action_version",
     "filter_version",
+    "gripper_calibration",
     "sampling_contract",
 )
 
@@ -227,12 +229,22 @@ def _validate_fragment_recipe(
         "name": recipe.name,
         "builder_backend": recipe.builder_backend,
         "gripper_normalization": recipe.gripper_normalization,
+        "gripper_contract": recipe.gripper_contract,
     }
     for key, expected_value in expected.items():
         if value.get(key) != expected_value:
             raise ValueError(f"Fragment recipe mismatch: {key}")
-    profile = _string(value.get("calibration_profile"), "calibration_profile")
-    recipe.calibration_for(profile)
+    expected_gripper = {
+        "contract_id": recipe.gripper_contract,
+        "left": asdict(recipe.gripper),
+        "right": asdict(recipe.gripper),
+    }
+    contracts = fragment.get("contracts")
+    if (
+        not isinstance(contracts, dict)
+        or contracts.get("gripper_calibration") != expected_gripper
+    ):
+        raise ValueError("Fragment gripper calibration does not match device contract")
 
 
 def _validate_fragment_dataset(
@@ -622,12 +634,6 @@ def _write_reports(
             for selection in omitted
         ],
     )
-    calibration_profiles = sorted(
-        {
-            str(descriptor.fragment["recipe"]["calibration_profile"])
-            for descriptor in descriptors
-        }
-    )
     snapshot = {
         "schema_version": SNAPSHOT_SCHEMA_VERSION,
         "status": "committed",
@@ -638,7 +644,7 @@ def _write_reports(
             "schema_version": recipe.schema_version,
             "name": recipe.name,
             "gripper_normalization": recipe.gripper_normalization,
-            "calibration_profiles": calibration_profiles,
+            "gripper_contract": recipe.gripper_contract,
         },
         "source_episode_count": len(descriptors),
         "fragment_count": len(descriptors),

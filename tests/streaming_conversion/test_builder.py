@@ -20,7 +20,7 @@ from arx5_collection.streaming_conversion.models import JobState
 from arx5_collection.streaming_conversion.recipe import Pi05ConversionRecipe
 
 
-RECIPE = Path("config/conversion.pi05-equal-eef-v2.toml")
+RECIPE = Path("config/conversion.pi05-equal-eef-v3.toml")
 
 
 class LeRobotV21BuilderTest(unittest.TestCase):
@@ -72,7 +72,7 @@ class LeRobotV21BuilderTest(unittest.TestCase):
             [0, 1],
         )
         snapshot = _read(self.output / "snapshot.json")
-        self.assertEqual(snapshot["recipe"]["calibration_profiles"], ["w3", "w4"])
+        self.assertEqual(snapshot["recipe"]["gripper_contract"], "arx5-gripper-v1")
         validation = _read(self.output / "reports" / "validation.json")
         self.assertEqual(validation["dataset_root"], str(self.output))
         self.assertNotIn(f".{self.output.name}.", json.dumps(validation))
@@ -160,7 +160,7 @@ class LeRobotV21BuilderTest(unittest.TestCase):
             SourceConfig(self.source_root, (Path("task"),), ()),
             RuntimeConfig(self.root / "streaming", 2),
             OutputConfig(self.root / "lerobot", "fold", "local/fold"),
-            RecipeConfig("pi05-equal-eef-v2", str(RECIPE), "folding the cloth"),
+            RecipeConfig("pi05-equal-eef-v3", str(RECIPE), "folding the cloth"),
         )
         candidates = tuple(
             EpisodeCandidate(
@@ -224,7 +224,21 @@ class LeRobotV21BuilderTest(unittest.TestCase):
             "state_action_order": ["joint"],
             "state_action_version": "state-v1",
             "filter_version": "filter-v1",
-            "gripper_calibration": {"station": station},
+            "gripper_calibration": {
+                "contract_id": "arx5-gripper-v1",
+                "left": {
+                    "open_value": -3.4,
+                    "closed_value": 0.0,
+                    "open_tolerance": 0.05,
+                    "closed_tolerance": 0.10,
+                },
+                "right": {
+                    "open_value": -3.4,
+                    "closed_value": 0.0,
+                    "open_tolerance": 0.05,
+                    "closed_tolerance": 0.10,
+                },
+            },
             "sampling_contract": {"action_horizon": 50},
         }
         info = {
@@ -305,22 +319,23 @@ class LeRobotV21BuilderTest(unittest.TestCase):
             ],
         )
         fragment = {
-            "schema_version": 1,
+            "schema_version": 2,
             "status": "committed",
             "episode_id": episode_id,
             "source_dir": str(self.source_root / episode_id),
             "source_identity": {"mcap": {}, "metadata": {}},
             "collection_type": "demonstration",
             "outcome": "success",
+            "source_station_id": station,
             "metadata_task": {},
             "training_task": task,
             "source_session_ids": [session_id],
             "recipe": {
-                "schema_version": 1,
-                "name": "pi05-equal-eef-v2",
+                "schema_version": 2,
+                "name": "pi05-equal-eef-v3",
                 "builder_backend": "lerobot-v2.1",
                 "gripper_normalization": "linear_open_closed_0_1",
-                "calibration_profile": station,
+                "gripper_contract": "arx5-gripper-v1",
             },
             "repo_id": f"local/fold__{episode_id}",
             "segment_count": 1,
@@ -338,7 +353,7 @@ class LeRobotV21BuilderTest(unittest.TestCase):
         _write(
             root / "COMMITTED.json",
             {
-                "schema_version": 1,
+                "schema_version": 2,
                 "episode_id": episode_id,
                 "fragment_status": "committed",
                 "committed_at": "2026-08-26T00:00:00Z",

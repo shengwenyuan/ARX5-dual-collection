@@ -25,11 +25,10 @@ from arx5_collection.streaming_conversion.models import FileIdentity
 from arx5_collection.streaming_conversion.models import JobState
 from arx5_collection.streaming_conversion.models import StageReceipt
 from arx5_collection.streaming_conversion.recipe import Pi05ConversionRecipe
-from arx5_collection.streaming_conversion.recipe import UnknownStationCalibrationError
 from arx5_collection.streaming_conversion.source import SourceChangedError
 
 
-RECIPE = Path("config/conversion.pi05-equal-eef-v2.toml")
+RECIPE = Path("config/conversion.pi05-equal-eef-v3.toml")
 
 
 class StreamingCoordinatorTest(unittest.TestCase):
@@ -155,21 +154,6 @@ class StreamingCoordinatorTest(unittest.TestCase):
         self.assertEqual(jobs["episode-b"].state, JobState.FAILED)
         self.assertFalse(stale_stage.exists())
 
-    def test_unknown_station_is_configuration_failure(self) -> None:
-        manifest = self._manifest("episode-a")
-
-        def reject(work: ConversionWork) -> EpisodeConversionResult:
-            raise UnknownStationCalibrationError("unknown station")
-
-        jobs = self._coordinator(manifest, _fake_stage, reject, workers=1).run()
-
-        self.assertEqual(jobs["episode-a"].state, JobState.FAILED)
-        self.assertEqual(
-            jobs["episode-a"].reason_code,
-            "configuration/unknown_station_calibration",
-        )
-        self.assertTrue((manifest.run_dir / "staging" / "episode-a").is_dir())
-
     def test_default_executor_uses_spawn_context(self) -> None:
         with patch(
             "arx5_collection.streaming_conversion.coordinator.ProcessPoolExecutor"
@@ -189,7 +173,7 @@ class StreamingCoordinatorTest(unittest.TestCase):
             SourceConfig(self.source_root, (Path("task"),), ()),
             RuntimeConfig(self.root / "streaming", 2),
             OutputConfig(self.root / "lerobot", "fold", "local/fold"),
-            RecipeConfig("pi05-equal-eef-v2", str(RECIPE), "folding the cloth"),
+            RecipeConfig("pi05-equal-eef-v3", str(RECIPE), "folding the cloth"),
         )
         candidates = tuple(
             EpisodeCandidate(

@@ -103,7 +103,7 @@ def _profile() -> str:
         repo_id = "local/fold_cloth"
 
         [recipe]
-        name = "pi05-equal-eef-v2"
+        name = "pi05-equal-eef-v3"
         profile = "config/fold_cloth.toml"
         task = "folding the cloth"
         """

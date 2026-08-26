@@ -30,7 +30,7 @@ class RunManifestTest(unittest.TestCase):
             SourceConfig(self.root / "source", (Path("task"),), ()),
             RuntimeConfig(self.root / "streaming", 25),
             OutputConfig(self.root / "lerobot", "fold", "local/fold"),
-            RecipeConfig("pi05-equal-eef-v2", "recipe.toml", "folding the cloth"),
+            RecipeConfig("pi05-equal-eef-v3", "recipe.toml", "folding the cloth"),
         )
         self.discovery = _discovery(self.root / "source")
         self.output = self.root / "lerobot" / "fold_2026-08-25"

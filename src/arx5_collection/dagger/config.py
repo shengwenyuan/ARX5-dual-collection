@@ -6,7 +6,7 @@ import re
 import tomllib
 
 from .action_gateway import JointActionSafety
-from .observation import GripperCalibration, ObservationConstraints
+from .observation import ObservationConstraints
 from .models import (
     DEFAULT_PI05_EXECUTION_PROFILE,
     Pi05CheckpointProfile,
@@ -18,6 +18,9 @@ from arx5_collection.production.profiles import (
     ArmRuntimeProfile,
     resolve_arm_profile,
 )
+from arx5_collection.gripper import ARX5_GRIPPER_CALIBRATION
+from arx5_collection.gripper import ARX5_GRIPPER_CONTRACT_ID
+from arx5_collection.gripper import GripperCalibration
 
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
@@ -46,6 +49,7 @@ class DaggerCollectorSettings:
     inference_timeout_s: float
     checkpoint_sha256: str
     prompt: str
+    gripper_contract: str
     grippers: GripperCalibration
     observation: ObservationConstraints
     snapshot_service_timeout_s: float
@@ -62,6 +66,10 @@ class DaggerCollectorSettings:
         policy = _table(payload, "policy")
         collector = _table(payload, "collector")
         gripper = _table(payload, "gripper")
+        _exact_keys(gripper, {"contract"}, "gripper")
+        gripper_contract = str(gripper["contract"])
+        if gripper_contract != ARX5_GRIPPER_CONTRACT_ID:
+            raise ValueError("unsupported ARX5 gripper contract")
         observation = _optional_table(payload, "observation")
         robot = _optional_table(payload, "robot")
         safety = _optional_table(payload, "safety")
@@ -74,12 +82,8 @@ class DaggerCollectorSettings:
             inference_timeout_s=float(collector.get("inference_timeout_s", 30.0)),
             checkpoint_sha256=str(policy["checkpoint_sha256"]).lower(),
             prompt=str(policy["prompt"]),
-            grippers=GripperCalibration(
-                left_open_raw=float(gripper["left_open_raw"]),
-                left_closed_raw=float(gripper["left_closed_raw"]),
-                right_open_raw=float(gripper["right_open_raw"]),
-                right_closed_raw=float(gripper["right_closed_raw"]),
-            ),
+            gripper_contract=gripper_contract,
+            grippers=ARX5_GRIPPER_CALIBRATION,
             observation=ObservationConstraints(
                 max_camera_span_ns=_milliseconds_ns(
                     observation.get("max_camera_span_ms", 40.0)
@@ -134,6 +138,8 @@ class DaggerCollectorSettings:
             raise ValueError("snapshot service timeout must be positive")
         if not _SHA256.fullmatch(settings.checkpoint_sha256):
             raise ValueError("checkpoint_sha256 must contain 64 hexadecimal characters")
+        if settings.checkpoint_profile.gripper_contract != settings.gripper_contract:
+            raise ValueError("checkpoint and runtime gripper contracts do not match")
         return settings
 
 
@@ -183,6 +189,7 @@ def load_checkpoint_profile(payload: dict[str, object]) -> Pi05CheckpointProfile
             flow_steps=10,
             action_semantics="absolute_joint",
             prefix_mode="none",
+            gripper_contract=ARX5_GRIPPER_CONTRACT_ID,
             input=Pi05InputProfile(
                 width=640,
                 height=360,
@@ -229,6 +236,7 @@ def load_checkpoint_profile(payload: dict[str, object]) -> Pi05CheckpointProfile
         hard_prefix_tolerance=float(checkpoint["hard_prefix_tolerance"]),
         model_action_dimension=int(checkpoint["model_action_dimension"]),
         gripper_normalization=str(checkpoint["gripper_normalization"]),
+        gripper_contract=str(checkpoint["gripper_contract"]),
     )
 
 
@@ -265,6 +273,11 @@ def _optional_table(payload: dict[str, object], name: str) -> dict[str, object]:
     if not isinstance(value, dict):
         raise ValueError(f"DAgger policy config [{name}] must be a table")
     return value
+
+
+def _exact_keys(value: dict[str, object], expected: set[str], label: str) -> None:
+    if set(value) != expected:
+        raise ValueError(f"DAgger policy config [{label}] keys must be exactly {sorted(expected)}")
 
 
 def _milliseconds_ns(value: object) -> int:

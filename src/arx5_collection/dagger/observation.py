@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Protocol
 
+from arx5_collection.gripper import GripperCalibration
+
 
 PI05_IMAGE_WIDTH = 640
 PI05_IMAGE_HEIGHT = 360
@@ -113,34 +115,6 @@ class VlaObservationStep:
 
 
 @dataclass(frozen=True, slots=True)
-class GripperCalibration:
-    left_open_raw: float
-    left_closed_raw: float
-    right_open_raw: float
-    right_closed_raw: float
-
-    def __post_init__(self) -> None:
-        values = (
-            self.left_open_raw,
-            self.left_closed_raw,
-            self.right_open_raw,
-            self.right_closed_raw,
-        )
-        if not all(math.isfinite(value) for value in values):
-            raise ValueError("gripper calibration values must be finite")
-        if self.left_open_raw == self.left_closed_raw:
-            raise ValueError("left gripper calibration range must not be zero")
-        if self.right_open_raw == self.right_closed_raw:
-            raise ValueError("right gripper calibration range must not be zero")
-
-    def normalize_left(self, value: float) -> float:
-        return _normalize(value, self.left_open_raw, self.left_closed_raw)
-
-    def normalize_right(self, value: float) -> float:
-        return _normalize(value, self.right_open_raw, self.right_closed_raw)
-
-
-@dataclass(frozen=True, slots=True)
 class Pi05Observation:
     state: tuple[float, ...]
     camera_high: RgbFrame
@@ -169,9 +143,9 @@ class Pi05ObservationEncoder:
     def encode(self, step: VlaObservationStep) -> Pi05Observation:
         state = (
             *step.left_arm.joint_positions,
-            self.grippers.normalize_left(step.left_arm.gripper_position),
+            self.grippers.normalize(step.left_arm.gripper_position),
             *step.right_arm.joint_positions,
-            self.grippers.normalize_right(step.right_arm.gripper_position),
+            self.grippers.normalize(step.right_arm.gripper_position),
         )
         return Pi05Observation(
             state=state,
@@ -180,9 +154,3 @@ class Pi05ObservationEncoder:
             camera_right_wrist=self.image_preprocessor.prepare(step.camera_right),
             cutoff_ns=step.cutoff_ns,
         )
-
-
-def _normalize(value: float, open_raw: float, closed_raw: float) -> float:
-    if not math.isfinite(value):
-        raise ValueError("gripper position must be finite")
-    return (value - open_raw) / (closed_raw - open_raw)

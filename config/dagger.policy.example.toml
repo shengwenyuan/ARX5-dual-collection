@@ -41,7 +41,4 @@ max_snapshot_age_ms = 100.0
 service_timeout_ms = 250.0
 
 [gripper]
-left_open_raw = -3.0
-left_closed_raw = 0.0
-right_open_raw = -3.0
-right_closed_raw = 0.0
+contract = "arx5-gripper-v1"

@@ -12,7 +12,8 @@ from arx5_collection.cleaning.pipeline import inspect_episode
 from arx5_collection.cleaning.reader import load_metadata
 from arx5_collection.dagger_dataset.pipeline import classify_dagger_episode
 from arx5_collection.dagger_dataset.selection import select_equal_eef_dagger_dataset
-from arx5_collection.pi05_dataset.actions import GripperCalibration
+from arx5_collection.gripper import ARX5_GRIPPER_CALIBRATION
+from arx5_collection.gripper import GripperCalibration
 from arx5_collection.pi05_dataset.discovery import discover_episode_dirs
 from arx5_collection.pi05_dataset.eef_selection import EqualEefPolicy
 from arx5_collection.pi05_dataset.exporter import export_lerobot
@@ -96,21 +97,8 @@ def _handle_classify_dagger(args: argparse.Namespace) -> int:
     return 0 if all(summary["valid"] for summary in summaries) else 2
 
 
-def _gripper_calibrations(
-    args: argparse.Namespace,
-) -> tuple[GripperCalibration, GripperCalibration]:
-    return (
-        GripperCalibration(
-            args.left_gripper_open,
-            args.left_gripper_closed,
-            args.gripper_tolerance,
-        ),
-        GripperCalibration(
-            args.right_gripper_open,
-            args.right_gripper_closed,
-            args.gripper_tolerance,
-        ),
-    )
+def _gripper_calibrations() -> tuple[GripperCalibration, GripperCalibration]:
+    return ARX5_GRIPPER_CALIBRATION, ARX5_GRIPPER_CALIBRATION
 
 
 def _print_selection(selection: DatasetSelection) -> None:
@@ -129,7 +117,7 @@ def _print_selection(selection: DatasetSelection) -> None:
 
 
 def _handle_select_pi05(args: argparse.Namespace) -> int:
-    left_gripper, right_gripper = _gripper_calibrations(args)
+    left_gripper, right_gripper = _gripper_calibrations()
     selection = select_dataset(
         _selected_episode_dirs(args),
         args.audit_root,
@@ -143,7 +131,7 @@ def _handle_select_pi05(args: argparse.Namespace) -> int:
 
 
 def _handle_select_pi05_eef(args: argparse.Namespace) -> int:
-    left_gripper, right_gripper = _gripper_calibrations(args)
+    left_gripper, right_gripper = _gripper_calibrations()
     policy = EqualEefPolicy(
         eef_distance_m=args.eef_distance_mm / 1000.0,
         gripper_delta_threshold=args.gripper_delta_threshold,
@@ -163,7 +151,7 @@ def _handle_select_pi05_eef(args: argparse.Namespace) -> int:
 
 
 def _handle_select_pi05_eef_dagger(args: argparse.Namespace) -> int:
-    left_gripper, right_gripper = _gripper_calibrations(args)
+    left_gripper, right_gripper = _gripper_calibrations()
     policy = EqualEefPolicy(
         eef_distance_m=args.eef_distance_mm / 1000.0,
         gripper_delta_threshold=args.gripper_delta_threshold,
@@ -290,11 +278,6 @@ def _add_selection_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--audit-root", type=Path, required=True)
     parser.add_argument("--output-root", type=Path, required=True)
     parser.add_argument("--task", required=True)
-    parser.add_argument("--left-gripper-open", type=float, required=True)
-    parser.add_argument("--left-gripper-closed", type=float, required=True)
-    parser.add_argument("--right-gripper-open", type=float, required=True)
-    parser.add_argument("--right-gripper-closed", type=float, required=True)
-    parser.add_argument("--gripper-tolerance", type=float, default=0.05)
     parser.add_argument("--outcome", action="append", choices=("success", "fail", "aborted"))
 
 

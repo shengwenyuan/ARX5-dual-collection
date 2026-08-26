@@ -19,7 +19,7 @@ from arx5_collection.streaming_conversion.models import JobState
 
 
 NOW = datetime(2026, 8, 26, 4, 0, tzinfo=timezone.utc)
-RECIPE = Path("config/conversion.pi05-equal-eef-v2.toml").resolve()
+RECIPE = Path("config/conversion.pi05-equal-eef-v3.toml").resolve()
 
 
 class _TTY(StringIO):
@@ -202,7 +202,7 @@ dataset_name = "fold"
 repo_id = "local/fold"
 
 [recipe]
-name = "pi05-equal-eef-v2"
+name = "pi05-equal-eef-v3"
 profile = "{RECIPE}"
 task = "folding the cloth"
 '''

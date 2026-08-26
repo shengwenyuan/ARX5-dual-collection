@@ -36,10 +36,7 @@ max_snapshot_age_ms = 100.0
 service_timeout_ms = 250.0
 
 [gripper]
-left_open_raw = -3.0
-left_closed_raw = 0.0
-right_open_raw = -3.0
-right_closed_raw = 0.0
+contract = "arx5-gripper-v1"
 """
 
 
@@ -65,6 +62,9 @@ class DaggerConfigTest(unittest.TestCase):
         self.assertEqual(collector.observation.max_arm_age_ns, 2_000_000)
         self.assertEqual(collector.observation.max_snapshot_age_ns, 100_000_000)
         self.assertEqual(collector.snapshot_service_timeout_s, 0.25)
+        self.assertEqual(collector.gripper_contract, "arx5-gripper-v1")
+        self.assertEqual(collector.grippers.open_value, -3.4)
+        self.assertEqual(collector.grippers.closed_value, 0.0)
         self.assertEqual(collector.execution.action_chunk_size, 50)
         self.assertEqual(collector.execution.execution_steps, 10)
         self.assertEqual(collector.execution.control_rate_hz, 25.0)
@@ -95,6 +95,17 @@ class DaggerConfigTest(unittest.TestCase):
         self.assertEqual(settings.execution.execution_steps, 4)
         self.assertEqual(settings.execution.control_rate_hz, 20.0)
         self.assertEqual(settings.execution.inference_period_s, 0.2)
+
+    def test_rejects_configurable_gripper_boundaries(self) -> None:
+        self.path.write_text(
+            CONFIG.replace(
+                'contract = "arx5-gripper-v1"',
+                "left_open_raw = -3.4\nleft_closed_raw = 0.0",
+            )
+        )
+
+        with self.assertRaisesRegex(ValueError, "keys must be exactly"):
+            DaggerCollectorSettings.load(self.path)
 
     def test_v3_rtc_numbers_are_loaded_from_one_typed_profile(self) -> None:
         root = Path(__file__).resolve().parents[2]

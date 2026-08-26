@@ -374,7 +374,7 @@ dataset_name = "fold_cloth"
 repo_id = "<owner>/<dataset_name>"
 
 [recipe]
-name = "pi05-equal-eef-v2"
+name = "pi05-equal-eef-v3"
 profile = "<existing-recipe-config>"
 task = "folding the cloth"
 ```
@@ -515,13 +515,13 @@ src/arx5_collection/dataset_cli.py
 
 本单位先冻结 Worker 将要复用的转换参数，不实现 Worker、Fragment 或 Builder：
 
-- 新增 task 无关的 `pi05-equal-eef-v2` conversion recipe，显式记录 cleaning、等 EEF 采样、按 `station.id` 冻结的夹爪标定和 LeRobot v2.1 backend；不再把训练 profile 当转换 profile。
+- `pi05-equal-eef-v3` conversion recipe 显式记录 cleaning、等 EEF 采样、`arx5-gripper-v1` 与 LeRobot v2.1 backend；station 仅保留来源身份。
 - 流式 profile 的 `recipe.name` 必须与 conversion recipe 一致；`recipe.task` 继续是本批 legacy Episode 的原样 prompt，两者不混为一个配置。
 - recipe loader 使用严格 schema 和字段集合，拒绝未知字段、缺字段和隐式版本升级。
-- Worker 必须从 Episode metadata 读取 `station.id` 并选择精确 calibration profile；未知 station 直接拒绝，不使用默认值。W3/W4 可以使用不同数值，但都冻结为 `linear_open_closed_0_1` 归一化语义。
+- Worker 从 Episode metadata 读取 `station.id` 作为来源信息；W3/W4 和未来 station 均使用设备固定的 `arx5-gripper-v1`。
 - DAgger selector 接受 `outcome=success`，以及已被 authority classifier 判定有效的 `outcome=fail`；两者都只选择完整闭合的 expert correction。
 - `outcome=aborted` 继续排除；普通 demonstration fail 不经过 DAgger selector。DAgger aborted 的未来规则沿用独立 TODO，不在本单位扩张。
-- 用现有 W3 v2 与 W4 fold-cloth 验收值冻结首版参数；参数变化必须产生新的 recipe name/schema，不原地改变历史转换语义。
+- 设备边界固定为 raw `[-3.4,0]`；契约变化必须产生新的 contract、recipe name/schema，不原地改变历史转换语义。
 - 本地：`63` 个流式、DAgger、π0.5 与清洗相关回归测试通过。
 - 云端：`pi05-cpu` 上 `31` 个定向测试通过；严格加载 `pi05-equal-eef-v2 + lerobot-v2.1 + 5 mm + horizon 50` 契约，无 MCAP 读取、PFS 写入或 W3/W4 连接。
 
@@ -534,7 +534,7 @@ src/arx5_collection/dataset_cli.py
 - demonstration 使用普通 selector；DAgger success/fail 使用 DAgger selector；DAgger fail 还必须来自 `dagger_fail/` 标记路径。普通 fail/aborted 与 DAgger aborted 返回 `excluded`，不创建空 Fragment。
 - 所有工作先发生在 Fragment 目标同级隐藏目录。只有 selection 非空、v2.1 export 和 validator 全部通过后，才写 `fragment.json`、最后写 `COMMITTED.json` 并一次 rename 发布。
 - Fragment 内保留 audit、selection、独立 LeRobot v2.1、conversion/source reports；报告中的绝对路径在发布前改写为最终 Fragment 路径，不泄漏临时目录。
-- Fragment 明确记录 `station.id` 对应的 calibration profile 和统一归一化语义。Builder 允许不同 station 的冻结标定数值不同，但必须拒绝归一化语义、state/action 或其他训练契约漂移。
+- Fragment 分别记录来源 `station.id` 与统一 `gripper_contract`；Builder 必须拒绝夹爪契约、state/action 或其他训练契约漂移。
 - 业务可判定的无有效 segment 返回结构化 `excluded` reason；读取、契约、I/O 或程序异常继续抛给后续 Coordinator 分类，不在 Worker 内吞掉。
 - 本单位的 Fragment 是当前 run 内 immutable 中间态，不实现跨 run 缓存；成功 Builder 后的清理规则保持原计划。
 - 为避免 staging 改写 lineage，`EpisodeCandidate -> selection manifest -> StageReceipt -> selector` 显式传递冻结的 source Session identity；selection schema 升为 `2`，stage schema 升为 `2`，不兼容旧 smoke 状态。
@@ -569,7 +569,7 @@ src/arx5_collection/dataset_cli.py
 - 全局 LeRobot episode 顺序固定为 selection 顺序，再按 Fragment 内 local episode index 排序；全局 frame/index/task index 确定性重写。
 - Parquet 只重写索引列，不解码或重编码 RGB 视频；视频优先同文件系统 hard-link，无法 hard-link 时复制。最终 snapshot 不依赖 Fragment 生命周期。
 - task 字符串原样合并，允许 snapshot 包含多个 task；同一 source Episode 和同一 source Session 内仍必须唯一一致。`split_group` 必须保持 source Episode ID。
-- 不同 station 允许使用 recipe 中各自冻结的标定数值；Builder 必须拒绝 gripper normalization、state/action、采样、相机、fps、颜色、LeRobot/OpenPI commit 等训练契约漂移。
+- 不同 station 必须使用同一 ARX5 夹爪契约；Builder 必须拒绝 gripper contract/normalization、state/action、采样、相机、fps、颜色、LeRobot/OpenPI commit 等训练契约漂移。
 - 输出在同级隐藏目录完整构建并通过现有 LeRobot validator 后一次 rename 发布；已存在目标拒绝覆盖。
 - 发布成功后才删除本 run 的 staging 与 Fragments；保留 `run.json`、selection/jobs manifest 及最终 source/discarded/snapshot 报告。失败时完整保留 run 供诊断和恢复。
 - 本单位验收使用两个真实 committed Fragment 组装一个 v2.1 snapshot，复核 LeRobot 与 OpenPI loader、task、source lineage、总 episode/frame 数和 Fragment 清理边界。

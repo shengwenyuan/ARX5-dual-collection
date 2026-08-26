@@ -97,7 +97,7 @@
 | 等 EEF 位移 sample | 夹爪/时间触发 | pending | 归一化夹爪变化 `>=0.02`；最大间隔 `100 ms` | `EqualEefPolicy` | 已实现、待正式数据验收 |
 | 等 EEF 位移 sample | 完整帧组反向关联 | pending | 最新 `observation_cutoff_ns <= tick_ns`；image age `<=40 ms` | `eef_selection._latest_frame_group` | 已实现、待正式数据验收 |
 | 状态构造 | 14 维 joint state | enabled | `[left J1..J6, left gripper, right J1..J6, right gripper]` | `pi05_dataset.actions.make_state` | OpenPI ARX/Aloha 适配 |
-| 夹爪构造 | raw 到 `[0,1]` | enabled | `0=open, 1=closed`；超标定容差时报错 | `pi05_dataset.actions.GripperCalibration` | OpenPI 表达 + 项目标定 |
+| 夹爪构造 | raw 到 `[0,1]` | enabled | `arx5-gripper-v1`：`-3.4=open, 0=closed`；容差内 clamp，明显越界报错 | `arx5_collection.gripper` | OpenPI 表达 + ARX5 设备契约 |
 | 动作构造 | measured-position proxy | enabled | 当前无 command Topic，使用 `action[t] = state[t]` | `pi05_dataset.selection.build_samples` | 项目示教适配 |
 | Idle 清洗 | 长 idle 删除 | enabled | 相邻 14 维 action 每维变化均 `<1e-3` 视为 idle；连续至少 24 帧删除 | `pi05_dataset.selection.select_nonidle_segments` | OpenPI DROID 时间尺度适配 |
 | 片段筛选 | 短运动和尾部裁剪 | enabled | 运动段至少 54 帧；每段末尾裁 34 帧 | `select_nonidle_segments` | OpenPI DROID 时间尺度适配 |

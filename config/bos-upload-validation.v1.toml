@@ -8,7 +8,7 @@ fraction = 0.10
 max_count = 15
 
 [deep]
-conversion_profile = "conversion.pi05-equal-eef-v2.toml"
+conversion_profile = "conversion.pi05-equal-eef-v3.toml"
 rgb_encoding = "rgb8"
 depth_encoding = "16UC1"
 width = 848

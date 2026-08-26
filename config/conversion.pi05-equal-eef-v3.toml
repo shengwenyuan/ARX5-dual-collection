@@ -1,7 +1,8 @@
-schema_version = 1
-name = "pi05-equal-eef-v2"
+schema_version = 2
+name = "pi05-equal-eef-v3"
 builder_backend = "lerobot-v2.1"
 gripper_normalization = "linear_open_closed_0_1"
+gripper_contract = "arx5-gripper-v1"
 
 [cleaning]
 cross_camera_tolerance_ns = 16700000
@@ -24,23 +25,3 @@ min_idle_frames = 24
 min_motion_frames = 54
 trim_segment_end_frames = 34
 max_episode_duration_s = 180.0
-
-[gripper.w3.left]
-open_value = -2.7309837341
-closed_value = 0.0
-tolerance = 0.001
-
-[gripper.w3.right]
-open_value = -2.4361028671
-closed_value = 0.0
-tolerance = 0.001
-
-[gripper.w4.left]
-open_value = -3.061722755432129
-closed_value = 0.0
-tolerance = 0.05
-
-[gripper.w4.right]
-open_value = -3.3894100189208984
-closed_value = 0.0
-tolerance = 0.05

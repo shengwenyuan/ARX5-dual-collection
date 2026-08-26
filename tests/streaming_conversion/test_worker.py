@@ -19,7 +19,7 @@ from arx5_collection.streaming_conversion.worker import convert_episode_fragment
 
 
 NOW = datetime(2026, 8, 25, 12, 0, tzinfo=timezone.utc)
-RECIPE = Path("config/conversion.pi05-equal-eef-v2.toml")
+RECIPE = Path("config/conversion.pi05-equal-eef-v3.toml")
 
 
 class ConvertEpisodeFragmentTest(unittest.TestCase):
@@ -53,7 +53,8 @@ class ConvertEpisodeFragmentTest(unittest.TestCase):
         fragment = json.loads((target / "fragment.json").read_text())
         self.assertEqual(fragment["training_task"], "folding the cloth")
         self.assertEqual(fragment["recipe"]["builder_backend"], "lerobot-v2.1")
-        self.assertEqual(fragment["recipe"]["calibration_profile"], "w3")
+        self.assertEqual(fragment["recipe"]["gripper_contract"], "arx5-gripper-v1")
+        self.assertEqual(fragment["source_station_id"], "w3")
         report = json.loads((target / "reports" / "conversion.json").read_text())
         self.assertEqual(report["source_selection_dir"], str(target / "selection"))
         self.assertEqual(report["output_root"], str(target / "lerobot"))
@@ -162,12 +163,12 @@ class ConvertEpisodeFragmentTest(unittest.TestCase):
 
         self.assertFalse(target.exists())
 
-    def test_rejects_station_without_frozen_calibration(self) -> None:
+    def test_accepts_new_station_with_device_gripper_contract(self) -> None:
         receipt = self._stage("demonstration", "success", "success", station_id="w5")
         target = self.root / "fragments" / receipt.episode_id
 
-        with self.assertRaisesRegex(ValueError, "no gripper calibration"):
-            convert_episode_fragment(
+        with self._successful_pipeline(receipt.episode_id, target):
+            result = convert_episode_fragment(
                 receipt,
                 target,
                 self.recipe,
@@ -175,7 +176,10 @@ class ConvertEpisodeFragmentTest(unittest.TestCase):
                 "local/fragment-test",
             )
 
-        self.assertFalse(target.exists())
+        self.assertEqual(result.status, ConversionStatus.COMMITTED)
+        fragment = json.loads((target / "fragment.json").read_text())
+        self.assertEqual(fragment["source_station_id"], "w5")
+        self.assertEqual(fragment["recipe"]["gripper_contract"], "arx5-gripper-v1")
 
     def test_pipeline_failure_cleans_partial_fragment(self) -> None:
         receipt = self._stage("demonstration", "success", "success")
@@ -249,6 +253,7 @@ class ConvertEpisodeFragmentTest(unittest.TestCase):
             mcap=_identity(source_dir / "episode.mcap"),
             metadata=_identity(source_dir / "metadata.json"),
         )
+        self.source_session_id = candidate.source_session_id
         stage = self.root / "staging" / bucket / "episode-a"
         return MountedEpisodeSource(self.source_root).stage(candidate, stage)
 
@@ -301,13 +306,13 @@ class ConvertEpisodeFragmentTest(unittest.TestCase):
         (output / "frame_index.jsonl").touch()
         return CleaningResult(quality, (), output)
 
-    @staticmethod
     def _selected(
+        self,
         output_root: Path,
         episode_id: str,
         source_session_ids: dict[str, str],
     ):
-        if source_session_ids != {episode_id: "w3/2026-08-25/task"}:
+        if source_session_ids != {episode_id: self.source_session_id}:
             raise AssertionError("Worker did not preserve frozen source Session identity")
         output = output_root / "selection"
         output.mkdir()
@@ -317,8 +322,8 @@ class ConvertEpisodeFragmentTest(unittest.TestCase):
             output_dir=output,
         )
 
-    @staticmethod
     def _fake_export(
+        self,
         source_root: Path,
         selection_dir: Path,
         output_root: Path,
@@ -334,7 +339,7 @@ class ConvertEpisodeFragmentTest(unittest.TestCase):
                 {
                     "segment_id": "episode-a--000",
                     "source_episode_id": "episode-a",
-                    "source_session_id": "w3/2026-08-25/task",
+                    "source_session_id": self.source_session_id,
                 }
             )
             + "\n"
@@ -356,7 +361,21 @@ class ConvertEpisodeFragmentTest(unittest.TestCase):
                     "state_action_order": ["joint"],
                     "state_action_version": "state-v1",
                     "filter_version": "filter-v2",
-                    "gripper_calibration": {},
+                    "gripper_calibration": {
+                        "contract_id": "arx5-gripper-v1",
+                        "left": {
+                            "open_value": -3.4,
+                            "closed_value": 0.0,
+                            "open_tolerance": 0.05,
+                            "closed_tolerance": 0.10,
+                        },
+                        "right": {
+                            "open_value": -3.4,
+                            "closed_value": 0.0,
+                            "open_tolerance": 0.05,
+                            "closed_tolerance": 0.10,
+                        },
+                    },
                     "sampling_contract": {},
                 }
             )

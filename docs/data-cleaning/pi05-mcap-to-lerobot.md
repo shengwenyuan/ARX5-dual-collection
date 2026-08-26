@@ -128,7 +128,7 @@ task                                <- metadata.task.description
 
 - 关节统一为弧度。
 - 夹爪统一为 `[0, 1]`，`0` 全开、`1` 全闭。
-- `stacking_five_paper_cups_pi05_v1` 以完整 success 数据的可审计观测端点标定：left open `-2.7309837341`、right open `-2.4361028671`、两侧 closed `0`。设备手册中的 `-3.14/-3.4` 候选限位尚未形成可核验配置；未来确认后必须生成新 calibration/dataset version。
+- 夹爪统一使用设备契约 `arx5-gripper-v1`：左右两侧 raw `-3.4` 为全开、`0` 为全闭；station 不保存或覆盖该边界。
 - openpi 在模型 transform 中把 14 维补零为 π0.5 的 32 维；数据集本身不预先写 32 维。
 - left/right 按机器人背后面向工作区的视角定义，并与 openpi 文档一致。
 - RGB 使用 `uint8`，YUYV 解码后检查颜色通道；Depth 保留在审计层，不写入首版训练 features。

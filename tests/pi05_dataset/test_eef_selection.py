@@ -58,7 +58,9 @@ def scan(left: tuple[ArmSample, ...], right: tuple[ArmSample, ...]) -> EpisodeSc
 
 class EqualEefSelectionTest(unittest.TestCase):
     def setUp(self) -> None:
-        self.calibration = GripperCalibration(0.0, 1.0, tolerance=1.0)
+        self.calibration = GripperCalibration(
+            0.0, 1.0, open_tolerance=1.0, closed_tolerance=1.0
+        )
 
     def test_samples_when_either_arm_crosses_endpoint_distance(self) -> None:
         left = tuple(

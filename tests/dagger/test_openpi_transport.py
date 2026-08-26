@@ -124,6 +124,7 @@ class OpenPiTransportContractTest(unittest.TestCase):
             "hard_prefix_tolerance": profile.hard_prefix_tolerance,
             "model_action_dimension": profile.model_action_dimension,
             "gripper_normalization": profile.gripper_normalization,
+            "gripper_contract": profile.gripper_contract,
             "input_width": profile.input.width,
             "input_height": profile.input.height,
             "input_channels": profile.input.channels,

@@ -15,7 +15,7 @@ from arx5_collection.dagger.action_gateway import (
     PolicyActionGateway,
 )
 from arx5_collection.dagger.models import InferenceTicket, PolicyExecutionProfile
-from arx5_collection.dagger.observation import GripperCalibration
+from arx5_collection.gripper import ARX5_GRIPPER_CALIBRATION
 
 
 SHA = "a" * 64
@@ -134,7 +134,7 @@ class Pi05JointActionContractTest(unittest.TestCase):
     def setUp(self) -> None:
         self.contract = Pi05JointActionContract(
             SHA,
-            GripperCalibration(-3.0, 0.0, -2.0, 2.0),
+            ARX5_GRIPPER_CALIBRATION,
             JointActionSafety(0.25, 1.5, 0.0, 1.0),
         )
         self.state = DualArmJointState((0.0,) * 6, (0.0,) * 6)
@@ -143,8 +143,8 @@ class Pi05JointActionContractTest(unittest.TestCase):
         commands = self.contract.validate(ticket(), self.state, 0)
 
         self.assertEqual(len(commands), 3)
-        self.assertEqual(commands[0].left, (0.0,) * 6 + (-3.0,))
-        self.assertEqual(commands[0].right, (0.0,) * 6 + (2.0,))
+        self.assertEqual(commands[0].left, (0.0,) * 6 + (-3.4,))
+        self.assertEqual(commands[0].right, (0.0,) * 6 + (0.0,))
 
     def test_rejects_step_gripper_epoch_and_checkpoint(self) -> None:
         invalid = (
@@ -182,7 +182,7 @@ class PolicyActionGatewayTest(unittest.TestCase):
         policy = Policy()
         contract = Pi05JointActionContract(
             SHA,
-            GripperCalibration(-3.0, 0.0, -3.0, 0.0),
+            ARX5_GRIPPER_CALIBRATION,
             JointActionSafety(0.25, 1.5, 0.0, 1.0),
         )
         mode = mode or NoopPolicyModeController()

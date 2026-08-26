@@ -19,10 +19,6 @@ class DatasetCliTest(unittest.TestCase):
                 "--audit-root", "/audit",
                 "--output-root", "/output",
                 "--task", "task",
-                "--left-gripper-open", "-1",
-                "--left-gripper-closed", "0",
-                "--right-gripper-open", "-1",
-                "--right-gripper-closed", "0",
             ],
             [
                 "select-pi05-eef",
@@ -30,10 +26,6 @@ class DatasetCliTest(unittest.TestCase):
                 "--audit-root", "/audit",
                 "--output-root", "/output",
                 "--task", "task",
-                "--left-gripper-open", "-1",
-                "--left-gripper-closed", "0",
-                "--right-gripper-open", "-1",
-                "--right-gripper-closed", "0",
             ],
             [
                 "classify-dagger",
@@ -46,10 +38,6 @@ class DatasetCliTest(unittest.TestCase):
                 "--audit-root", "/audit",
                 "--output-root", "/output",
                 "--task", "task",
-                "--left-gripper-open", "-1",
-                "--left-gripper-closed", "0",
-                "--right-gripper-open", "-1",
-                "--right-gripper-closed", "0",
             ],
             [
                 "mix-selections",

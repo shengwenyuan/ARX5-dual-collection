@@ -16,7 +16,7 @@ from arx5_collection.dagger.models import (
     PolicyExecutionProfile,
     RtcRolloutProfile,
 )
-from arx5_collection.dagger.observation import GripperCalibration
+from arx5_collection.gripper import ARX5_GRIPPER_CALIBRATION
 from arx5_collection.dagger.rtc_scheduler import (
     RollingMaxDelayEstimator,
     RtcActionScheduler,
@@ -123,7 +123,7 @@ class RtcSchedulerTest(unittest.TestCase):
             sink,
             Pi05JointActionContract(
                 SHA,
-                GripperCalibration(-3.0, 0.0, -3.0, 0.0),
+                ARX5_GRIPPER_CALIBRATION,
                 JointActionSafety(0.25, 1.5, 0.0, 1.0),
             ),
             mode,

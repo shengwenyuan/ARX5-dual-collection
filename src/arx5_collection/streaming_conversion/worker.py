@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import asdict
 from datetime import datetime, timezone
 import json
 import os
@@ -26,7 +27,7 @@ from .recipe import Pi05ConversionRecipe
 from .source import validate_stage
 
 
-FRAGMENT_SCHEMA_VERSION = 1
+FRAGMENT_SCHEMA_VERSION = 2
 _REASON_COMPONENT = re.compile(r"^[a-z][a-z0-9_]*$")
 
 
@@ -88,7 +89,6 @@ def convert_episode_fragment(
         raise ValueError("staged metadata collection_type must be a string")
     outcome = _metadata_string(metadata, "outcome")
     station_id = _metadata_station_id(metadata)
-    calibration = recipe.calibration_for(station_id)
     if collection_type not in {"demonstration", "dagger"}:
         raise ValueError(f"unsupported collection_type: {collection_type!r}")
     if collection_type == "dagger" and outcome == "fail":
@@ -110,8 +110,8 @@ def convert_episode_fragment(
                     audit_root,
                     temporary,
                     task,
-                    calibration.left,
-                    calibration.right,
+                    recipe.gripper,
+                    recipe.gripper,
                     recipe.selection,
                     source_session_ids={episode_id: receipt.source_session_id},
                 )
@@ -121,8 +121,8 @@ def convert_episode_fragment(
                     audit_root,
                     temporary,
                     task,
-                    calibration.left,
-                    calibration.right,
+                    recipe.gripper,
+                    recipe.gripper,
                     recipe.selection,
                     source_session_ids={episode_id: receipt.source_session_id},
                 )
@@ -146,6 +146,15 @@ def convert_episode_fragment(
             )
             report_path = temporary / "reports" / "conversion.json"
             conversion = read_json(report_path)
+            expected_gripper = {
+                "contract_id": recipe.gripper_contract,
+                "left": asdict(recipe.gripper),
+                "right": asdict(recipe.gripper),
+            }
+            if conversion.get("gripper_calibration") != expected_gripper:
+                raise RuntimeError(
+                    "conversion gripper calibration does not match device contract"
+                )
             _rewrite_report_paths(conversion, fragment_target)
             _write_json_fsync(report_path, conversion)
 
@@ -271,6 +280,7 @@ def _fragment_value(
         },
         "collection_type": collection_type,
         "outcome": outcome,
+        "source_station_id": station_id,
         "metadata_task": quality.get("task"),
         "training_task": task,
         "source_session_ids": sorted(
@@ -285,7 +295,7 @@ def _fragment_value(
             "name": recipe.name,
             "builder_backend": recipe.builder_backend,
             "gripper_normalization": recipe.gripper_normalization,
-            "calibration_profile": station_id,
+            "gripper_contract": recipe.gripper_contract,
         },
         "repo_id": repo_id,
         "segment_count": int(validation["episodes"]),

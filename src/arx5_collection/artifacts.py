@@ -101,10 +101,12 @@ class Pi05SegmentArtifact(TypedDict):
 class GripperCalibrationArtifact(TypedDict):
     open_value: float
     closed_value: float
-    tolerance: float
+    open_tolerance: float
+    closed_tolerance: float
 
 
 class GripperCalibrationsArtifact(TypedDict):
+    contract_id: str
     left: GripperCalibrationArtifact
     right: GripperCalibrationArtifact
 

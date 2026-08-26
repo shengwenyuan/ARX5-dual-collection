@@ -22,7 +22,6 @@ from .models import JobState
 from .models import SelectionEntry
 from .models import StageReceipt
 from .recipe import Pi05ConversionRecipe
-from .recipe import UnknownStationCalibrationError
 from .source import MountedEpisodeSource
 from .source import SourceChangedError
 from .source import StageValidationError
@@ -288,8 +287,6 @@ def _classify_error(
 ) -> tuple[JobState, str]:
     if isinstance(error, SourceChangedError):
         return JobState.DISCARDED, "discarded/source_changed_after_confirmation"
-    if isinstance(error, UnknownStationCalibrationError):
-        return JobState.FAILED, "configuration/unknown_station_calibration"
     if phase is WorkPhase.STAGE:
         if isinstance(error, StageValidationError):
             return JobState.FAILED, "infrastructure/staging_validation"

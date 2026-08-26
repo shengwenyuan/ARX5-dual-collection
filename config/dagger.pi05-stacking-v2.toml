@@ -20,6 +20,7 @@ action_semantics = "absolute_joint"
 prefix_mode = "none"
 hard_prefix_tolerance = 0.00001
 gripper_normalization = "linear_open_closed_0_1"
+gripper_contract = "arx5-gripper-v1"
 
 [model_input]
 width = 640
@@ -64,7 +65,4 @@ max_snapshot_age_ms = 100.0
 service_timeout_ms = 250.0
 
 [gripper]
-left_open_raw = -3.0
-left_closed_raw = 0.0
-right_open_raw = -3.0
-right_closed_raw = 0.0
+contract = "arx5-gripper-v1"

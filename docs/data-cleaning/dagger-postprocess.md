@@ -79,10 +79,7 @@ arx5-dataset select-pi05-eef-dagger \
   --input-root <raw-dagger-root> \
   --audit-root <audit-root> \
   --output-root <dagger-derived-root> \
-  --task '<task>' \
-  --left-gripper-open <value> --left-gripper-closed <value> \
-  --right-gripper-open <value> --right-gripper-closed <value> \
-  --gripper-tolerance <existing-recipe-value>
+  --task '<task>'
 
 arx5-dataset mix-selections \
   --input demonstration=<demo-selection> \
@@ -94,7 +91,7 @@ arx5-dataset mix-selections \
 
 `--weight` 当前只记录未来采样意图，`selection.json` 明确写 `weighting_applied=false`。在 dataloader 真正消费权重前，不宣称加权训练已经启用。
 
-混合前必须精确复用 demonstration selection 的夹爪标定与 tolerance。W3 v2 当前为左开 `-2.7309837341`、右开 `-2.4361028671`、闭合均为 `0`、tolerance `0.001`；混合器会拒绝不同契约。
+夹爪统一使用 `arx5-gripper-v1`：左右两侧 raw `-3.4` 为全开、`0` 为全闭，归一化为 `[0,1]`。边界与 station 无关；混合器会拒绝不同契约。
 
 ## 当前验收
 

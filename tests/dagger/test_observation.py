@@ -4,12 +4,12 @@ import unittest
 from types import SimpleNamespace
 
 from arx5_collection.dagger.observation import (
-    GripperCalibration,
     Pi05ObservationEncoder,
     RawArmSample,
     RgbFrame,
     VlaObservationStep,
 )
+from arx5_collection.gripper import ARX5_GRIPPER_CALIBRATION
 from arx5_collection.dagger.ros_snapshot import OpenCvRgbResizer, _camera_frame
 
 try:
@@ -38,18 +38,18 @@ class ObservationTest(unittest.TestCase):
             camera_left=frame(1000),
             camera_overview=frame(1000),
             camera_right=frame(1000),
-            left_arm=arm(999, -3.0),
+            left_arm=arm(999, -3.4),
             right_arm=arm(999, 0.0),
         )
         encoder = Pi05ObservationEncoder(
-            GripperCalibration(-3.0, 0.0, -3.0, 0.0), Preprocessor()
+            ARX5_GRIPPER_CALIBRATION, Preprocessor()
         )
 
         observation = encoder.encode(step)
 
         self.assertEqual(
             observation.state,
-            (-3.0,) * 6 + (0.0,) + (0.0,) * 6 + (1.0,),
+            (-3.4,) * 6 + (0.0,) + (0.0,) * 6 + (1.0,),
         )
         self.assertEqual(observation.cutoff_ns, 1000)
 
