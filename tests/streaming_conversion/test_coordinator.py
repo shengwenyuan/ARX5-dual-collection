@@ -1,0 +1,282 @@
+from __future__ import annotations
+
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+import tempfile
+from threading import Barrier, Lock
+import unittest
+from unittest.mock import patch
+
+from arx5_collection.streaming_conversion.config import OutputConfig
+from arx5_collection.streaming_conversion.config import RecipeConfig
+from arx5_collection.streaming_conversion.config import RuntimeConfig
+from arx5_collection.streaming_conversion.config import SourceConfig
+from arx5_collection.streaming_conversion.config import StreamingConversionConfig
+from arx5_collection.streaming_conversion.coordinator import ConversionWork
+from arx5_collection.streaming_conversion.coordinator import StageWork
+from arx5_collection.streaming_conversion.coordinator import StreamingCoordinator
+from arx5_collection.streaming_conversion.coordinator import spawn_executor
+from arx5_collection.streaming_conversion.manifest import RunManifest
+from arx5_collection.streaming_conversion.models import ConversionStatus
+from arx5_collection.streaming_conversion.models import DiscoveryResult
+from arx5_collection.streaming_conversion.models import EpisodeCandidate
+from arx5_collection.streaming_conversion.models import EpisodeConversionResult
+from arx5_collection.streaming_conversion.models import FileIdentity
+from arx5_collection.streaming_conversion.models import JobState
+from arx5_collection.streaming_conversion.models import StageReceipt
+from arx5_collection.streaming_conversion.recipe import Pi05ConversionRecipe
+from arx5_collection.streaming_conversion.recipe import UnknownStationCalibrationError
+from arx5_collection.streaming_conversion.source import SourceChangedError
+
+
+RECIPE = Path("config/conversion.pi05-equal-eef-v2.toml")
+
+
+class StreamingCoordinatorTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temporary = tempfile.TemporaryDirectory()
+        self.root = Path(self.temporary.name).resolve()
+        self.source_root = self.root / "source"
+        self.source_root.mkdir()
+        self.recipe = Pi05ConversionRecipe.load(RECIPE)
+
+    def tearDown(self) -> None:
+        self.temporary.cleanup()
+
+    def test_closes_jobs_with_bounded_work_and_releases_success_staging(self) -> None:
+        manifest = self._manifest("episode-a", "episode-b", "episode-c")
+        barrier = Barrier(2)
+        lock = Lock()
+        active = 0
+        maximum = 0
+        started: list[str] = []
+
+        def stage(work: StageWork) -> StageReceipt:
+            nonlocal active, maximum
+            with lock:
+                started.append(f"stage:{work.selection.episode_id}")
+                active += 1
+                maximum = max(maximum, active)
+            if work.selection.episode_id in {"episode-a", "episode-b"}:
+                barrier.wait(timeout=2)
+            try:
+                if work.selection.episode_id == "episode-c":
+                    raise SourceChangedError("frozen source changed")
+                work.target.mkdir(parents=True)
+                return _receipt(work)
+            finally:
+                with lock:
+                    active -= 1
+
+        def convert(work: ConversionWork) -> EpisodeConversionResult:
+            nonlocal active, maximum
+            with lock:
+                started.append(f"convert:{work.receipt.episode_id}")
+                active += 1
+                maximum = max(maximum, active)
+            try:
+                if work.receipt.episode_id == "episode-b":
+                    return _excluded(work.receipt.episode_id)
+                return _committed(work.receipt.episode_id, work.target)
+            finally:
+                with lock:
+                    active -= 1
+
+        jobs = self._coordinator(manifest, stage, convert, workers=2).run()
+
+        self.assertEqual(jobs["episode-a"].state, JobState.COMMITTED)
+        self.assertEqual(jobs["episode-b"].state, JobState.EXCLUDED)
+        self.assertEqual(jobs["episode-c"].state, JobState.DISCARDED)
+        self.assertEqual(
+            jobs["episode-c"].reason_code,
+            "discarded/source_changed_after_confirmation",
+        )
+        self.assertEqual(maximum, 2)
+        self.assertLess(
+            min(index for index, item in enumerate(started) if item.startswith("convert:")),
+            started.index("stage:episode-c"),
+        )
+        self.assertFalse((manifest.run_dir / "staging" / "episode-a").exists())
+        self.assertFalse((manifest.run_dir / "staging" / "episode-b").exists())
+
+    def test_resume_restarts_interrupted_attempt_and_cleans_hidden_partials(self) -> None:
+        manifest = self._manifest("episode-a")
+        manifest.transition("episode-a", JobState.STAGING)
+        manifest.transition("episode-a", JobState.CONVERTING)
+        for parent in ("staging", "fragments"):
+            partial = manifest.run_dir / parent / ".episode-a.interrupted"
+            partial.mkdir(parents=True)
+
+        jobs = self._coordinator(
+            manifest,
+            _fake_stage,
+            lambda work: _committed(work.receipt.episode_id, work.target),
+            workers=1,
+        ).run()
+
+        self.assertEqual(jobs["episode-a"].state, JobState.COMMITTED)
+        self.assertEqual(jobs["episode-a"].attempt, 1)
+        self.assertEqual(list((manifest.run_dir / "staging").glob(".*")), [])
+        self.assertEqual(list((manifest.run_dir / "fragments").glob(".*")), [])
+
+    def test_terminal_jobs_skip_workers_and_failed_job_requires_retry(self) -> None:
+        manifest = self._manifest("episode-a", "episode-b")
+        for state in (
+            JobState.STAGING,
+            JobState.CONVERTING,
+            JobState.VALIDATING,
+            JobState.COMMITTED,
+        ):
+            manifest.transition("episode-a", state)
+        stale_stage = manifest.run_dir / "staging" / "episode-a"
+        stale_stage.mkdir(parents=True)
+        manifest.transition("episode-b", JobState.STAGING)
+        manifest.transition(
+            "episode-b",
+            JobState.FAILED,
+            reason_code="infrastructure/staging_io",
+        )
+        calls = 0
+
+        def forbidden_stage(work: StageWork) -> StageReceipt:
+            nonlocal calls
+            calls += 1
+            raise AssertionError(work)
+
+        jobs = self._coordinator(
+            manifest,
+            forbidden_stage,
+            lambda work: _committed(work.receipt.episode_id, work.target),
+            workers=1,
+        ).run()
+
+        self.assertEqual(calls, 0)
+        self.assertEqual(jobs["episode-a"].state, JobState.COMMITTED)
+        self.assertEqual(jobs["episode-b"].state, JobState.FAILED)
+        self.assertFalse(stale_stage.exists())
+
+    def test_unknown_station_is_configuration_failure(self) -> None:
+        manifest = self._manifest("episode-a")
+
+        def reject(work: ConversionWork) -> EpisodeConversionResult:
+            raise UnknownStationCalibrationError("unknown station")
+
+        jobs = self._coordinator(manifest, _fake_stage, reject, workers=1).run()
+
+        self.assertEqual(jobs["episode-a"].state, JobState.FAILED)
+        self.assertEqual(
+            jobs["episode-a"].reason_code,
+            "configuration/unknown_station_calibration",
+        )
+        self.assertTrue((manifest.run_dir / "staging" / "episode-a").is_dir())
+
+    def test_default_executor_uses_spawn_context(self) -> None:
+        with patch(
+            "arx5_collection.streaming_conversion.coordinator.ProcessPoolExecutor"
+        ) as factory:
+            executor = spawn_executor(1)
+
+        self.assertIs(executor, factory.return_value)
+        self.assertEqual(factory.call_args.kwargs["max_workers"], 1)
+        self.assertEqual(
+            factory.call_args.kwargs["mp_context"].get_start_method(),
+            "spawn",
+        )
+
+    def _manifest(self, *episode_ids: str) -> RunManifest:
+        config = StreamingConversionConfig(
+            1,
+            SourceConfig(self.source_root, (Path("task"),), ()),
+            RuntimeConfig(self.root / "streaming", 2),
+            OutputConfig(self.root / "lerobot", "fold", "local/fold"),
+            RecipeConfig("pi05-equal-eef-v2", str(RECIPE), "folding the cloth"),
+        )
+        candidates = tuple(
+            EpisodeCandidate(
+                source_dir=self.source_root / "task" / episode_id,
+                relative_dir=Path("task") / episode_id,
+                include_path=Path("task"),
+                episode_id=episode_id,
+                source_session_id="w4/2026-08-25/task",
+                collection_type="demonstration",
+                outcome="success",
+                task_id="task",
+                task_description="folding the cloth",
+                mcap=FileIdentity(10, index + 1),
+                metadata=FileIdentity(20, index + 11),
+            )
+            for index, episode_id in enumerate(episode_ids)
+        )
+        discovery = DiscoveryResult(
+            self.source_root,
+            (self.source_root / "task",),
+            candidates,
+            (),
+        )
+        return RunManifest.create(
+            config,
+            discovery,
+            self.root / "lerobot" / f"output-{episode_ids[0]}",
+            f"run-{episode_ids[0]}",
+        )
+
+    def _coordinator(
+        self,
+        manifest: RunManifest,
+        stage_runner,
+        conversion_runner,
+        *,
+        workers: int,
+    ) -> StreamingCoordinator:
+        return StreamingCoordinator(
+            manifest,
+            self.source_root,
+            self.recipe,
+            "folding the cloth",
+            "local/fold",
+            workers,
+            stage_runner=stage_runner,
+            conversion_runner=conversion_runner,
+            executor_factory=lambda count: ThreadPoolExecutor(max_workers=count),
+        )
+
+
+def _fake_stage(work: StageWork) -> StageReceipt:
+    work.target.mkdir(parents=True, exist_ok=True)
+    return _receipt(work)
+
+
+def _receipt(work: StageWork) -> StageReceipt:
+    return StageReceipt(
+        episode_id=work.selection.episode_id,
+        source_session_id=work.selection.source_session_id,
+        source_dir=work.selection.source_dir,
+        stage_dir=work.target,
+        mcap=work.selection.mcap,
+        metadata=work.selection.metadata,
+    )
+
+
+def _committed(episode_id: str, target: Path) -> EpisodeConversionResult:
+    return EpisodeConversionResult(
+        episode_id,
+        ConversionStatus.COMMITTED,
+        target,
+        segment_count=1,
+        frame_count=10,
+    )
+
+
+def _excluded(episode_id: str) -> EpisodeConversionResult:
+    return EpisodeConversionResult(
+        episode_id,
+        ConversionStatus.EXCLUDED,
+        None,
+        segment_count=0,
+        frame_count=0,
+        reason_code="selection/no_valid_motion_segment",
+    )
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -254,6 +254,31 @@ class RunManifest:
         self._append(event)
         return self._jobs[episode_id]
 
+    def resume_interrupted(
+        self,
+        episode_id: str,
+        *,
+        detail: str | None = None,
+    ) -> JobSnapshot:
+        current = self._job(episode_id)
+        if current.state not in {
+            JobState.STAGING,
+            JobState.CONVERTING,
+            JobState.VALIDATING,
+        }:
+            raise ValueError(f"job {episode_id} is not interrupted")
+        event = JobEvent(
+            event_index=len(self._events),
+            episode_id=episode_id,
+            previous_state=current.state,
+            state=JobState.STAGING,
+            attempt=current.attempt + 1,
+            recorded_at=_format_utc(self._clock()),
+            detail=detail,
+        )
+        self._append(event)
+        return self._jobs[episode_id]
+
     def _job(self, episode_id: str) -> JobSnapshot:
         try:
             return self._jobs[episode_id]
@@ -296,6 +321,13 @@ def _replay_events(
         elif current.state is JobState.FAILED:
             if event.state is not JobState.STAGING or event.attempt != current.attempt + 1:
                 raise ValueError("failed job may only retry into a new staging attempt")
+        elif (
+            current.state
+            in {JobState.STAGING, JobState.CONVERTING, JobState.VALIDATING}
+            and event.state is JobState.STAGING
+            and event.attempt == current.attempt + 1
+        ):
+            pass
         else:
             if current.state in _TERMINAL or event.state not in _ALLOWED[current.state]:
                 raise ValueError(

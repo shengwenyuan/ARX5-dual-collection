@@ -66,7 +66,12 @@ class MountedEpisodeSource:
         return validate_stage(target)
 
     def _inside_root(self, path: Path) -> Path:
-        resolved = path.resolve(strict=True)
+        try:
+            resolved = path.resolve(strict=True)
+        except OSError as error:
+            raise SourceChangedError(
+                f"source changed after confirmation: missing path: {path}"
+            ) from error
         try:
             resolved.relative_to(self._source_root)
         except ValueError as error:

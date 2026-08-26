@@ -16,6 +16,10 @@ class StationGripperCalibration:
     right: GripperCalibration
 
 
+class UnknownStationCalibrationError(ValueError):
+    pass
+
+
 @dataclass(frozen=True, slots=True)
 class Pi05ConversionRecipe:
     schema_version: int
@@ -30,7 +34,9 @@ class Pi05ConversionRecipe:
         for calibration in self.station_calibrations:
             if calibration.station_id == station_id:
                 return calibration
-        raise ValueError(f"no gripper calibration for station: {station_id!r}")
+        raise UnknownStationCalibrationError(
+            f"no gripper calibration for station: {station_id!r}"
+        )
 
     @classmethod
     def load(cls, path: str | Path) -> Pi05ConversionRecipe:

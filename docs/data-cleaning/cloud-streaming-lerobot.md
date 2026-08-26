@@ -1,6 +1,6 @@
 # 云端 Episode 流式转换与 LeRobot Fragment 计划
 
-- Status: `unit-5-verified`
+- Status: `unit-6-verified`
 - Date: `2026-08-25`
 - Updated: `2026-08-26`
 - Parent: `docs/data-cleaning/pi05-mcap-to-lerobot.md`
@@ -541,6 +541,23 @@ src/arx5_collection/dataset_cli.py
 - 本地：`80` 个流式、DAgger、π0.5 与 cleaning 相关测试通过；覆盖正常提交、excluded 无空 Fragment、DAgger fail 路由、未知 station、来源标记、异常原子清理和 source Session 传递。
 - 云端：`pi05-cpu` 上 `38` 个定向测试通过。真实 W4 Episode `20260825T050901952462Z-5398c9f5` 完成 `9,244,689,012 bytes` 暂存与完整 v2.1 Fragment：`1 segment / 2,223 frames`，staging `15.996 s`，转换与验证 `594.325 s`。
 - Fragment 二次独立加载通过：task 原样为 `folding the cloth`，calibration profile 为 `w4`，source Session 为 `w4/2026-08-25/fold_cloth/2026-08-25`，报告无临时路径泄漏；精确 smoke staging/Fragment 已清理，BOS 未写入，W3/W4 未连接。
+
+### 单位 6：Spawn Coordinator / Backpressure / Resume
+
+本单位只实现当前 run 的 Episode 调度与状态闭环，不实现最终 Builder 或外部 CLI：
+
+- 单 Coordinator 是 `jobs.jsonl` 唯一写者；子进程不接触 manifest。
+- 使用 `ProcessPoolExecutor` 的显式 `spawn` context。父进程不初始化 ROS、LeRobot writer 或 MCAP reader。
+- 每条 Episode 分为 `stage future` 与 `convert future`；只有 stage 成功后父进程才写 `converting` 并提交转换。
+- 同时在途 future 总数不超过 `workers`。已完成 staging 的 conversion 始终优先于新 Episode staging，使可见 staging 上界受 worker 数约束。
+- conversion 返回 committed 时，父进程依次写 `validating -> committed`；excluded 写稳定 selection reason。Worker exception 被映射为明确的 discarded/failed reason，其他 Episode 继续推进。
+- 恢复同一 run 时，`staging/converting/validating` 被视为无活动 lease 的中断 attempt，清理该 Episode 的隐藏临时目录并以新 attempt 回到 `staging`；完整 staging 和带 `COMMITTED.json` 的 Fragment直接复用。
+- `committed/excluded/discarded` 保持 SKIP，`failed` 仍需显式 retry，不自动重试。
+- 本单位只闭合所有 source Episode 的终态；存在 failed 是否阻止 Builder沿用既有计划，由下一单位执行。
+- committed/excluded 在写终态前精确释放本条 staging；恢复时也清理两类终态遗留的完整 staging。discarded/failed 暂存保留供诊断，不做隐式删除。
+- 本地：`44` 个流式定向测试、全项目 `353 passed / 2 skipped`；覆盖两阶段调度、并发上限、转换优先、源变化与未知 station 分类、staging 释放、终态跳过、失败显式重试和中断 attempt 恢复。
+- 云端：`pi05-cpu` 上 `44` 个定向测试通过。两条真实 BOS Episode 使用 `2` 个 spawn Worker 完成只读暂存与完整性复核，合计约 `18 GB`，总耗时 `37.182 s`；两条均按 smoke 设计进入 `excluded/selection/unit6_smoke`，attempt 均为 `0`，最终 staging 为空。
+- 云端 smoke 只创建精确命名的临时 run；复核后已清理。BOS 未写入，目标 LeRobot 未创建，W3/W4 未连接。
 
 ## 待补信息
 

@@ -54,6 +54,14 @@ class MountedEpisodeSourceTest(unittest.TestCase):
 
         self.assertFalse(self.target.exists())
 
+    def test_reports_disappearing_frozen_source_as_source_change(self) -> None:
+        (self.source_dir / "episode.mcap").unlink()
+
+        with self.assertRaisesRegex(SourceChangedError, "missing path"):
+            self.source.stage(self.candidate, self.target)
+
+        self.assertFalse(self.target.exists())
+
     def test_rejects_source_changed_during_copy_and_cleans_partial(self) -> None:
         from arx5_collection.streaming_conversion import source as source_module
 

@@ -132,6 +132,20 @@ class RunManifestTest(unittest.TestCase):
                 reason_code="Bad Reason",
             )
 
+    def test_interrupted_job_resumes_as_new_staging_attempt(self) -> None:
+        run = self._create()
+        run.transition("episode-a", JobState.STAGING)
+        run.transition("episode-a", JobState.CONVERTING)
+
+        resumed = run.resume_interrupted("episode-a", detail="coordinator restart")
+
+        self.assertEqual(resumed.state, JobState.STAGING)
+        self.assertEqual(resumed.attempt, 1)
+        replayed = RunManifest.open(run.run_dir)
+        self.assertEqual(replayed.jobs["episode-a"], resumed)
+        with self.assertRaisesRegex(ValueError, "not interrupted"):
+            run.resume_interrupted("episode-b")
+
     def test_rejects_tampered_event_history(self) -> None:
         run = self._create()
         path = run.run_dir / "jobs.jsonl"
