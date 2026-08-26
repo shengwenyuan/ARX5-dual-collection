@@ -10,14 +10,27 @@ from arx5_collection.pi05_dataset.eef_selection import EqualEefPolicy
 
 
 @dataclass(frozen=True, slots=True)
+class StationGripperCalibration:
+    station_id: str
+    left: GripperCalibration
+    right: GripperCalibration
+
+
+@dataclass(frozen=True, slots=True)
 class Pi05ConversionRecipe:
     schema_version: int
     name: str
     builder_backend: str
+    gripper_normalization: str
     cleaning: CleaningPolicy
     selection: EqualEefPolicy
-    left_gripper: GripperCalibration
-    right_gripper: GripperCalibration
+    station_calibrations: tuple[StationGripperCalibration, ...]
+
+    def calibration_for(self, station_id: str) -> StationGripperCalibration:
+        for calibration in self.station_calibrations:
+            if calibration.station_id == station_id:
+                return calibration
+        raise ValueError(f"no gripper calibration for station: {station_id!r}")
 
     @classmethod
     def load(cls, path: str | Path) -> Pi05ConversionRecipe:
@@ -29,6 +42,7 @@ class Pi05ConversionRecipe:
                 "schema_version",
                 "name",
                 "builder_backend",
+                "gripper_normalization",
                 "cleaning",
                 "selection",
                 "gripper",
@@ -43,12 +57,21 @@ class Pi05ConversionRecipe:
         backend = _string(payload["builder_backend"], "builder_backend")
         if backend != "lerobot-v2.1":
             raise ValueError("unsupported conversion builder_backend")
+        normalization = _string(
+            payload["gripper_normalization"], "gripper_normalization"
+        )
+        if normalization != "linear_open_closed_0_1":
+            raise ValueError("unsupported gripper_normalization")
 
         cleaning = _table(payload, "cleaning")
         selection = _table(payload, "selection")
         gripper = _table(payload, "gripper")
-        left = _table(gripper, "left")
-        right = _table(gripper, "right")
+        if not gripper:
+            raise ValueError("conversion recipe must contain station calibrations")
+        calibrations = tuple(
+            _station_calibration(station_id, value)
+            for station_id, value in sorted(gripper.items())
+        )
         _exact_keys(
             cleaning,
             {
@@ -79,16 +102,11 @@ class Pi05ConversionRecipe:
             },
             "selection",
         )
-        _exact_keys(left, {"open_value", "closed_value", "tolerance"}, "gripper.left")
-        _exact_keys(
-            right,
-            {"open_value", "closed_value", "tolerance"},
-            "gripper.right",
-        )
         return cls(
             schema_version=1,
             name=name,
             builder_backend=backend,
+            gripper_normalization=normalization,
             cleaning=CleaningPolicy(
                 cross_camera_tolerance_ns=_int(
                     cleaning["cross_camera_tolerance_ns"],
@@ -155,9 +173,27 @@ class Pi05ConversionRecipe:
                     "selection.max_episode_duration_s",
                 ),
             ),
-            left_gripper=_gripper(left, "gripper.left"),
-            right_gripper=_gripper(right, "gripper.right"),
+            station_calibrations=calibrations,
         )
+
+
+def _station_calibration(
+    station_id: object,
+    payload: object,
+) -> StationGripperCalibration:
+    station = _path_component(station_id, "gripper station id")
+    _exact_keys(payload, {"left", "right"}, f"gripper.{station}")
+    assert isinstance(payload, dict)
+    left = _table(payload, "left")
+    right = _table(payload, "right")
+    fields = {"open_value", "closed_value", "tolerance"}
+    _exact_keys(left, fields, f"gripper.{station}.left")
+    _exact_keys(right, fields, f"gripper.{station}.right")
+    return StationGripperCalibration(
+        station_id=station,
+        left=_gripper(left, f"gripper.{station}.left"),
+        right=_gripper(right, f"gripper.{station}.right"),
+    )
 
 
 def _gripper(payload: dict[str, object], label: str) -> GripperCalibration:
@@ -184,6 +220,13 @@ def _string(value: object, label: str) -> str:
     if not isinstance(value, str) or not value:
         raise ValueError(f"{label} must be a non-empty string")
     return value
+
+
+def _path_component(value: object, label: str) -> str:
+    text = _string(value, label)
+    if text in {".", ".."} or Path(text).name != text:
+        raise ValueError(f"{label} must be one path component")
+    return text
 
 
 def _int(value: object, label: str) -> int:
