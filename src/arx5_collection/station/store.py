@@ -46,6 +46,8 @@ def station_config_payload(station: StationConfig) -> dict[str, Any]:
         }
     if station.ros_domain_id is not None:
         payload["ros_domain_id"] = station.ros_domain_id
+    if station.task_upload_routes is not None:
+        payload["task_upload_routes"] = station.task_upload_routes
     return payload
 
 
@@ -100,7 +102,7 @@ class StationConfigStore:
             )
         updated = replace(
             station,
-            schema_version=3,
+            schema_version=max(station.schema_version, 3),
             ros_domain_id=validate_ros_domain_id(ros_domain_id),
         )
         self.commit(updated)

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -22,6 +23,7 @@ EXPECTED_STREAMS = {
 }
 MIN_ROS_DOMAIN_ID = 0
 MAX_ROS_DOMAIN_ID = 232
+TASK_UPLOAD_DIRECTORY = re.compile(r"[a-z0-9][a-z0-9_-]*")
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,6 +62,17 @@ class StationConfig:
     arms: tuple[ArmConfig, ...]
     cameras: tuple[CameraConfig, ...]
     triggers: TriggerConfig | None = None
+    task_upload_routes: dict[str, str] | None = None
+
+    def task_upload_directory(self, description: str) -> str:
+        routes = self.task_upload_routes or {}
+        try:
+            return routes[description]
+        except KeyError as error:
+            raise ValueError(
+                "task description is not configured in station "
+                f"task_upload_routes: {description!r}"
+            ) from error
 
     def metadata(self) -> dict[str, Any]:
         devices = [
@@ -142,12 +155,32 @@ def load_station_config(path: Path) -> StationConfig:
             },
             "station",
         )
+    elif schema_version == 4:
+        _require_exact_keys(
+            payload,
+            {
+                "schema_version",
+                "station_id",
+                "ros_domain_id",
+                "sdk_type",
+                "arms",
+                "cameras",
+                "triggers",
+                "task_upload_routes",
+            },
+            "station",
+        )
     else:
-        raise ValueError("station schema_version must be 1, 2, or 3")
+        raise ValueError("station schema_version must be 1, 2, 3, or 4")
     station_id = _non_empty_string(payload["station_id"], "station_id")
     ros_domain_id = (
         validate_ros_domain_id(payload["ros_domain_id"])
-        if schema_version == 3
+        if schema_version >= 3
+        else None
+    )
+    task_upload_routes = (
+        _task_upload_routes(payload["task_upload_routes"])
+        if schema_version == 4
         else None
     )
     sdk_type = payload["sdk_type"]
@@ -203,6 +236,7 @@ def load_station_config(path: Path) -> StationConfig:
         arms=tuple(arms_by_role[role] for role in ARM_ROLES),
         cameras=cameras,
         triggers=triggers,
+        task_upload_routes=task_upload_routes,
     )
 
 
@@ -217,6 +251,10 @@ def load_configured_station(path: Path) -> StationConfig:
         raise ValueError(
             "station configuration has no ros_domain_id; run "
             "'arx5-collect station set-ros-domain-id <id>'"
+        )
+    if station.task_upload_routes is None:
+        raise ValueError(
+            "station configuration has no task_upload_routes; manually migrate station.json to schema v4"
         )
     return station
 
@@ -291,6 +329,24 @@ def _camera_serial(value: object, role: str) -> str:
             f"camera {role} must be a serial string or serial_number object"
         )
     return _non_empty_string(serial, f"camera {role} serial_number")
+
+
+def _task_upload_routes(value: object) -> dict[str, str]:
+    if not isinstance(value, dict):
+        raise ValueError("task_upload_routes must be an object")
+    routes: dict[str, str] = {}
+    for description, directory in value.items():
+        if not isinstance(description, str) or not description.strip():
+            raise ValueError("task_upload_routes keys must be non-empty strings")
+        if (
+            not isinstance(directory, str)
+            or TASK_UPLOAD_DIRECTORY.fullmatch(directory) is None
+        ):
+            raise ValueError(
+                "task_upload_routes values must match [a-z0-9][a-z0-9_-]*"
+            )
+        routes[description] = directory
+    return routes
 
 
 def _trigger_config(value: object) -> TriggerConfig:

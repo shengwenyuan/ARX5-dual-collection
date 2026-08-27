@@ -24,7 +24,9 @@ from bos_upload_episodes import parse_bos_listing  # noqa: E402
 from bos_upload_episodes import parse_commands  # noqa: E402
 from bos_upload_episodes import execute  # noqa: E402
 from bos_upload_episodes import remote_path  # noqa: E402
+from bos_upload_episodes import station_sync_command  # noqa: E402
 from bos_upload_episodes import upload_argv  # noqa: E402
+from bos_upload_episodes import validate_episode_tasks  # noqa: E402
 from bos_upload_episodes import verify_bos  # noqa: E402
 
 
@@ -88,6 +90,38 @@ def test_parse_standard_commands(tmp_path: Path) -> None:
         "bcecmd", "bos", "sync", f"{tmp_path}/", "bos:/bucket/task/",
         "--concurrency", "16", "--exclude", "abort/*", "--yes",
     ]
+
+
+def test_station_command_derives_task_and_date(tmp_path: Path) -> None:
+    source = tmp_path / "2026-08-27" / "fold_cloth-01"
+    source.mkdir(parents=True)
+    command = station_sync_command(
+        source,
+        "folding the cloth",
+        Path(__file__).parents[1] / "config" / "station.example.json",
+    )
+    assert command.destination == "bos:/datainfra-demo/fold_cloth/2026-08-27/"
+    assert command.options == (
+        "--concurrency", "16", "--sync-type", "dest-not-exist"
+    )
+
+
+def test_station_command_rejects_non_date_parent(tmp_path: Path) -> None:
+    source = tmp_path / "today" / "fold_cloth"
+    source.mkdir(parents=True)
+    with pytest.raises(ValueError, match="YYYY-MM-DD"):
+        station_sync_command(
+            source,
+            "folding the cloth",
+            Path(__file__).parents[1] / "config" / "station.example.json",
+        )
+
+
+def test_episode_task_must_match_environment_exactly(tmp_path: Path) -> None:
+    episode = write_episode(tmp_path, "episode")
+    validate_episode_tasks((episode,), "folding the cloth")
+    with pytest.raises(ValueError, match="ARX5_TASK_DESCRIPTION"):
+        validate_episode_tasks((episode,), "Folding the cloth")
 
 
 def test_coarse_gate_rejects_tiny_and_missing_stream(tmp_path: Path) -> None:

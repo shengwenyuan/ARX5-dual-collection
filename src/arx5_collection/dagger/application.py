@@ -69,6 +69,7 @@ class DaggerSessionBuilder:
         additional_recording_topics: tuple[str, ...] = (),
     ) -> ProductionSession:
         station = load_configured_station(spec.station_config)
+        station.task_upload_directory(spec.task_description)
         return ProductionSession(
             station=station,
             output_root=spec.output_root,

@@ -8,7 +8,7 @@
 
 ## 目标
 
-用户粘贴一条或多条标准 `bcecmd bos sync` 命令。工具只解析命令，不通过 shell 执行用户文本；完成全量粗筛、抽样质量门和人工确认后，才按顺序调用 `bcecmd`。
+生产入口 `arx5 upload` 根据当前 output root、task description 和 station schema v4 自动生成唯一的 BOS sync；完成全量粗筛、抽样质量门和人工确认后才调用 `bcecmd`。多行原始命令解析仅保留为专家兼容入口。
 
 ```text
 commands
@@ -168,7 +168,15 @@ tests/test_bos_upload_episodes.py     # 定向契约测试
 
 ## 输入入口
 
-正式入口同时支持 `--commands-file <path>` 和 stdin 多行粘贴；两者进入同一个逐行解析器。交互粘贴以空行结束，commands file 便于审计和复跑。
+正式入口为：
+
+```bash
+arx5 upload
+```
+
+它读取 `ARX5_OUTPUT_ROOT`、`ARX5_TASK_DESCRIPTION` 和 `/var/lib/arx5-collection/station.json`。schema v4 的 `task_upload_routes` 将完整 prompt 映射为 BOS 目录段；日期严格取自 output root 的 `YYYY-MM-DD` 父目录。默认目标为 `bos:/datainfra-demo/<task_dir>/<date>/`，并固定 concurrency 16 与 `dest-not-exist`。
+
+`--commands-file <path>` 和 stdin 多行粘贴继续进入原解析器，但只作为专家兼容入口。
 
 10% LeRobot 深检默认开启。只有显式传入 `--full-check false` 才跳过该阶段；全量粗筛、时长统计、目标冲突检查和上传后完整性校验始终执行。最终确认页必须显示实际 `full_check` 值。
 
@@ -185,6 +193,6 @@ tests/test_bos_upload_episodes.py     # 定向契约测试
 
 ## 本地验收
 
-- 命令解析、`dest-not-exist` 静默降级、`abort/` 迁移、10%/15 条抽样、BOS listing、远端复用粗筛和端到端 fake-bcecmd 链路共 `7` 个定向测试通过。
-- 全仓结果：`372 passed, 2 skipped`。
+- schema v4 路由、日期解析、Episode prompt 一致性、宿主机薄入口和既有上传链路测试通过。
+- 全仓结果：`407 passed, 2 skipped`。
 - `bcecmd` 真实凭据上传与远端对象复核尚未执行；首次使用应选择一个小型正式批次完成 live BOS 验收，不用 W3/W4 生产采集进程作为测试对象。

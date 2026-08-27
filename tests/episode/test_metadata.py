@@ -70,7 +70,7 @@ class MetadataWriterTest(unittest.TestCase):
     def test_load_station_maps_current_devices(self) -> None:
         station = load_station(STATION_PATH)
         self.assertEqual(station["id"], "station-example")
-        self.assertEqual(station["config_schema_version"], 3)
+        self.assertEqual(station["config_schema_version"], 4)
         self.assertEqual(station["ros_domain_id"], 31)
         self.assertEqual(len(station["devices"]), 7)
         self.assertEqual(

@@ -1,5 +1,5 @@
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "station_id": "station-example",
   "ros_domain_id": 31,
   "sdk_type": 2,
@@ -31,5 +31,8 @@
       "product_id": "0000",
       "serial_number": "pedal-abort-serial"
     }
+  },
+  "task_upload_routes": {
+    "folding the cloth": "fold_cloth"
   }
 }

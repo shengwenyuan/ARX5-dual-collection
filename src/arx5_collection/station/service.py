@@ -96,7 +96,7 @@ class StationInitializationService:
         )
 
         station = StationConfig(
-            schema_version=3,
+            schema_version=4,
             station_id=station_id.strip(),
             ros_domain_id=ros_domain_id,
             sdk_type=2,
@@ -105,6 +105,7 @@ class StationInitializationService:
                 cameras_by_role[role] for role in ("left", "right", "overview")
             ),
             triggers=triggers,
+            task_upload_routes={},
         )
         self.store.commit(station)
         interaction.report(f"Station configuration committed: {self.store.path}")

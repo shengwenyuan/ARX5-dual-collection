@@ -121,6 +121,8 @@ class StationInitializationServiceTest(unittest.TestCase):
 
         self.assertEqual(result.station_id, "new-station")
         self.assertEqual(result.ros_domain_id, 31)
+        self.assertEqual(result.schema_version, 4)
+        self.assertEqual(result.task_upload_routes, {})
         self.assertEqual(os.environ["ROS_DOMAIN_ID"], "31")
         self.assertTrue(path.exists())
         self.assertEqual(

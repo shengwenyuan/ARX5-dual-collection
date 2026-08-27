@@ -19,7 +19,7 @@ from arx5_collection.station.store import StationConfigStore
 
 def station() -> StationConfig:
     return StationConfig(
-        schema_version=3,
+        schema_version=4,
         station_id="station-a",
         ros_domain_id=31,
         sdk_type=2,
@@ -36,6 +36,7 @@ def station() -> StationConfig:
             PedalConfig("activate", "8088", "0015", "pedal-one"),
             PedalConfig("abort", "8088", "0015", "pedal-two"),
         ),
+        task_upload_routes={"folding the cloth": "fold_cloth"},
     )
 
 
@@ -45,7 +46,7 @@ class StationConfigStoreTest(unittest.TestCase):
         self.addCleanup(directory.cleanup)
         self.path = Path(directory.name) / "state" / "station.json"
 
-    def test_writes_schema_v3_that_production_loader_reads(self) -> None:
+    def test_writes_schema_v4_that_production_loader_reads(self) -> None:
         StationConfigStore(self.path).commit(station())
 
         loaded = load_station_config(self.path)
@@ -82,6 +83,7 @@ class StationConfigStoreTest(unittest.TestCase):
                 "arms",
                 "cameras",
                 "triggers",
+                "task_upload_routes",
             },
         )
         self.assertNotIn("hidraw", self.path.read_text())
@@ -96,6 +98,7 @@ class StationConfigStoreTest(unittest.TestCase):
             arms=legacy.arms,
             cameras=legacy.cameras,
             triggers=legacy.triggers,
+            task_upload_routes=None,
         )
         StationConfigStore(self.path).commit(legacy)
 

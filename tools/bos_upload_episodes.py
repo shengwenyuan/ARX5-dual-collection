@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+from datetime import date
 import json
 import math
 import os
@@ -16,6 +17,8 @@ import time
 import tomllib
 from dataclasses import dataclass
 from typing import Callable, Iterable, Sequence, TextIO
+
+from arx5_collection.production.config import load_configured_station
 
 
 MCAP_NAME = "episode.mcap"
@@ -33,6 +36,8 @@ STREAM_IDS = {
 }
 VALUE_OPTIONS = {"--concurrency", "--sync-type", "--traffic-limit"}
 RETRY_EXIT_CODE = 75
+DEFAULT_BOS_ROOT = "bos:/datainfra-demo"
+DEFAULT_STATION_CONFIG = Path("/var/lib/arx5-collection/station.json")
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,6 +131,30 @@ def parse_commands(lines: Iterable[str]) -> tuple[SyncCommand, ...]:
             ):
                 raise ValueError("多条 sync 的本地来源或 BOS 目标不能重叠")
     return tuple(commands)
+
+
+def station_sync_command(
+    source: Path,
+    task_description: str,
+    station_config: Path,
+) -> SyncCommand:
+    source = source.resolve()
+    if not source.is_dir():
+        raise ValueError(f"本地来源目录不存在：{source}")
+    collection_date = source.parent.name
+    try:
+        date.fromisoformat(collection_date)
+    except ValueError as error:
+        raise ValueError("ARX5_OUTPUT_ROOT 父目录必须是 YYYY-MM-DD") from error
+    task_directory = load_configured_station(station_config).task_upload_directory(
+        task_description
+    )
+    destination = f"{DEFAULT_BOS_ROOT}/{task_directory}/{collection_date}/"
+    return SyncCommand(
+        source,
+        destination,
+        ("--concurrency", "16", "--sync-type", "dest-not-exist"),
+    )
 
 
 def _validate_options(options: Sequence[str]) -> None:
@@ -521,6 +550,18 @@ def _collect(commands: Sequence[SyncCommand], policy: UploadPolicy) -> dict[Sync
     return result
 
 
+def validate_episode_tasks(
+    episodes: Sequence[Episode], expected: str
+) -> None:
+    for episode in episodes:
+        task = (episode.metadata or {}).get("task")
+        actual = task.get("description") if isinstance(task, dict) else None
+        if actual != expected:
+            raise ValueError(
+                f"Episode task 与 ARX5_TASK_DESCRIPTION 不一致：{episode.directory}"
+            )
+
+
 def execute(
     commands: Sequence[SyncCommand],
     policy: UploadPolicy,
@@ -528,6 +569,7 @@ def execute(
     full_check: bool = True,
     runner: ProcessRunner | None = None,
     deep_validate: Callable[[Episode], None] | None = None,
+    task_description: str | None = None,
 ) -> None:
     runner = runner or ProcessRunner()
     client = BosClient(runner)
@@ -545,6 +587,8 @@ def execute(
     all_episodes = tuple(episode for episodes in grouped.values() for episode in episodes)
     if not all_episodes:
         raise RuntimeError("没有可上传的合格 Episode")
+    if task_description is not None:
+        validate_episode_tasks(all_episodes, task_description)
     if full_check:
         validate = deep_validate or DeepGate(policy).validate
         samples = choose_samples(all_episodes, policy)
@@ -605,6 +649,9 @@ def _command_lines(path: Path | None) -> list[str]:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="审计并上传 ARX5 Episodes 到 BOS")
     parser.add_argument("--commands-file", type=Path)
+    parser.add_argument("--source", type=Path)
+    parser.add_argument("--task-description")
+    parser.add_argument("--station-config", type=Path, default=DEFAULT_STATION_CONFIG)
     parser.add_argument(
         "--full-check",
         choices=("true", "false"),
@@ -617,10 +664,29 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
     try:
+        if args.source is not None:
+            if args.commands_file is not None or not args.task_description:
+                raise ValueError("--source 必须与 --task-description 单独使用")
+            commands = (
+                station_sync_command(
+                    args.source,
+                    args.task_description,
+                    args.station_config,
+                ),
+            )
+            print(
+                f"ROUTE source={commands[0].source} "
+                f"task={args.task_description!r} destination={commands[0].destination}"
+            )
+        else:
+            if args.task_description is not None:
+                raise ValueError("--task-description 需要 --source")
+            commands = parse_commands(_command_lines(args.commands_file))
         execute(
-            parse_commands(_command_lines(args.commands_file)),
+            commands,
             UploadPolicy.load(args.policy),
             full_check=args.full_check == "true",
+            task_description=args.task_description,
         )
     except (OSError, RuntimeError, ValueError) as error:
         parser.error(str(error))

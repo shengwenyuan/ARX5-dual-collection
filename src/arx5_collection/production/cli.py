@@ -255,6 +255,7 @@ def run_station_set_ros_domain_id(
 
 def run_session(args: argparse.Namespace) -> int:
     station = load_configured_station(args.station_config)
+    station.task_upload_directory(args.task_description)
     validate_task_streams(args.task_config)
     request = load_request(
         args.task_config,

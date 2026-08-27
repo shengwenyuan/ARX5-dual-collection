@@ -32,11 +32,12 @@ arx5-collect station configure
 
 ## 最终 Station 配置
 
-schema v3 至少包含：
+schema v4 至少包含：
 
 ```text
 station_id
 ros_domain_id
+task_upload_routes
 sdk_type
 arms
   left  -> USB2CAN serial, can1
@@ -50,8 +51,10 @@ triggers
 
 - `station_id` 默认使用主机名并允许用户在提交前修改；它是外部命名，项目不解释其格式。
 - `ros_domain_id` 由用户显式输入，合法范围为 `0..232`，不从 `station_id` 推导，也不由项目跨工作站分配或查重。
+- schema v4 的 `task_upload_routes` 由人直接维护，使用完整 task description 作为 key、BOS 安全目录段作为 value；不提供修改 CLI。
+- 多工作站同步时只能更新 `schema_version` 与 `task_upload_routes`，禁止复制整份 station.json。
 - 初始化在启动任何 ROS 进程前应用该 Domain ID；普通采集与 DAgger 随后只从 Station 配置继承。
-- schema v1/v2 只允许读取和迁移；生产启动缺少 `ros_domain_id` 时明确失败，不静默使用 domain 0。
+- schema v1/v2/v3 只允许读取和迁移；生产启动缺少 `ros_domain_id` 或 `task_upload_routes` 时明确失败。
 - `can1/can3` 是生成器内部固定策略，不要求用户理解或填写 CAN 接口编号。
 - 所有硬件序列号在各自类别内必须完整、非空、唯一，并与当前探测结果一致。
 - 运行期每次启动仍重新验证配置与实物，不因初始化成功而跳过设备检查。
