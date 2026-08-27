@@ -49,6 +49,19 @@ class ConvertEpisodeFragmentTest(unittest.TestCase):
         self.assertEqual(result.status, ConversionStatus.COMMITTED)
         self.assertEqual(result.segment_count, 2)
         self.assertEqual(result.frame_count, 120)
+        self.assertEqual(
+            {name for name, _ in result.phase_seconds},
+            {
+                "stage_validate",
+                "metadata",
+                "clean",
+                "select",
+                "export",
+                "validate",
+                "finalize",
+            },
+        )
+        self.assertTrue(all(seconds >= 0 for _, seconds in result.phase_seconds))
         self.assertTrue((target / "COMMITTED.json").is_file())
         fragment = json.loads((target / "fragment.json").read_text())
         self.assertEqual(fragment["training_task"], "folding the cloth")

@@ -7,6 +7,8 @@ import json
 import os
 from pathlib import Path
 import re
+import time
+from typing import TypeVar
 
 from arx5_collection.artifacts import read_json
 from arx5_collection.artifacts import read_jsonl
@@ -29,6 +31,7 @@ from .source import validate_stage
 
 FRAGMENT_SCHEMA_VERSION = 2
 _REASON_COMPONENT = re.compile(r"^[a-z][a-z0-9_]*$")
+T = TypeVar("T")
 
 
 class _Excluded(RuntimeError):
@@ -71,7 +74,16 @@ def convert_episode_fragment(
 ) -> EpisodeConversionResult:
     """Convert one staged source Episode into one committed v2.1 Fragment."""
 
-    if validate_stage(receipt.stage_dir) != receipt:
+    phases: list[tuple[str, float]] = []
+
+    def timed(name: str, operation: Callable[[], T]) -> T:
+        started = time.monotonic()
+        try:
+            return operation()
+        finally:
+            phases.append((name, max(time.monotonic() - started, 0.0)))
+
+    if timed("stage_validate", lambda: validate_stage(receipt.stage_dir)) != receipt:
         raise ValueError("StageReceipt does not match committed staging")
     if not fragment_target.is_absolute():
         raise ValueError("Fragment target must be an absolute path")
@@ -80,7 +92,7 @@ def convert_episode_fragment(
     if "/" not in repo_id or repo_id.startswith("/") or repo_id.endswith("/"):
         raise ValueError("repo_id must use the '<owner>/<dataset>' form")
 
-    metadata = load_metadata(receipt.stage_dir)
+    metadata = timed("metadata", lambda: load_metadata(receipt.stage_dir))
     episode_id = _metadata_string(metadata, "episode_id")
     if episode_id != receipt.episode_id:
         raise ValueError("staged metadata episode_id does not match StageReceipt")
@@ -98,52 +110,77 @@ def convert_episode_fragment(
     try:
         with staged_directory(fragment_target) as temporary:
             audit_root = temporary / "audit"
-            cleaning = clean_episode(
-                receipt.stage_dir,
-                audit_root,
-                recipe.cleaning,
+            cleaning = timed(
+                "clean",
+                lambda: clean_episode(
+                    receipt.stage_dir,
+                    audit_root,
+                    recipe.cleaning,
+                ),
             )
             if collection_type == "dagger":
-                classify_dagger_episode(receipt.stage_dir, audit_root)
-                selection = select_equal_eef_dagger_dataset(
-                    [receipt.stage_dir],
-                    audit_root,
-                    temporary,
-                    task,
-                    recipe.gripper,
-                    recipe.gripper,
-                    recipe.selection,
-                    source_session_ids={episode_id: receipt.source_session_id},
+                timed(
+                    "classify",
+                    lambda: classify_dagger_episode(receipt.stage_dir, audit_root),
+                )
+                selection = timed(
+                    "select",
+                    lambda: select_equal_eef_dagger_dataset(
+                        [receipt.stage_dir],
+                        audit_root,
+                        temporary,
+                        task,
+                        recipe.gripper,
+                        recipe.gripper,
+                        recipe.selection,
+                        source_session_ids={episode_id: receipt.source_session_id},
+                    ),
                 )
             else:
-                selection = select_equal_eef_dataset(
-                    [receipt.stage_dir],
-                    audit_root,
-                    temporary,
-                    task,
-                    recipe.gripper,
-                    recipe.gripper,
-                    recipe.selection,
-                    source_session_ids={episode_id: receipt.source_session_id},
+                selection = timed(
+                    "select",
+                    lambda: select_equal_eef_dataset(
+                        [receipt.stage_dir],
+                        audit_root,
+                        temporary,
+                        task,
+                        recipe.gripper,
+                        recipe.gripper,
+                        recipe.selection,
+                        source_session_ids={episode_id: receipt.source_session_id},
+                    ),
                 )
             if not selection.episodes:
-                raise _Excluded(_excluded_result(receipt, selection.excluded_episodes))
+                raise _Excluded(
+                    _excluded_result(
+                        receipt,
+                        selection.excluded_episodes,
+                        tuple(phases),
+                    )
+                )
             if selection.output_dir != temporary / "selection":
                 raise RuntimeError("selector wrote outside the Fragment workspace")
 
-            dataset_root = export_lerobot(
-                receipt.stage_dir,
-                selection.output_dir,
-                temporary,
-                repo_id,
-                dataset_root=temporary / "lerobot",
+            dataset_root = timed(
+                "export",
+                lambda: export_lerobot(
+                    receipt.stage_dir,
+                    selection.output_dir,
+                    temporary,
+                    repo_id,
+                    dataset_root=temporary / "lerobot",
+                ),
             )
-            validation = validate_lerobot(
-                dataset_root,
-                repo_id,
-                action_horizon=recipe.selection.action_horizon,
-                expected_task=task,
+            validation = timed(
+                "validate",
+                lambda: validate_lerobot(
+                    dataset_root,
+                    repo_id,
+                    action_horizon=recipe.selection.action_horizon,
+                    expected_task=task,
+                ),
             )
+            finalize_started = time.monotonic()
             report_path = temporary / "reports" / "conversion.json"
             conversion = read_json(report_path)
             expected_gripper = {
@@ -194,6 +231,7 @@ def convert_episode_fragment(
                     "committed_at": fragment["committed_at"],
                 },
             )
+            phases.append(("finalize", max(time.monotonic() - finalize_started, 0.0)))
     except _Excluded as excluded:
         return excluded.result
 
@@ -203,12 +241,14 @@ def convert_episode_fragment(
         fragment_dir=fragment_target,
         segment_count=int(fragment["segment_count"]),
         frame_count=int(fragment["frame_count"]),
+        phase_seconds=tuple(phases),
     )
 
 
 def _excluded_result(
     receipt: StageReceipt,
     excluded_episodes: tuple[dict[str, object], ...],
+    phase_seconds: tuple[tuple[str, float], ...] = (),
 ) -> EpisodeConversionResult:
     if len(excluded_episodes) != 1:
         raise RuntimeError("single Episode selector must return one exclusion")
@@ -225,6 +265,7 @@ def _excluded_result(
         segment_count=0,
         frame_count=0,
         reason_code=f"selection/{reason}",
+        phase_seconds=phase_seconds,
     )
 
 
