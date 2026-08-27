@@ -10,6 +10,7 @@ from arx5_collection.streaming_conversion.alignment import AlignmentCancelled
 from arx5_collection.streaming_conversion.alignment import build_alignment_report
 from arx5_collection.streaming_conversion.alignment import render_alignment
 from arx5_collection.streaming_conversion.alignment import require_enter_confirmation
+from arx5_collection.streaming_conversion.config import BufferedRuntimeConfig
 from arx5_collection.streaming_conversion.config import OutputConfig
 from arx5_collection.streaming_conversion.config import PrefetchRuntimeConfig
 from arx5_collection.streaming_conversion.config import RecipeConfig
@@ -115,6 +116,40 @@ class AlignmentTest(unittest.TestCase):
             self.assertIn("prefetch_max_bytes: 2000000000000", rendered)
             with self.assertRaisesRegex(ValueError, "below runtime.pfs_root"):
                 build_alignment_report(config, discovery, Path("/outside/snapshot"))
+
+    def test_renders_buffered_watermarks(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            config = StreamingConversionConfig(
+                3,
+                SourceConfig(root / "source", (Path("task"),), ()),
+                BufferedRuntimeConfig(
+                    root,
+                    root / "streaming",
+                    16,
+                    64,
+                    128_000_000_000,
+                    256_000_000_000,
+                    2_000_000_000_000,
+                    128,
+                    5_000_000_000_000,
+                ),
+                OutputConfig(root / "lerobot", "dataset", "local/data"),
+                RecipeConfig("recipe", "recipe.toml", "folding the cloth"),
+            )
+            discovery = DiscoveryResult(root / "source", (), (), ())
+
+            rendered = render_alignment(
+                build_alignment_report(
+                    config,
+                    discovery,
+                    root / "lerobot" / "snapshot",
+                )
+            )
+
+        self.assertIn("runtime_mode: buffered_prefetch", rendered)
+        self.assertIn("ready_low_bytes: 128000000000", rendered)
+        self.assertIn("temporary_hard_max_bytes: 2000000000000", rendered)
 
 
 if __name__ == "__main__":

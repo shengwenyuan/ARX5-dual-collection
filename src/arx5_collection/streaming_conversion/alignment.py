@@ -5,6 +5,7 @@ from datetime import date
 from pathlib import Path
 from typing import TextIO
 
+from .config import BufferedRuntimeConfig
 from .config import PrefetchRuntimeConfig
 from .config import StreamingConversionConfig
 from .models import DiscoveryResult
@@ -35,7 +36,7 @@ def build_alignment_report(
     if not output_path.is_absolute():
         raise ValueError("streaming output override must be an absolute path")
     if (
-        isinstance(config.runtime, PrefetchRuntimeConfig)
+        isinstance(config.runtime, (PrefetchRuntimeConfig, BufferedRuntimeConfig))
         and config.runtime.pfs_root.resolve(strict=False)
         not in output_path.resolve(strict=False).parents
     ):
@@ -52,7 +53,21 @@ def render_alignment(report: AlignmentReport) -> str:
         f"output: {report.output_path}",
     ]
     runtime = report.config.runtime
-    if isinstance(runtime, PrefetchRuntimeConfig):
+    if isinstance(runtime, BufferedRuntimeConfig):
+        lines.extend(
+            [
+                "runtime_mode: buffered_prefetch",
+                f"pfs_root: {runtime.pfs_root}",
+                f"stage_workers: {runtime.stage_workers}",
+                f"conversion_workers: {runtime.conversion_workers}",
+                f"ready_low_bytes: {runtime.ready_low_bytes}",
+                f"ready_high_bytes: {runtime.ready_high_bytes}",
+                f"temporary_hard_max_bytes: {runtime.temporary_hard_max_bytes}",
+                f"max_staged_episodes: {runtime.max_staged_episodes}",
+                f"min_free_bytes: {runtime.min_free_bytes}",
+            ]
+        )
+    elif isinstance(runtime, PrefetchRuntimeConfig):
         lines.extend(
             [
                 "runtime_mode: bounded_prefetch",
