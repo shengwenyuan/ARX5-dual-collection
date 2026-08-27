@@ -6,6 +6,7 @@ import tempfile
 import textwrap
 import unittest
 
+from arx5_collection.streaming_conversion.config import BufferedRuntimeConfig
 from arx5_collection.streaming_conversion.config import PrefetchRuntimeConfig
 from arx5_collection.streaming_conversion.config import StreamingConversionConfig
 
@@ -64,7 +65,7 @@ class StreamingConfigTest(unittest.TestCase):
         self.assertEqual(runtime.prefetch_max_bytes, 2_000_000_000_000)
         self.assertEqual(runtime.prefetch_max_episodes, 128)
 
-    def test_prefetch_profile_enforces_paths_and_hard_limits(self) -> None:
+    def test_legacy_prefetch_profile_enforces_paths_and_watermark_order(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary).resolve()
             cases = (
@@ -72,13 +73,6 @@ class StreamingConfigTest(unittest.TestCase):
                     'streaming_root = "/outside/streaming"',
                     "must be below runtime.pfs_root",
                 ),
-                ("stage_workers = 33", "must not exceed 32"),
-                ("conversion_workers = 113", "must not exceed 112"),
-                (
-                    "prefetch_max_bytes = 2_000_000_000_001",
-                    "must not exceed 2000000000000",
-                ),
-                ("prefetch_max_episodes = 129", "must not exceed 128"),
                 (
                     "prefetch_target_bytes = 2_000_000_000_000\n"
                     "prefetch_max_bytes = 1_500_000_000_000",
@@ -88,12 +82,52 @@ class StreamingConfigTest(unittest.TestCase):
             baseline = _prefetch_profile(root)
             originals = (
                 f'streaming_root = "{root / "pfs" / "streaming"}"',
-                "stage_workers = 16",
-                "conversion_workers = 64",
-                "prefetch_max_bytes = 2_000_000_000_000",
-                "prefetch_max_episodes = 128",
                 "prefetch_target_bytes = 1_500_000_000_000\n"
                 "prefetch_max_bytes = 2_000_000_000_000",
+            )
+            for (replacement, reason), original in zip(cases, originals, strict=True):
+                path = root / f"case-{len(replacement)}.toml"
+                path.write_text(baseline.replace(original, replacement))
+                with self.subTest(reason=reason):
+                    with self.assertRaisesRegex(ValueError, reason):
+                        StreamingConversionConfig.load(path)
+
+    def test_loads_host_independent_buffered_profile(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            path = root / "streaming.toml"
+            path.write_text(_buffered_profile(root))
+
+            config = StreamingConversionConfig.load(path)
+
+        self.assertEqual(config.schema_version, 3)
+        self.assertIsInstance(config.runtime, BufferedRuntimeConfig)
+        runtime = config.runtime
+        assert isinstance(runtime, BufferedRuntimeConfig)
+        self.assertEqual(runtime.ready_low_bytes, 128_000_000_000)
+        self.assertEqual(runtime.ready_high_bytes, 256_000_000_000)
+        self.assertEqual(runtime.temporary_hard_max_bytes, 2_000_000_000_000)
+        self.assertEqual(runtime.min_free_bytes, 100_000_000_000)
+
+    def test_buffered_profile_rejects_invalid_watermarks(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            baseline = _buffered_profile(root)
+            cases = (
+                (
+                    "ready_low_bytes = 300_000_000_000",
+                    "ready_low_bytes must not exceed ready_high_bytes",
+                ),
+                (
+                    "temporary_hard_max_bytes = 200_000_000_000",
+                    "ready_high_bytes must not exceed temporary_hard_max_bytes",
+                ),
+                ("min_free_bytes = -1", "non-negative integer"),
+            )
+            originals = (
+                "ready_low_bytes = 128_000_000_000",
+                "temporary_hard_max_bytes = 2_000_000_000_000",
+                "min_free_bytes = 100_000_000_000",
             )
             for (replacement, reason), original in zip(cases, originals, strict=True):
                 path = root / f"case-{len(replacement)}.toml"
@@ -186,6 +220,41 @@ def _prefetch_profile(root: Path) -> str:
         prefetch_target_bytes = 1_500_000_000_000
         prefetch_max_bytes = 2_000_000_000_000
         prefetch_max_episodes = 128
+
+        [output]
+        lerobot_root = "{pfs_root / "lerobot"}"
+        dataset_name = "fold_cloth"
+        repo_id = "local/fold_cloth"
+
+        [recipe]
+        name = "pi05-equal-eef-v3"
+        profile = "config/fold_cloth.toml"
+        task = "folding the cloth"
+        '''
+    )
+
+
+def _buffered_profile(root: Path) -> str:
+    pfs_root = root / "pfs"
+    return textwrap.dedent(
+        f'''
+        schema_version = 3
+
+        [source]
+        root = "{root / "source"}"
+        include_paths = ["fold_cloth/2026-08-21"]
+        block = []
+
+        [runtime]
+        pfs_root = "{pfs_root}"
+        streaming_root = "{pfs_root / "streaming"}"
+        stage_workers = 16
+        conversion_workers = 64
+        ready_low_bytes = 128_000_000_000
+        ready_high_bytes = 256_000_000_000
+        temporary_hard_max_bytes = 2_000_000_000_000
+        max_staged_episodes = 128
+        min_free_bytes = 100_000_000_000
 
         [output]
         lerobot_root = "{pfs_root / "lerobot"}"

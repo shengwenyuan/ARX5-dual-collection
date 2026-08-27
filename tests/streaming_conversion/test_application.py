@@ -13,6 +13,8 @@ from arx5_collection.streaming_conversion.application import StreamingRunRequest
 from arx5_collection.streaming_conversion.application import execute_streaming_conversion
 from arx5_collection.streaming_conversion.builder import SnapshotBuildResult
 from arx5_collection.streaming_conversion.config import StreamingConversionConfig
+from arx5_collection.streaming_conversion.coordinator import CoordinatorMetric
+from arx5_collection.streaming_conversion.coordinator import CoordinatorProgress
 from arx5_collection.streaming_conversion.discovery import discover_episodes
 from arx5_collection.streaming_conversion.manifest import RunManifest
 from arx5_collection.streaming_conversion.models import JobState
@@ -80,6 +82,14 @@ class StreamingApplicationTest(unittest.TestCase):
         self.assertEqual(run.jobs["episode-a"].state, JobState.COMMITTED)
         self.assertEqual(run.definition.output_path, self.output)
         self.assertEqual(run.definition.repo_id, "local/snapshot")
+        metrics = [
+            json.loads(line)
+            for line in (run.run_dir / "metrics.jsonl").read_text().splitlines()
+        ]
+        self.assertEqual(
+            {record["kind"] for record in metrics},
+            {"progress", "work_completed"},
+        )
 
     def test_cancelled_alignment_has_no_run_side_effect(self) -> None:
         with self.assertRaises(AlignmentCancelled):
@@ -256,8 +266,15 @@ task = "folding the cloth"
 
 
 class _SuccessfulCoordinator:
-    def __init__(self, manifest: RunManifest) -> None:
+    def __init__(
+        self,
+        manifest: RunManifest,
+        progress_reporter=None,
+        metric_reporter=None,
+    ) -> None:
         self._manifest = manifest
+        self._progress_reporter = progress_reporter
+        self._metric_reporter = metric_reporter
 
     def run(self):
         for episode_id, job in self._manifest.jobs.items():
@@ -266,11 +283,46 @@ class _SuccessfulCoordinator:
             self._manifest.transition(episode_id, JobState.CONVERTING)
             self._manifest.transition(episode_id, JobState.VALIDATING)
             self._manifest.transition(episode_id, JobState.COMMITTED)
+            if self._metric_reporter is not None:
+                self._metric_reporter(
+                    CoordinatorMetric(
+                        phase="convert",
+                        episode_id=episode_id,
+                        elapsed_seconds=1.0,
+                        source_bytes=4,
+                        status="committed",
+                        frame_count=10,
+                    )
+                )
+        if self._progress_reporter is not None:
+            self._progress_reporter(
+                CoordinatorProgress(
+                    stage_active=0,
+                    stage_ready=0,
+                    convert_active=0,
+                    convert_ready=0,
+                    reserved_staging_bytes=0,
+                    reserved_staging_episodes=0,
+                    ready_staging_bytes=0,
+                    temporary_bytes=0,
+                    pfs_free_bytes=None,
+                    elapsed_seconds=1.0,
+                    staged_bytes=4,
+                    converted_frames=10,
+                    stage_gb_s=0.000000004,
+                    conversion_frames_s=10.0,
+                    states={"committed": 1},
+                )
+            )
         return self._manifest.jobs
 
 
 def _successful_coordinator(manifest, *args, **kwargs):
-    return _SuccessfulCoordinator(manifest)
+    return _SuccessfulCoordinator(
+        manifest,
+        progress_reporter=kwargs.get("progress_reporter"),
+        metric_reporter=kwargs.get("metric_reporter"),
+    )
 
 
 def _fake_builder(manifest, output_path, recipe, repo_id):

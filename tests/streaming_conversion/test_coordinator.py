@@ -7,6 +7,7 @@ from threading import Barrier, Event, Lock
 import unittest
 from unittest.mock import patch
 
+from arx5_collection.streaming_conversion.config import BufferedRuntimeConfig
 from arx5_collection.streaming_conversion.config import OutputConfig
 from arx5_collection.streaming_conversion.config import PrefetchRuntimeConfig
 from arx5_collection.streaming_conversion.config import RecipeConfig
@@ -354,6 +355,71 @@ class StreamingCoordinatorTest(unittest.TestCase):
         self.assertEqual(jobs["episode-a"].attempt, 1)
         self.assertFalse(target.exists())
 
+    def test_buffered_prefetch_retained_failure_does_not_act_as_soft_watermark(self) -> None:
+        manifest = self._manifest("episode-a", "episode-b")
+        retained = manifest.run_dir / "staging" / "episode-a"
+        retained.mkdir(parents=True)
+        manifest.transition("episode-a", JobState.STAGING)
+        manifest.transition(
+            "episode-a",
+            JobState.FAILED,
+            reason_code="infrastructure/staging_io",
+        )
+
+        jobs = self._buffered_coordinator(
+            manifest,
+            _fake_stage,
+            lambda work: _committed(work.receipt.episode_id, work.target),
+            low_bytes=20,
+            high_bytes=40,
+            hard_max_bytes=90,
+        ).run()
+
+        self.assertEqual(jobs["episode-a"].state, JobState.FAILED)
+        self.assertEqual(jobs["episode-b"].state, JobState.COMMITTED)
+        self.assertTrue(retained.exists())
+
+    def test_buffered_prefetch_stops_before_minimum_pfs_free_space(self) -> None:
+        manifest = self._manifest("episode-a")
+        coordinator = self._buffered_coordinator(
+            manifest,
+            _fake_stage,
+            lambda work: _committed(work.receipt.episode_id, work.target),
+            low_bytes=20,
+            high_bytes=40,
+            hard_max_bytes=90,
+            min_free_bytes=20,
+            disk_free_reader=lambda path: 40,
+        )
+
+        with self.assertRaises(StagingCapacityError):
+            coordinator.run()
+
+        self.assertEqual(manifest.jobs["episode-a"].state, JobState.DISCOVERED)
+
+    def test_buffered_resume_quarantines_invalid_stage_then_restages(self) -> None:
+        manifest = self._manifest("episode-a")
+        invalid = manifest.run_dir / "staging" / "episode-a"
+        invalid.mkdir(parents=True)
+        (invalid / "stage.json").write_text("not-json")
+        manifest.transition("episode-a", JobState.STAGING)
+
+        jobs = self._buffered_coordinator(
+            manifest,
+            _fake_stage,
+            lambda work: _committed(work.receipt.episode_id, work.target),
+            low_bytes=20,
+            high_bytes=40,
+            hard_max_bytes=90,
+        ).run()
+
+        self.assertEqual(jobs["episode-a"].state, JobState.COMMITTED)
+        quarantined = list(
+            (manifest.run_dir / "quarantine" / "staging").iterdir()
+        )
+        self.assertEqual(len(quarantined), 1)
+        self.assertEqual((quarantined[0] / "stage.json").read_text(), "not-json")
+
     def _manifest(self, *episode_ids: str) -> RunManifest:
         config = StreamingConversionConfig(
             1,
@@ -446,6 +512,44 @@ class StreamingCoordinatorTest(unittest.TestCase):
             stage_executor_factory=executor_factory,
             conversion_executor_factory=executor_factory,
             progress_reporter=progress_reporter,
+        )
+
+    def _buffered_coordinator(
+        self,
+        manifest: RunManifest,
+        stage_runner,
+        conversion_runner,
+        *,
+        low_bytes: int,
+        high_bytes: int,
+        hard_max_bytes: int,
+        min_free_bytes: int = 0,
+        disk_free_reader=None,
+    ) -> StreamingCoordinator:
+        runtime = BufferedRuntimeConfig(
+            pfs_root=self.root,
+            streaming_root=self.root / "streaming",
+            stage_workers=2,
+            conversion_workers=2,
+            ready_low_bytes=low_bytes,
+            ready_high_bytes=high_bytes,
+            temporary_hard_max_bytes=hard_max_bytes,
+            max_staged_episodes=4,
+            min_free_bytes=min_free_bytes,
+        )
+        executor_factory = lambda count: ThreadPoolExecutor(max_workers=count)
+        return StreamingCoordinator(
+            manifest,
+            self.source_root,
+            self.recipe,
+            "folding the cloth",
+            "local/fold",
+            runtime,
+            stage_runner=stage_runner,
+            conversion_runner=conversion_runner,
+            stage_executor_factory=executor_factory,
+            conversion_executor_factory=executor_factory,
+            disk_free_reader=disk_free_reader,
         )
 
 

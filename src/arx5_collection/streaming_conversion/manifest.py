@@ -10,6 +10,7 @@ from typing import Any
 
 from arx5_collection.atomic import staged_directory
 
+from .config import BufferedRuntimeConfig
 from .config import PrefetchRuntimeConfig
 from .config import StreamingConversionConfig
 from .models import DiscoveryResult
@@ -21,8 +22,8 @@ from .models import RunDefinition
 from .models import SelectionEntry
 
 
-RUN_SCHEMA_VERSION = 3
-_SUPPORTED_RUN_SCHEMA_VERSIONS = {2, RUN_SCHEMA_VERSION}
+RUN_SCHEMA_VERSION = 4
+_SUPPORTED_RUN_SCHEMA_VERSIONS = {2, 3, RUN_SCHEMA_VERSION}
 SELECTION_SCHEMA_VERSION = 2
 JOB_EVENT_SCHEMA_VERSION = 1
 _REASON_CODE = re.compile(r"^[a-z][a-z0-9_]*(/[a-z][a-z0-9_]*)*$")
@@ -379,6 +380,18 @@ def _validate_reason(state: JobState, reason_code: str | None) -> None:
 
 
 def _runtime_value(value: object) -> dict[str, object]:
+    if isinstance(value, BufferedRuntimeConfig):
+        return {
+            "mode": "buffered_prefetch",
+            "pfs_root": str(value.pfs_root),
+            "stage_workers": value.stage_workers,
+            "conversion_workers": value.conversion_workers,
+            "ready_low_bytes": value.ready_low_bytes,
+            "ready_high_bytes": value.ready_high_bytes,
+            "temporary_hard_max_bytes": value.temporary_hard_max_bytes,
+            "max_staged_episodes": value.max_staged_episodes,
+            "min_free_bytes": value.min_free_bytes,
+        }
     if isinstance(value, PrefetchRuntimeConfig):
         return {
             "mode": "bounded_prefetch",
@@ -413,6 +426,11 @@ def _run_definition(value: dict[str, Any], schema_version: int) -> RunDefinition
             "prefetch_target_bytes": None,
             "prefetch_max_bytes": None,
             "prefetch_max_episodes": None,
+            "ready_low_bytes": None,
+            "ready_high_bytes": None,
+            "temporary_hard_max_bytes": None,
+            "max_staged_episodes": None,
+            "min_free_bytes": None,
         }
     else:
         runtime_values = _run_runtime(value["runtime"], streaming_root, output_path)
@@ -429,6 +447,11 @@ def _run_definition(value: dict[str, Any], schema_version: int) -> RunDefinition
         prefetch_target_bytes=runtime_values["prefetch_target_bytes"],
         prefetch_max_bytes=runtime_values["prefetch_max_bytes"],
         prefetch_max_episodes=runtime_values["prefetch_max_episodes"],
+        ready_low_bytes=runtime_values["ready_low_bytes"],
+        ready_high_bytes=runtime_values["ready_high_bytes"],
+        temporary_hard_max_bytes=runtime_values["temporary_hard_max_bytes"],
+        max_staged_episodes=runtime_values["max_staged_episodes"],
+        min_free_bytes=runtime_values["min_free_bytes"],
         recipe_name=_string(recipe["name"], "run recipe name"),
         recipe_profile=_string(recipe["profile"], "run recipe profile"),
         recipe_task=_string(recipe["task"], "run recipe task"),
@@ -453,6 +476,55 @@ def _run_runtime(
             "prefetch_target_bytes": None,
             "prefetch_max_bytes": None,
             "prefetch_max_episodes": None,
+            "ready_low_bytes": None,
+            "ready_high_bytes": None,
+            "temporary_hard_max_bytes": None,
+            "max_staged_episodes": None,
+            "min_free_bytes": None,
+        }
+    if mode == "buffered_prefetch":
+        _exact_keys(
+            value,
+            {
+                "mode",
+                "pfs_root",
+                "stage_workers",
+                "conversion_workers",
+                "ready_low_bytes",
+                "ready_high_bytes",
+                "temporary_hard_max_bytes",
+                "max_staged_episodes",
+                "min_free_bytes",
+            },
+            "run runtime",
+        )
+        common = _run_pfs_runtime(value, streaming_root, output_path)
+        low_bytes = _positive_run_int(
+            value["ready_low_bytes"], "run runtime ready_low_bytes"
+        )
+        high_bytes = _positive_run_int(
+            value["ready_high_bytes"], "run runtime ready_high_bytes"
+        )
+        hard_max_bytes = _positive_run_int(
+            value["temporary_hard_max_bytes"],
+            "run runtime temporary_hard_max_bytes",
+        )
+        if low_bytes > high_bytes or high_bytes > hard_max_bytes:
+            raise ValueError("run buffered prefetch watermarks are invalid")
+        return {
+            **common,
+            "prefetch_target_bytes": None,
+            "prefetch_max_bytes": None,
+            "prefetch_max_episodes": None,
+            "ready_low_bytes": low_bytes,
+            "ready_high_bytes": high_bytes,
+            "temporary_hard_max_bytes": hard_max_bytes,
+            "max_staged_episodes": _positive_run_int(
+                value["max_staged_episodes"], "run runtime max_staged_episodes"
+            ),
+            "min_free_bytes": _non_negative_int(
+                value["min_free_bytes"], "run runtime min_free_bytes"
+            ),
         }
     if mode != "bounded_prefetch":
         raise ValueError("run runtime mode is unsupported")
@@ -469,17 +541,7 @@ def _run_runtime(
         },
         "run runtime",
     )
-    pfs_root = Path(_string(value["pfs_root"], "run runtime pfs_root"))
-    if not pfs_root.is_absolute():
-        raise ValueError("run runtime pfs_root must be absolute")
-    normalized_pfs = pfs_root.resolve(strict=False)
-    normalized_streaming = streaming_root.resolve(strict=False)
-    normalized_output = output_path.resolve(strict=False)
-    if (
-        normalized_pfs not in normalized_streaming.parents
-        or normalized_pfs not in normalized_output.parents
-    ):
-        raise ValueError("run streaming and output paths must be below pfs_root")
+    common = _run_pfs_runtime(value, streaming_root, output_path)
     target_bytes = _positive_run_int(
         value["prefetch_target_bytes"], "run runtime prefetch_target_bytes"
     )
@@ -489,6 +551,33 @@ def _run_runtime(
     if target_bytes > max_bytes:
         raise ValueError("run prefetch target must not exceed maximum")
     return {
+        **common,
+        "prefetch_target_bytes": target_bytes,
+        "prefetch_max_bytes": max_bytes,
+        "prefetch_max_episodes": _positive_run_int(
+            value["prefetch_max_episodes"], "run runtime prefetch_max_episodes"
+        ),
+        "ready_low_bytes": None,
+        "ready_high_bytes": None,
+        "temporary_hard_max_bytes": None,
+        "max_staged_episodes": None,
+        "min_free_bytes": None,
+    }
+
+
+def _run_pfs_runtime(
+    value: dict[str, object], streaming_root: Path, output_path: Path
+) -> dict[str, object]:
+    pfs_root = Path(_string(value["pfs_root"], "run runtime pfs_root"))
+    if not pfs_root.is_absolute():
+        raise ValueError("run runtime pfs_root must be absolute")
+    normalized_pfs = pfs_root.resolve(strict=False)
+    if (
+        normalized_pfs not in streaming_root.resolve(strict=False).parents
+        or normalized_pfs not in output_path.resolve(strict=False).parents
+    ):
+        raise ValueError("run streaming and output paths must be below pfs_root")
+    return {
         "workers": None,
         "pfs_root": pfs_root,
         "stage_workers": _positive_run_int(
@@ -496,11 +585,6 @@ def _run_runtime(
         ),
         "conversion_workers": _positive_run_int(
             value["conversion_workers"], "run runtime conversion_workers"
-        ),
-        "prefetch_target_bytes": target_bytes,
-        "prefetch_max_bytes": max_bytes,
-        "prefetch_max_episodes": _positive_run_int(
-            value["prefetch_max_episodes"], "run runtime prefetch_max_episodes"
         ),
     }
 

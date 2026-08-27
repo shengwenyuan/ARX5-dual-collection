@@ -77,6 +77,11 @@ class RunDefinition:
     prefetch_target_bytes: int | None
     prefetch_max_bytes: int | None
     prefetch_max_episodes: int | None
+    ready_low_bytes: int | None
+    ready_high_bytes: int | None
+    temporary_hard_max_bytes: int | None
+    max_staged_episodes: int | None
+    min_free_bytes: int | None
     recipe_name: str
     recipe_profile: str
     recipe_task: str
@@ -142,3 +147,4 @@ class EpisodeConversionResult:
     segment_count: int
     frame_count: int
     reason_code: str | None = None
+    phase_seconds: tuple[tuple[str, float], ...] = ()

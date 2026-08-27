@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from dataclasses import asdict
 from datetime import datetime, timezone
 import json
+import os
 from pathlib import Path
 from typing import Callable, TextIO
 
@@ -11,10 +13,12 @@ from .alignment import render_alignment
 from .alignment import require_enter_confirmation
 from .builder import SnapshotBuildResult
 from .builder import build_lerobot_v21_snapshot
+from .config import BufferedRuntimeConfig
 from .config import PrefetchRuntimeConfig
 from .config import SourceConfig
 from .config import StreamingConversionConfig
 from .coordinator import CoordinatorProgress
+from .coordinator import CoordinatorMetric
 from .coordinator import StreamingCoordinator
 from .discovery import discover_episodes
 from .manifest import RunManifest
@@ -106,6 +110,7 @@ def execute_streaming_conversion(
         + "\n"
     )
     output_stream.flush()
+    metrics = _MetricsJournal(manifest.run_dir / "metrics.jsonl")
     jobs = StreamingCoordinator(
         manifest,
         config.source.root,
@@ -113,7 +118,10 @@ def execute_streaming_conversion(
         config.recipe.task,
         manifest.definition.repo_id,
         config.runtime,
-        progress_reporter=lambda progress: _write_progress(output_stream, progress),
+        progress_reporter=lambda progress: _write_progress(
+            output_stream, progress, metrics
+        ),
+        metric_reporter=metrics.write_work,
     ).run()
     snapshot = builder(
         manifest,
@@ -194,6 +202,18 @@ def _validate_resume_config(
 
 def _config_runtime_values(config: StreamingConversionConfig) -> dict[str, object]:
     runtime = config.runtime
+    if isinstance(runtime, BufferedRuntimeConfig):
+        return {
+            "runtime_mode": "buffered_prefetch",
+            "pfs_root": runtime.pfs_root,
+            "stage_workers": runtime.stage_workers,
+            "conversion_workers": runtime.conversion_workers,
+            "ready_low_bytes": runtime.ready_low_bytes,
+            "ready_high_bytes": runtime.ready_high_bytes,
+            "temporary_hard_max_bytes": runtime.temporary_hard_max_bytes,
+            "max_staged_episodes": runtime.max_staged_episodes,
+            "min_free_bytes": runtime.min_free_bytes,
+        }
     if isinstance(runtime, PrefetchRuntimeConfig):
         return {
             "runtime_mode": "bounded_prefetch",
@@ -217,6 +237,18 @@ def _frozen_runtime_values(manifest: RunManifest) -> dict[str, object]:
             "runtime_mode": "legacy_shared_pool",
             "workers": frozen.workers,
         }
+    if frozen.ready_low_bytes is not None:
+        return {
+            "runtime_mode": "buffered_prefetch",
+            "pfs_root": frozen.pfs_root,
+            "stage_workers": frozen.stage_workers,
+            "conversion_workers": frozen.conversion_workers,
+            "ready_low_bytes": frozen.ready_low_bytes,
+            "ready_high_bytes": frozen.ready_high_bytes,
+            "temporary_hard_max_bytes": frozen.temporary_hard_max_bytes,
+            "max_staged_episodes": frozen.max_staged_episodes,
+            "min_free_bytes": frozen.min_free_bytes,
+        }
     return {
         "runtime_mode": "bounded_prefetch",
         "pfs_root": frozen.pfs_root,
@@ -231,25 +263,35 @@ def _frozen_runtime_values(manifest: RunManifest) -> dict[str, object]:
 def _write_progress(
     output_stream: TextIO,
     progress: CoordinatorProgress,
+    metrics: _MetricsJournal,
 ) -> None:
-    output_stream.write(
-        json.dumps(
-            {
-                "streaming_progress": {
-                    "stage_active": progress.stage_active,
-                    "stage_ready": progress.stage_ready,
-                    "convert_active": progress.convert_active,
-                    "convert_ready": progress.convert_ready,
-                    "reserved_staging_bytes": progress.reserved_staging_bytes,
-                    "reserved_staging_episodes": progress.reserved_staging_episodes,
-                    "states": progress.states,
-                }
-            },
-            sort_keys=True,
-        )
-        + "\n"
-    )
+    value = asdict(progress)
+    output_stream.write(json.dumps({"streaming_progress": value}, sort_keys=True) + "\n")
     output_stream.flush()
+    metrics.write("progress", value)
+
+
+class _MetricsJournal:
+    def __init__(self, path: Path) -> None:
+        self._path = path
+
+    def write_work(self, metric: CoordinatorMetric) -> None:
+        value = asdict(metric)
+        value["phase_seconds"] = dict(metric.phase_seconds)
+        self.write("work_completed", value)
+
+    def write(self, kind: str, value: dict[str, object]) -> None:
+        record = {
+            "schema_version": 1,
+            "recorded_at": _utc_now().isoformat(),
+            "kind": kind,
+            **value,
+        }
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        with self._path.open("a") as stream:
+            stream.write(json.dumps(record, sort_keys=True) + "\n")
+            stream.flush()
+            os.fsync(stream.fileno())
 
 
 def _default_run_id(value: datetime, dataset_name: str) -> str:

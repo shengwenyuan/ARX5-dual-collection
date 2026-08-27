@@ -30,12 +30,20 @@ class PrefetchRuntimeConfig:
     prefetch_max_episodes: int
 
 
-RuntimeSettings = RuntimeConfig | PrefetchRuntimeConfig
+@dataclass(frozen=True, slots=True)
+class BufferedRuntimeConfig:
+    pfs_root: Path
+    streaming_root: Path
+    stage_workers: int
+    conversion_workers: int
+    ready_low_bytes: int
+    ready_high_bytes: int
+    temporary_hard_max_bytes: int
+    max_staged_episodes: int
+    min_free_bytes: int
 
-MAX_STAGE_WORKERS = 32
-MAX_CONVERSION_WORKERS = 112
-MAX_PREFETCH_BYTES = 2_000_000_000_000
-MAX_PREFETCH_EPISODES = 128
+
+RuntimeSettings = RuntimeConfig | PrefetchRuntimeConfig | BufferedRuntimeConfig
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,9 +98,9 @@ class StreamingConversionConfig:
         if (
             isinstance(schema_version, bool)
             or not isinstance(schema_version, int)
-            or schema_version not in {1, 2}
+            or schema_version not in {1, 2, 3}
         ):
-            raise ValueError("streaming config schema_version must be 1 or 2")
+            raise ValueError("streaming config schema_version must be 1, 2, or 3")
 
         source = _table(payload, "source")
         runtime = _table(payload, "runtime")
@@ -101,7 +109,7 @@ class StreamingConversionConfig:
         _exact_keys(source, {"root", "include_paths", "block"}, "source")
         if schema_version == 1:
             _exact_keys(runtime, {"streaming_root", "workers"}, "runtime")
-        else:
+        elif schema_version == 2:
             _exact_keys(
                 runtime,
                 {
@@ -112,6 +120,22 @@ class StreamingConversionConfig:
                     "prefetch_target_bytes",
                     "prefetch_max_bytes",
                     "prefetch_max_episodes",
+                },
+                "runtime",
+            )
+        else:
+            _exact_keys(
+                runtime,
+                {
+                    "pfs_root",
+                    "streaming_root",
+                    "stage_workers",
+                    "conversion_workers",
+                    "ready_low_bytes",
+                    "ready_high_bytes",
+                    "temporary_hard_max_bytes",
+                    "max_staged_episodes",
+                    "min_free_bytes",
                 },
                 "runtime",
             )
@@ -150,7 +174,7 @@ class StreamingConversionConfig:
                 task=_non_empty_string(recipe["task"], "recipe.task"),
             ),
         )
-        if isinstance(runtime_config, PrefetchRuntimeConfig):
+        if isinstance(runtime_config, (PrefetchRuntimeConfig, BufferedRuntimeConfig)):
             _require_within(
                 config.output.lerobot_root,
                 runtime_config.pfs_root,
@@ -172,42 +196,61 @@ def _runtime_config(
 
     pfs_root = _absolute_path(value["pfs_root"], "runtime.pfs_root")
     _require_within(streaming_root, pfs_root, "runtime.streaming_root")
-    stage_workers = _bounded_positive_int(
-        value["stage_workers"],
-        "runtime.stage_workers",
-        MAX_STAGE_WORKERS,
+    stage_workers = _positive_int(value["stage_workers"], "runtime.stage_workers")
+    conversion_workers = _positive_int(
+        value["conversion_workers"], "runtime.conversion_workers"
     )
-    conversion_workers = _bounded_positive_int(
-        value["conversion_workers"],
-        "runtime.conversion_workers",
-        MAX_CONVERSION_WORKERS,
-    )
-    target_bytes = _bounded_positive_int(
-        value["prefetch_target_bytes"],
-        "runtime.prefetch_target_bytes",
-        MAX_PREFETCH_BYTES,
-    )
-    max_bytes = _bounded_positive_int(
-        value["prefetch_max_bytes"],
-        "runtime.prefetch_max_bytes",
-        MAX_PREFETCH_BYTES,
-    )
-    if target_bytes > max_bytes:
-        raise ValueError(
-            "runtime.prefetch_target_bytes must not exceed prefetch_max_bytes"
+    if schema_version == 2:
+        target_bytes = _positive_int(
+            value["prefetch_target_bytes"], "runtime.prefetch_target_bytes"
         )
-    return PrefetchRuntimeConfig(
+        max_bytes = _positive_int(
+            value["prefetch_max_bytes"], "runtime.prefetch_max_bytes"
+        )
+        if target_bytes > max_bytes:
+            raise ValueError(
+                "runtime.prefetch_target_bytes must not exceed prefetch_max_bytes"
+            )
+        return PrefetchRuntimeConfig(
+            pfs_root=pfs_root,
+            streaming_root=streaming_root,
+            stage_workers=stage_workers,
+            conversion_workers=conversion_workers,
+            prefetch_target_bytes=target_bytes,
+            prefetch_max_bytes=max_bytes,
+            prefetch_max_episodes=_positive_int(
+                value["prefetch_max_episodes"], "runtime.prefetch_max_episodes"
+            ),
+        )
+
+    low_bytes = _positive_int(value["ready_low_bytes"], "runtime.ready_low_bytes")
+    high_bytes = _positive_int(
+        value["ready_high_bytes"], "runtime.ready_high_bytes"
+    )
+    hard_max_bytes = _positive_int(
+        value["temporary_hard_max_bytes"], "runtime.temporary_hard_max_bytes"
+    )
+    min_free_bytes = _non_negative_int(
+        value["min_free_bytes"], "runtime.min_free_bytes"
+    )
+    if low_bytes > high_bytes:
+        raise ValueError("runtime.ready_low_bytes must not exceed ready_high_bytes")
+    if high_bytes > hard_max_bytes:
+        raise ValueError(
+            "runtime.ready_high_bytes must not exceed temporary_hard_max_bytes"
+        )
+    return BufferedRuntimeConfig(
         pfs_root=pfs_root,
         streaming_root=streaming_root,
         stage_workers=stage_workers,
         conversion_workers=conversion_workers,
-        prefetch_target_bytes=target_bytes,
-        prefetch_max_bytes=max_bytes,
-        prefetch_max_episodes=_bounded_positive_int(
-            value["prefetch_max_episodes"],
-            "runtime.prefetch_max_episodes",
-            MAX_PREFETCH_EPISODES,
+        ready_low_bytes=low_bytes,
+        ready_high_bytes=high_bytes,
+        temporary_hard_max_bytes=hard_max_bytes,
+        max_staged_episodes=_positive_int(
+            value["max_staged_episodes"], "runtime.max_staged_episodes"
         ),
+        min_free_bytes=min_free_bytes,
     )
 
 
@@ -242,11 +285,10 @@ def _positive_int(value: object, label: str) -> int:
     return value
 
 
-def _bounded_positive_int(value: object, label: str, maximum: int) -> int:
-    number = _positive_int(value, label)
-    if number > maximum:
-        raise ValueError(f"{label} must not exceed {maximum}")
-    return number
+def _non_negative_int(value: object, label: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ValueError(f"{label} must be a non-negative integer")
+    return value
 
 
 def _require_within(path: Path, root: Path, label: str) -> None:

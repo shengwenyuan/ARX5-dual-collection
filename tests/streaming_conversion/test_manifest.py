@@ -6,6 +6,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
+from arx5_collection.streaming_conversion.config import BufferedRuntimeConfig
 from arx5_collection.streaming_conversion.config import OutputConfig
 from arx5_collection.streaming_conversion.config import PrefetchRuntimeConfig
 from arx5_collection.streaming_conversion.config import RecipeConfig
@@ -200,6 +201,37 @@ class RunManifestTest(unittest.TestCase):
         self.assertEqual(run.definition.stage_workers, 16)
         self.assertEqual(run.definition.conversion_workers, 64)
         self.assertEqual(run.definition.prefetch_max_bytes, 2_000_000_000_000)
+
+    def test_freezes_buffered_prefetch_runtime(self) -> None:
+        config = StreamingConversionConfig(
+            3,
+            SourceConfig(self.root / "source", (Path("task"),), ()),
+            BufferedRuntimeConfig(
+                self.root,
+                self.root / "streaming-v3",
+                16,
+                64,
+                128_000_000_000,
+                256_000_000_000,
+                2_000_000_000_000,
+                128,
+                100_000_000_000,
+            ),
+            OutputConfig(self.root / "lerobot", "fold", "local/fold"),
+            RecipeConfig("pi05-equal-eef-v3", "recipe.toml", "folding the cloth"),
+        )
+        run = RunManifest.create(
+            config,
+            self.discovery,
+            self.output,
+            "buffered-run",
+            clock=lambda: NOW,
+        )
+
+        self.assertEqual(run.definition.ready_low_bytes, 128_000_000_000)
+        self.assertEqual(run.definition.ready_high_bytes, 256_000_000_000)
+        self.assertEqual(run.definition.temporary_hard_max_bytes, 2_000_000_000_000)
+        self.assertEqual(run.definition.min_free_bytes, 100_000_000_000)
 
     def _create(self) -> RunManifest:
         return RunManifest.create(

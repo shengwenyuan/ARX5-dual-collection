@@ -15,6 +15,7 @@ from pathlib import Path
 import shutil
 import time
 
+from .config import BufferedRuntimeConfig
 from .config import PrefetchRuntimeConfig
 from .config import RuntimeConfig
 from .config import RuntimeSettings
@@ -60,6 +61,7 @@ class WorkPhase(str, Enum):
 class ActiveWork:
     episode_id: str
     phase: WorkPhase
+    started_at: float = 0.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -70,13 +72,35 @@ class CoordinatorProgress:
     convert_ready: int
     reserved_staging_bytes: int
     reserved_staging_episodes: int
+    ready_staging_bytes: int
+    temporary_bytes: int
+    pfs_free_bytes: int | None
+    elapsed_seconds: float
+    staged_bytes: int
+    converted_frames: int
+    stage_gb_s: float
+    conversion_frames_s: float
     states: dict[str, int]
+
+
+@dataclass(frozen=True, slots=True)
+class CoordinatorMetric:
+    phase: str
+    episode_id: str
+    elapsed_seconds: float
+    source_bytes: int
+    status: str
+    segment_count: int = 0
+    frame_count: int = 0
+    phase_seconds: tuple[tuple[str, float], ...] = ()
 
 
 StageRunner = Callable[[StageWork], StageReceipt]
 ConversionRunner = Callable[[ConversionWork], EpisodeConversionResult]
 ExecutorFactory = Callable[[int], Executor]
 ProgressReporter = Callable[[CoordinatorProgress], None]
+MetricReporter = Callable[[CoordinatorMetric], None]
+DiskFreeReader = Callable[[Path], int]
 
 
 class StagingCapacityError(RuntimeError):
@@ -99,6 +123,8 @@ class StreamingCoordinator:
         stage_executor_factory: ExecutorFactory | None = None,
         conversion_executor_factory: ExecutorFactory | None = None,
         progress_reporter: ProgressReporter | None = None,
+        metric_reporter: MetricReporter | None = None,
+        disk_free_reader: DiskFreeReader | None = None,
         progress_interval_seconds: float = 10.0,
     ) -> None:
         if not task.strip():
@@ -109,7 +135,7 @@ class StreamingCoordinator:
         self._task = task
         self._repo_id = repo_id
         if isinstance(runtime, bool) or not isinstance(
-            runtime, (int, RuntimeConfig, PrefetchRuntimeConfig)
+            runtime, (int, RuntimeConfig, PrefetchRuntimeConfig, BufferedRuntimeConfig)
         ):
             raise TypeError("Coordinator runtime is invalid")
         if isinstance(runtime, int):
@@ -127,10 +153,16 @@ class StreamingCoordinator:
         if progress_interval_seconds <= 0:
             raise ValueError("progress interval must be positive")
         self._progress_reporter = progress_reporter
+        self._metric_reporter = metric_reporter
+        self._disk_free_reader = disk_free_reader or _disk_free
         self._progress_interval_seconds = progress_interval_seconds
         self._selection = {item.episode_id: item for item in manifest.selection}
+        self._started_at = 0.0
+        self._staged_bytes = 0
+        self._converted_frames = 0
 
     def run(self) -> dict[str, JobSnapshot]:
+        self._started_at = time.monotonic()
         self._recover_interrupted()
         if isinstance(self._runtime, RuntimeConfig):
             return self._run_legacy(self._runtime.workers)
@@ -162,6 +194,7 @@ class StreamingCoordinator:
                     try:
                         result = future.result()
                     except Exception as error:
+                        self._report_work(work, None, error)
                         self._record_error(work, error)
                         continue
                     if work.phase is WorkPhase.STAGE:
@@ -178,8 +211,11 @@ class StreamingCoordinator:
                             )
                             continue
                         self._manifest.transition(work.episode_id, JobState.CONVERTING)
+                        self._staged_bytes += self._episode_bytes(work.episode_id)
+                        self._report_work(work, result, None)
                         ready_convert.append(result)
                     else:
+                        self._report_work(work, result, None)
                         try:
                             self._record_conversion(work, result)
                         except Exception as error:
@@ -212,7 +248,9 @@ class StreamingCoordinator:
                     repo_id=_fragment_repo_id(self._repo_id, receipt.episode_id),
                 )
                 future = executor.submit(self._conversion_runner, work)
-                active[future] = ActiveWork(receipt.episode_id, WorkPhase.CONVERT)
+                active[future] = ActiveWork(
+                    receipt.episode_id, WorkPhase.CONVERT, time.monotonic()
+                )
                 continue
 
             episode_id = ready_stage.popleft()
@@ -225,15 +263,18 @@ class StreamingCoordinator:
                 target=self._manifest.run_dir / "staging" / episode_id,
             )
             future = executor.submit(self._stage_runner, work)
-            active[future] = ActiveWork(episode_id, WorkPhase.STAGE)
+            active[future] = ActiveWork(
+                episode_id, WorkPhase.STAGE, time.monotonic()
+            )
 
     def _run_bounded_prefetch(
         self,
-        runtime: PrefetchRuntimeConfig,
+        runtime: PrefetchRuntimeConfig | BufferedRuntimeConfig,
     ) -> dict[str, JobSnapshot]:
         ready_stage, ready_convert, reserved = self._recover_prefetch_queues()
         active: dict[Future[object], ActiveWork] = {}
         next_progress = time.monotonic()
+        refill_enabled = True
 
         with self._stage_executor_factory(runtime.stage_workers) as stage_executor:
             with self._conversion_executor_factory(
@@ -246,12 +287,14 @@ class StreamingCoordinator:
                         active,
                         ready_convert,
                     )
-                    self._fill_staging(
+                    refill_enabled = self._fill_staging(
                         stage_executor,
                         runtime,
                         active,
                         ready_stage,
+                        ready_convert,
                         reserved,
+                        refill_enabled,
                     )
                     now = time.monotonic()
                     if now >= next_progress:
@@ -284,6 +327,7 @@ class StreamingCoordinator:
                         try:
                             result = future.result()
                         except Exception as error:
+                            self._report_work(work, None, error)
                             self._record_error(work, error)
                             self._release_missing_stage(work.episode_id, reserved)
                             continue
@@ -305,8 +349,11 @@ class StreamingCoordinator:
                             self._manifest.transition(
                                 work.episode_id, JobState.CONVERTING
                             )
+                            self._staged_bytes += self._episode_bytes(work.episode_id)
+                            self._report_work(work, result, None)
                             ready_convert.append(result)
                             continue
+                        self._report_work(work, result, None)
                         try:
                             self._record_conversion(work, result)
                         except Exception as error:
@@ -345,7 +392,14 @@ class StreamingCoordinator:
                     receipt,
                     StageWork(self._source_root, selection, target),
                 )
-            except (OSError, ValueError):
+            except (OSError, ValueError, StageValidationError):
+                _quarantine_invalid_stage(
+                    target,
+                    self._manifest.run_dir,
+                    episode_id,
+                    job.attempt,
+                )
+                reserved.discard(episode_id)
                 ready_stage.append(episode_id)
                 continue
             if job.state is JobState.DISCOVERED:
@@ -374,33 +428,66 @@ class StreamingCoordinator:
                 repo_id=_fragment_repo_id(self._repo_id, receipt.episode_id),
             )
             future = executor.submit(self._conversion_runner, work)
-            active[future] = ActiveWork(receipt.episode_id, WorkPhase.CONVERT)
+            active[future] = ActiveWork(
+                receipt.episode_id, WorkPhase.CONVERT, time.monotonic()
+            )
             active_count += 1
 
     def _fill_staging(
         self,
         executor: Executor,
-        runtime: PrefetchRuntimeConfig,
+        runtime: PrefetchRuntimeConfig | BufferedRuntimeConfig,
         active: dict[Future[object], ActiveWork],
         ready_stage: deque[str],
+        ready_convert: deque[StageReceipt],
         reserved: set[str],
-    ) -> None:
+        refill_enabled: bool,
+    ) -> bool:
         active_count = sum(work.phase is WorkPhase.STAGE for work in active.values())
+        if isinstance(runtime, BufferedRuntimeConfig):
+            ready_bytes = self._ready_staging_bytes(active, ready_convert)
+            if ready_bytes <= runtime.ready_low_bytes:
+                refill_enabled = True
+            elif ready_bytes >= runtime.ready_high_bytes:
+                refill_enabled = False
+            if not refill_enabled:
+                return False
         while active_count < runtime.stage_workers and ready_stage:
             episode_id = ready_stage[0]
             episode_bytes = self._episode_bytes(episode_id)
-            if episode_bytes > runtime.prefetch_max_bytes:
+            hard_max = (
+                runtime.temporary_hard_max_bytes
+                if isinstance(runtime, BufferedRuntimeConfig)
+                else runtime.prefetch_max_bytes
+            )
+            max_episodes = (
+                runtime.max_staged_episodes
+                if isinstance(runtime, BufferedRuntimeConfig)
+                else runtime.prefetch_max_episodes
+            )
+            if episode_bytes > hard_max:
                 raise StagingCapacityError(
                     f"Episode {episode_id} requires {episode_bytes} staging bytes, "
-                    f"above hard limit {runtime.prefetch_max_bytes}"
+                    f"above hard limit {hard_max}"
                 )
             reserved_bytes = self._reserved_bytes(reserved)
-            if (
+            if isinstance(runtime, BufferedRuntimeConfig):
+                ready_bytes = self._ready_staging_bytes(active, ready_convert)
+                temporary_bytes = reserved_bytes + self._nonstage_temporary_bytes()
+                if (
+                    ready_bytes >= runtime.ready_high_bytes
+                    or len(reserved) >= max_episodes
+                    or temporary_bytes + episode_bytes > hard_max
+                    or self._disk_free_reader(runtime.pfs_root)
+                    < runtime.min_free_bytes + episode_bytes
+                ):
+                    return False
+            elif (
                 reserved_bytes >= runtime.prefetch_target_bytes
-                or len(reserved) >= runtime.prefetch_max_episodes
-                or reserved_bytes + episode_bytes > runtime.prefetch_max_bytes
+                or len(reserved) >= max_episodes
+                or reserved_bytes + episode_bytes > hard_max
             ):
-                return
+                return refill_enabled
             ready_stage.popleft()
             job = self._manifest.jobs[episode_id]
             if job.state is JobState.DISCOVERED:
@@ -416,8 +503,11 @@ class StreamingCoordinator:
             except Exception:
                 reserved.remove(episode_id)
                 raise
-            active[future] = ActiveWork(episode_id, WorkPhase.STAGE)
+            active[future] = ActiveWork(
+                episode_id, WorkPhase.STAGE, time.monotonic()
+            )
             active_count += 1
+        return refill_enabled
 
     def _episode_bytes(self, episode_id: str) -> int:
         selection = self._selection[episode_id]
@@ -426,13 +516,32 @@ class StreamingCoordinator:
     def _reserved_bytes(self, reserved: set[str]) -> int:
         return sum(self._episode_bytes(episode_id) for episode_id in reserved)
 
+    def _ready_staging_bytes(
+        self,
+        active: dict[Future[object], ActiveWork],
+        ready_convert: deque[StageReceipt],
+    ) -> int:
+        active_stage = sum(
+            self._episode_bytes(work.episode_id)
+            for work in active.values()
+            if work.phase is WorkPhase.STAGE
+        )
+        return active_stage + sum(
+            self._episode_bytes(receipt.episode_id) for receipt in ready_convert
+        )
+
+    def _nonstage_temporary_bytes(self) -> int:
+        return _tree_bytes(self._manifest.run_dir / "fragments") + _tree_bytes(
+            self._manifest.run_dir / "quarantine"
+        )
+
     def _release_missing_stage(self, episode_id: str, reserved: set[str]) -> None:
         if not (self._manifest.run_dir / "staging" / episode_id).exists():
             reserved.discard(episode_id)
 
     def _capacity_error(
         self,
-        runtime: PrefetchRuntimeConfig,
+        runtime: PrefetchRuntimeConfig | BufferedRuntimeConfig,
         ready_stage: deque[str],
         reserved: set[str],
     ) -> str:
@@ -446,8 +555,8 @@ class StreamingCoordinator:
             "staging capacity cannot make progress: "
             f"reserved_bytes={self._reserved_bytes(reserved)}, "
             f"reserved_episodes={len(reserved)}, "
-            f"prefetch_max_bytes={runtime.prefetch_max_bytes}, "
-            f"prefetch_max_episodes={runtime.prefetch_max_episodes}, "
+            f"hard_max_bytes={getattr(runtime, 'temporary_hard_max_bytes', None) or getattr(runtime, 'prefetch_max_bytes', None)}, "
+            f"max_staged_episodes={getattr(runtime, 'max_staged_episodes', None) or getattr(runtime, 'prefetch_max_episodes', None)}, "
             f"next_episode={ready_stage[0]}, retained_terminal={retained}"
         )
 
@@ -460,6 +569,10 @@ class StreamingCoordinator:
     ) -> None:
         if self._progress_reporter is None:
             return
+        elapsed = max(time.monotonic() - self._started_at, 1e-9)
+        pfs_free = None
+        if isinstance(self._runtime, BufferedRuntimeConfig):
+            pfs_free = self._disk_free_reader(self._runtime.pfs_root)
         states: dict[str, int] = {}
         for job in self._manifest.jobs.values():
             states[job.state.value] = states.get(job.state.value, 0) + 1
@@ -475,7 +588,50 @@ class StreamingCoordinator:
                 convert_ready=len(ready_convert),
                 reserved_staging_bytes=self._reserved_bytes(reserved),
                 reserved_staging_episodes=len(reserved),
+                ready_staging_bytes=self._ready_staging_bytes(active, ready_convert),
+                temporary_bytes=self._reserved_bytes(reserved)
+                + self._nonstage_temporary_bytes(),
+                pfs_free_bytes=pfs_free,
+                elapsed_seconds=elapsed,
+                staged_bytes=self._staged_bytes,
+                converted_frames=self._converted_frames,
+                stage_gb_s=self._staged_bytes / 1_000_000_000 / elapsed,
+                conversion_frames_s=self._converted_frames / elapsed,
                 states=dict(sorted(states.items())),
+            )
+        )
+
+    def _report_work(
+        self,
+        work: ActiveWork,
+        result: object | None,
+        error: Exception | None,
+    ) -> None:
+        if self._metric_reporter is None:
+            if isinstance(result, EpisodeConversionResult):
+                self._converted_frames += result.frame_count
+            return
+        elapsed = max(time.monotonic() - work.started_at, 0.0)
+        status = "failed" if error is not None else "completed"
+        segments = 0
+        frames = 0
+        phases: tuple[tuple[str, float], ...] = ()
+        if isinstance(result, EpisodeConversionResult):
+            status = result.status.value
+            segments = result.segment_count
+            frames = result.frame_count
+            phases = result.phase_seconds
+            self._converted_frames += frames
+        self._metric_reporter(
+            CoordinatorMetric(
+                phase=work.phase.value,
+                episode_id=work.episode_id,
+                elapsed_seconds=elapsed,
+                source_bytes=self._episode_bytes(work.episode_id),
+                status=status,
+                segment_count=segments,
+                frame_count=frames,
+                phase_seconds=phases,
             )
         )
 
@@ -583,6 +739,40 @@ def stage_thread_executor(workers: int) -> Executor:
         max_workers=workers,
         thread_name_prefix="arx5-stage",
     )
+
+
+def _disk_free(path: Path) -> int:
+    return shutil.disk_usage(path).free
+
+
+def _tree_bytes(root: Path) -> int:
+    if not root.exists():
+        return 0
+    total = 0
+    for path in root.rglob("*"):
+        try:
+            if path.is_file() and not path.is_symlink():
+                total += path.stat().st_size
+        except OSError:
+            continue
+    return total
+
+
+def _quarantine_invalid_stage(
+    target: Path,
+    run_dir: Path,
+    episode_id: str,
+    attempt: int,
+) -> Path:
+    quarantine = run_dir / "quarantine" / "staging"
+    quarantine.mkdir(parents=True, exist_ok=True)
+    candidate = quarantine / f"{episode_id}.attempt-{attempt}"
+    suffix = 1
+    while candidate.exists():
+        candidate = quarantine / f"{episode_id}.attempt-{attempt}.{suffix}"
+        suffix += 1
+    target.replace(candidate)
+    return candidate
 
 
 def _validate_reused_stage(receipt: StageReceipt, work: StageWork) -> None:
