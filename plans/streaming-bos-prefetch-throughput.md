@@ -1,6 +1,6 @@
 # Streaming MCAP → LeRobot 第二轮吞吐改进计划
 
-- Status: `implementation-in-progress`
+- Status: `round2-core-mini-validated`
 - Date: `2026-08-27`
 - Baseline host: `pi05-cpu`
 - Predecessor: commits `8ecc80b`, `75ae295`, `0f261db`, `1495f89`
@@ -154,3 +154,44 @@ schema v1/run schema v2 的 `_run_legacy` 仍是旧 run resume 兼容边界，�
 - 不立即安装 TorchCodec，不立即改 SVT preset。
 - 暂不用当前 schema v2 profile 开始新的 300+ Episode 正式全量。
 - 先完成 P0 语义修正和 P1 观测，再决定哪个 conversion 优化进入正式 profile。
+
+## 2026-08-27 第二轮核心实施与迷你验收
+
+已实施并单向部署到 `pi05-cpu`：
+
+- streaming config schema v3 / run manifest schema v4。
+- `ready_low_bytes / ready_high_bytes`、`temporary_hard_max_bytes`、`max_staged_episodes` 和 `min_free_bytes`。
+- 无效 staging 移入 run 内 quarantine 后按冻结 source identity 重建。
+- run 内 `metrics.jsonl`，记录 progress、stage/conversion wall time 和 conversion 内部 phase timing。
+- v1/v2 保持原语义 resume；schema v3 不再使用通用库内的 `32/112/2 TB/128` 主机硬编码。
+
+静态验收：
+
+- 本地：`393 passed, 2 skipped`。
+- `pi05-cpu` streaming 模块：`72 passed`；追加 alignment 兼容测试 `5 passed`。
+
+迷你白名单使用一个 w3 success Episode：
+
+```text
+run_id: round2-mini-20260827
+source: fold_cloth/2026-08-25/20260825T103813136942Z-4b8dde4c
+source bytes: 7,434,825,451
+result: 1 committed / 0 failed / 0 discarded / 0 excluded
+LeRobot: 1 episode / 1,616 frames
+```
+
+实测时间：
+
+| Phase | Wall time |
+| --- | ---: |
+| BOS→PFS staging | `14.964 s` |
+| conversion total | `447.466 s` |
+| clean | `6.544 s` |
+| select | `6.723 s` |
+| export | `433.021 s` |
+| validate | `1.075 s` |
+| coordinator total before Builder result | `462.438 s` |
+
+高峰临时占用 `8,738,232,606 bytes`，低于验收 profile 的 100 GB hard max；conversion 结束时剩余约 24 MB Fragment，Builder 成功后 staging/Fragments 全部释放，run manifest/metrics/config 约 35 KB。最终 snapshot 和 loader validation 通过。
+
+`export` 占 conversion wall time 约 `96.8%`，所以下一步瓶颈已明确收敛到 exporter/视频编码路径。暂停 MCAP clean/select 优化，先将 export 再拆分为 frame decode/resize/video encode/parquet/report 并执行 SVT 线程与 preset 小样本 A/B。
