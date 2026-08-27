@@ -195,3 +195,27 @@ LeRobot: 1 episode / 1,616 frames
 高峰临时占用 `8,738,232,606 bytes`，低于验收 profile 的 100 GB hard max；conversion 结束时剩余约 24 MB Fragment，Builder 成功后 staging/Fragments 全部释放，run manifest/metrics/config 约 35 KB。最终 snapshot 和 loader validation 通过。
 
 `export` 占 conversion wall time 约 `96.8%`，所以下一步瓶颈已明确收敛到 exporter/视频编码路径。暂停 MCAP clean/select 优化，先将 export 再拆分为 frame decode/resize/video encode/parquet/report 并执行 SVT 线程与 preset 小样本 A/B。
+
+## 2026-08-27 exporter / SVT mini A/B
+
+同一条 w3 白名单 Episode、1616 frames 的结果：
+
+| 指标 | preset 8 | preset 10 |
+| --- | ---: | ---: |
+| 端到端 | `461.435 s` | `463.545 s` |
+| conversion | `446.334 s` | `446.300 s` |
+| export | `431.610 s` | `431.365 s` |
+| frame materialize | `371.406 s` | `372.395 s` |
+| SVT encode | `12.149 s` | `11.489 s` |
+| 视频字节 | `18,494,414` | `18,732,559` |
+| 验收 | 1 committed / 1616 frames | 1 committed / 1616 frames |
+
+两档均保持 `libsvtav1 / YUV420 / GOP 2 / CRF 30` 并通过固定帧解码抽检。preset 10 只将视频编码缩短约 `5.4%`，但端到端没有收益且视频增大约 `1.3%`，因此不进入正式 profile。
+
+新分段指标纠正了“export 慢等于 SVT 慢”的判断：frame materialize 占 export 约 `86%`，SVT encode 仅约 `2.8%`。本轮保留显式编码 policy、失败证据和通用 frozen-manifest benchmark harness；停止继续调 SVT，正式双日构建前先对齐输入范围、resource policy 与输出命名。
+
+结果目录：
+
+```text
+/mnt/pfs/swy/dataset/1011/arx5/fold_cloth/streaming/benchmarks/20260827-exporter-svt-mini-v1/results/
+```
