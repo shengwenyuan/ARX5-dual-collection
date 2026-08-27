@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
+import pty
 import shutil
 import signal
 import subprocess
@@ -321,19 +322,24 @@ def run_e2e(args: argparse.Namespace) -> int:
         started = time.monotonic()
         cpu_before = _cpu_stat()
         with log_path.open("w") as log:
-            process = subprocess.Popen(
-                command,
-                stdin=subprocess.PIPE,
-                stdout=log,
-                stderr=subprocess.STDOUT,
-                text=True,
-                start_new_session=True,
-            )
-            assert process.stdin is not None
-            process.stdin.write("\n")
-            process.stdin.close()
-            with ResourceSampler(process_group=process.pid) as sampler:
-                return_code = process.wait()
+            master_fd, slave_fd = pty.openpty()
+            try:
+                process = subprocess.Popen(
+                    command,
+                    stdin=slave_fd,
+                    stdout=log,
+                    stderr=subprocess.STDOUT,
+                    start_new_session=True,
+                )
+                os.close(slave_fd)
+                slave_fd = -1
+                os.write(master_fd, b"\n")
+                with ResourceSampler(process_group=process.pid) as sampler:
+                    return_code = process.wait()
+            finally:
+                if slave_fd >= 0:
+                    os.close(slave_fd)
+                os.close(master_fd)
         elapsed = time.monotonic() - started
         cpu_after = _cpu_stat()
         counts = _job_counts(run_dir) if run_dir.exists() else {}
