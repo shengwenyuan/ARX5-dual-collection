@@ -62,13 +62,12 @@ def execute_streaming_conversion(
 ) -> StreamingApplicationResult:
     _validate_request(request)
     config = StreamingConversionConfig.load(request.config_path)
-    recipe = _load_recipe(request.config_path, config)
+    recipe = load_conversion_recipe(request.config_path, config)
 
     if request.resume_run_id is not None:
         manifest = RunManifest.open(
             config.runtime.streaming_root / request.resume_run_id
         )
-        _validate_resume_config(config, manifest)
         if request.retry_failed:
             for episode_id in manifest.retryable_episode_ids():
                 manifest.retry_failed(episode_id, detail="operator requested CLI retry")
@@ -98,6 +97,31 @@ def execute_streaming_conversion(
             repo_id=config.output.repo_id_for(report.output_path),
         )
 
+    return execute_frozen_streaming_run(
+        config,
+        recipe,
+        manifest,
+        output_stream,
+        builder=builder,
+    )
+
+
+def execute_frozen_streaming_run(
+    config: StreamingConversionConfig,
+    recipe: Pi05ConversionRecipe,
+    manifest: RunManifest,
+    output_stream: TextIO,
+    *,
+    builder: Builder = build_lerobot_v21_snapshot,
+) -> StreamingApplicationResult:
+    """Execute an already frozen run without repeating operator alignment."""
+
+    _validate_resume_config(config, manifest)
+    if recipe.name != config.recipe.name:
+        raise ValueError(
+            "streaming recipe name does not match profile: "
+            f"{config.recipe.name!r} != {recipe.name!r}"
+        )
     output_stream.write(
         json.dumps(
             {
@@ -156,7 +180,7 @@ def _validate_request(request: StreamingRunRequest) -> None:
             raise ValueError(f"{label} must be one path component")
 
 
-def _load_recipe(
+def load_conversion_recipe(
     config_path: Path,
     config: StreamingConversionConfig,
 ) -> Pi05ConversionRecipe:
