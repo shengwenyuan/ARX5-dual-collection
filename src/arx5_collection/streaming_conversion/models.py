@@ -70,7 +70,13 @@ class RunDefinition:
     streaming_root: Path
     output_path: Path
     repo_id: str
-    workers: int
+    workers: int | None
+    pfs_root: Path | None
+    stage_workers: int | None
+    conversion_workers: int | None
+    prefetch_target_bytes: int | None
+    prefetch_max_bytes: int | None
+    prefetch_max_episodes: int | None
     recipe_name: str
     recipe_profile: str
     recipe_task: str

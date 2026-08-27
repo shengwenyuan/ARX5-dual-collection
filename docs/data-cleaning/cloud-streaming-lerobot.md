@@ -195,12 +195,14 @@ stage(candidate, pfs_staging_dir) -> StageReceipt
 
 ## 并行模型
 
-首版使用 Python `multiprocessing`/`ProcessPoolExecutor` 的 `spawn` context，不使用 `fork`：
+新调度把 BOS staging 和 conversion 拆成独立执行器：
 
+- staging 使用有上限的 `ThreadPoolExecutor`，只做 BOS 到 PFS 的大文件顺序复制。
+- conversion 使用 Python `ProcessPoolExecutor` 的 `spawn` context，不使用 `fork`。
 - rosbag2、rclpy、ffmpeg 和 LeRobot writer 均在 Worker 子进程内初始化。
 - 不在父进程初始化 ROS context 后 fork。
 - 每个 Worker 一次处理一个 Episode。
-- `workers` 是 profile 参数，不由代码写死。
+- stage/conversion worker 数与预取字节/Episode 上限由 schema v2 profile 显式配置并冻结到 run。
 - Coordinator 是 manifest 与状态的唯一写者。
 - Worker 只通过结构化 `EpisodeJobResult` 返回成功、排除或失败结果。
 
@@ -354,7 +356,7 @@ discovered
 复杂参数统一进入版本化 TOML profile。CLI 只保留配置路径和可选的绝对输出覆盖：
 
 ```toml
-schema_version = 1
+schema_version = 2
 
 [source]
 root = "/mnt/bos/datainfra-demo"
@@ -365,8 +367,13 @@ include_paths = [
 block = ["abort", "fail", "test", "logs"]
 
 [runtime]
+pfs_root = "/mnt/pfs/swy"
 streaming_root = "/mnt/pfs/swy/dataset/1011/arx5/fold_cloth/streaming"
-workers = 4
+stage_workers = 16
+conversion_workers = 64
+prefetch_target_bytes = 1_500_000_000_000
+prefetch_max_bytes = 2_000_000_000_000
+prefetch_max_episodes = 128
 
 [output]
 lerobot_root = "/mnt/pfs/swy/dataset/1011/arx5/fold_cloth/lerobot"
@@ -599,11 +606,22 @@ src/arx5_collection/dataset_cli.py
 - smoke 暴露并修正 selector 的 `quality_grade_C` 非法 reason code：固定为 `selection/quality_grade_c`，Worker 同时增加稳定 reason component 校验，防止未来二次状态异常覆盖原始原因。真实短 Episode 单独复测已返回正确 `excluded` 结果。
 - 实际 resume/retry 的状态迁移由本地真实 manifest 测试覆盖；云端不重复执行 10 分钟转换。所有 Unit 8 smoke snapshot、run、probe 和临时 profile 已清理，BOS 未写入，W3/W4 未连接。
 
+### 单位 9：BOS 有界预取与独立转换池
+
+- config schema v2 把 staging 与 conversion 拆为独立并发参数；config schema v1 和旧 run schema v2 仍使用原共享进程池，保持现有 run resume 语义。
+- staging 使用线程池，conversion 仍使用 `spawn` 进程池；两者可持续重叠，conversion 不再挤占 BOS copy slot。
+- 提交 staging 前按冻结 MCAP + metadata size 预留，同时实施 target bytes、hard max bytes 与 Episode 数上限。
+- 现有完整 staging 在 resume 时校验后直接重建 conversion queue；failed/discarded 保留数据仍计入硬上限，容量无法前进时明确终止而不删除现场。
+- 新 run manifest schema v3 冻结 runtime mode 与全部预取参数；resume 拒绝任一资源/容量参数漂移。
+- 正式 profile 固定 `/mnt/pfs/swy` 边界、`16` stage workers、`64` conversion workers、`1.5 TB` target、`2 TB` hard max 与 `128` Episode 上限。
+- Coordinator 每 `10 s` 输出 active/ready worker、队列、预留 staging bytes/Episodes 与 Job state 快照。
+- 本地静态验收完成后再部署到 `pi05-cpu`；云端参数短测不与当前全量 schema v1 run 并发。
+
 当前入口：
 
 ```bash
 cp config/streaming.fold-cloth.example.toml /tmp/fold-cloth.toml
-# 编辑 include_paths / block / workers
+# 编辑 include_paths / block / schema v2 runtime 参数
 arx5-dataset stream-to-lerobot --config /tmp/fold-cloth.toml
 
 # 中断恢复；只有确需重试 failed 时才追加 --retry-failed

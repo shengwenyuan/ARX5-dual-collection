@@ -2,11 +2,8 @@ schema_version = 2
 
 [source]
 root = "/mnt/bos/datainfra-demo"
-include_paths = [
-  "fold_cloth/2026-08-21",
-  "fold_cloth/2026-08-22",
-]
-block = ["abort", "fail", "test", "logs"]
+include_paths = ["fold_cloth/2026-08-25"]
+block = ["test", "tests", "abort", "aborted", "log", "logs"]
 
 [runtime]
 pfs_root = "/mnt/pfs/swy"

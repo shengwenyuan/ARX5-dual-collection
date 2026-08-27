@@ -11,6 +11,7 @@ from arx5_collection.streaming_conversion.alignment import build_alignment_repor
 from arx5_collection.streaming_conversion.alignment import render_alignment
 from arx5_collection.streaming_conversion.alignment import require_enter_confirmation
 from arx5_collection.streaming_conversion.config import OutputConfig
+from arx5_collection.streaming_conversion.config import PrefetchRuntimeConfig
 from arx5_collection.streaming_conversion.config import RecipeConfig
 from arx5_collection.streaming_conversion.config import RuntimeConfig
 from arx5_collection.streaming_conversion.config import SourceConfig
@@ -81,6 +82,39 @@ class AlignmentTest(unittest.TestCase):
 
             with self.assertRaisesRegex(ValueError, "absolute"):
                 build_alignment_report(config, discovery, Path("relative"))
+
+    def test_renders_prefetch_limits_and_rejects_output_outside_pfs(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            config = StreamingConversionConfig(
+                2,
+                SourceConfig(root / "source", (Path("task"),), ()),
+                PrefetchRuntimeConfig(
+                    root,
+                    root / "streaming",
+                    16,
+                    64,
+                    1_500_000_000_000,
+                    2_000_000_000_000,
+                    128,
+                ),
+                OutputConfig(root / "lerobot", "dataset", "local/data"),
+                RecipeConfig("recipe", "recipe.toml", "folding the cloth"),
+            )
+            discovery = DiscoveryResult(root / "source", (), (), ())
+            report = build_alignment_report(
+                config,
+                discovery,
+                root / "lerobot" / "snapshot",
+            )
+
+            rendered = render_alignment(report)
+
+            self.assertIn("stage_workers: 16", rendered)
+            self.assertIn("conversion_workers: 64", rendered)
+            self.assertIn("prefetch_max_bytes: 2000000000000", rendered)
+            with self.assertRaisesRegex(ValueError, "below runtime.pfs_root"):
+                build_alignment_report(config, discovery, Path("/outside/snapshot"))
 
 
 if __name__ == "__main__":

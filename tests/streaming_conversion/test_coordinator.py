@@ -3,11 +3,12 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 import tempfile
-from threading import Barrier, Lock
+from threading import Barrier, Event, Lock
 import unittest
 from unittest.mock import patch
 
 from arx5_collection.streaming_conversion.config import OutputConfig
+from arx5_collection.streaming_conversion.config import PrefetchRuntimeConfig
 from arx5_collection.streaming_conversion.config import RecipeConfig
 from arx5_collection.streaming_conversion.config import RuntimeConfig
 from arx5_collection.streaming_conversion.config import SourceConfig
@@ -15,6 +16,7 @@ from arx5_collection.streaming_conversion.config import StreamingConversionConfi
 from arx5_collection.streaming_conversion.coordinator import ConversionWork
 from arx5_collection.streaming_conversion.coordinator import StageWork
 from arx5_collection.streaming_conversion.coordinator import StreamingCoordinator
+from arx5_collection.streaming_conversion.coordinator import StagingCapacityError
 from arx5_collection.streaming_conversion.coordinator import spawn_executor
 from arx5_collection.streaming_conversion.manifest import RunManifest
 from arx5_collection.streaming_conversion.models import ConversionStatus
@@ -167,6 +169,191 @@ class StreamingCoordinatorTest(unittest.TestCase):
             "spawn",
         )
 
+    def test_bounded_prefetch_overlaps_independent_stage_and_conversion_pools(self) -> None:
+        manifest = self._manifest(
+            "episode-a", "episode-b", "episode-c", "episode-d"
+        )
+        first_stages = Barrier(2)
+        third_stage_started = Event()
+        lock = Lock()
+        stage_active = 0
+        stage_maximum = 0
+        convert_active = 0
+        convert_maximum = 0
+
+        def stage(work: StageWork) -> StageReceipt:
+            nonlocal stage_active, stage_maximum
+            episode_id = work.selection.episode_id
+            with lock:
+                stage_active += 1
+                stage_maximum = max(stage_maximum, stage_active)
+            try:
+                if episode_id in {"episode-a", "episode-b"}:
+                    first_stages.wait(timeout=2)
+                else:
+                    third_stage_started.set()
+                work.target.mkdir(parents=True)
+                return _receipt(work)
+            finally:
+                with lock:
+                    stage_active -= 1
+
+        def convert(work: ConversionWork) -> EpisodeConversionResult:
+            nonlocal convert_active, convert_maximum
+            with lock:
+                convert_active += 1
+                convert_maximum = max(convert_maximum, convert_active)
+            try:
+                self.assertTrue(third_stage_started.wait(timeout=2))
+                return _committed(work.receipt.episode_id, work.target)
+            finally:
+                with lock:
+                    convert_active -= 1
+
+        jobs = self._prefetch_coordinator(
+            manifest,
+            stage,
+            convert,
+            stage_workers=2,
+            conversion_workers=2,
+            target_bytes=90,
+            max_bytes=120,
+            max_episodes=4,
+        ).run()
+
+        self.assertEqual(
+            {job.state for job in jobs.values()},
+            {JobState.COMMITTED},
+        )
+        self.assertEqual(stage_maximum, 2)
+        self.assertGreaterEqual(convert_maximum, 1)
+
+    def test_prefetch_hard_episode_bound_blocks_new_stage_until_release(self) -> None:
+        manifest = self._manifest("episode-a", "episode-b", "episode-c")
+        first_stages = Barrier(2)
+        lock = Lock()
+        events: list[str] = []
+
+        def stage(work: StageWork) -> StageReceipt:
+            episode_id = work.selection.episode_id
+            if episode_id in {"episode-a", "episode-b"}:
+                first_stages.wait(timeout=2)
+            with lock:
+                events.append(f"stage:{episode_id}")
+            work.target.mkdir(parents=True)
+            return _receipt(work)
+
+        def convert(work: ConversionWork) -> EpisodeConversionResult:
+            episode_id = work.receipt.episode_id
+            with lock:
+                events.append(f"convert:{episode_id}")
+            return _committed(episode_id, work.target)
+
+        self._prefetch_coordinator(
+            manifest,
+            stage,
+            convert,
+            stage_workers=2,
+            conversion_workers=1,
+            target_bytes=60,
+            max_bytes=60,
+            max_episodes=2,
+        ).run()
+
+        first_conversion = min(
+            index for index, item in enumerate(events) if item.startswith("convert:")
+        )
+        self.assertLess(first_conversion, events.index("stage:episode-c"))
+
+    def test_retained_failed_stage_counts_against_hard_capacity(self) -> None:
+        manifest = self._manifest("episode-a", "episode-b")
+        retained = manifest.run_dir / "staging" / "episode-a"
+        retained.mkdir(parents=True)
+        manifest.transition("episode-a", JobState.STAGING)
+        manifest.transition(
+            "episode-a",
+            JobState.FAILED,
+            reason_code="infrastructure/staging_io",
+        )
+
+        coordinator = self._prefetch_coordinator(
+            manifest,
+            _fake_stage,
+            lambda work: _committed(work.receipt.episode_id, work.target),
+            stage_workers=1,
+            conversion_workers=1,
+            target_bytes=40,
+            max_bytes=40,
+            max_episodes=2,
+        )
+
+        with self.assertRaisesRegex(
+            StagingCapacityError,
+            "retained_terminal=\\['episode-a'\\]",
+        ):
+            coordinator.run()
+
+        self.assertTrue(retained.exists())
+        self.assertEqual(manifest.jobs["episode-b"].state, JobState.DISCOVERED)
+
+    def test_reports_prefetch_queue_and_final_release(self) -> None:
+        manifest = self._manifest("episode-a")
+        progress = []
+
+        self._prefetch_coordinator(
+            manifest,
+            _fake_stage,
+            lambda work: _committed(work.receipt.episode_id, work.target),
+            stage_workers=1,
+            conversion_workers=1,
+            target_bytes=60,
+            max_bytes=60,
+            max_episodes=1,
+            progress_reporter=progress.append,
+        ).run()
+
+        self.assertGreaterEqual(len(progress), 2)
+        self.assertEqual(progress[0].reserved_staging_bytes, 30)
+        self.assertEqual(progress[-1].reserved_staging_bytes, 0)
+        self.assertEqual(progress[-1].states, {"committed": 1})
+
+    def test_prefetch_resume_reuses_valid_complete_stage_without_copy(self) -> None:
+        manifest = self._manifest("episode-a")
+        selection = manifest.selection[0]
+        target = manifest.run_dir / "staging" / "episode-a"
+        target.mkdir(parents=True)
+        receipt = StageReceipt(
+            episode_id="episode-a",
+            source_session_id=selection.source_session_id,
+            source_dir=selection.source_dir,
+            stage_dir=target,
+            mcap=selection.mcap,
+            metadata=selection.metadata,
+        )
+        manifest.transition("episode-a", JobState.STAGING)
+
+        def forbidden_stage(work: StageWork) -> StageReceipt:
+            raise AssertionError(work)
+
+        with patch(
+            "arx5_collection.streaming_conversion.coordinator.validate_stage",
+            return_value=receipt,
+        ):
+            jobs = self._prefetch_coordinator(
+                manifest,
+                forbidden_stage,
+                lambda work: _committed(work.receipt.episode_id, work.target),
+                stage_workers=1,
+                conversion_workers=1,
+                target_bytes=60,
+                max_bytes=60,
+                max_episodes=1,
+            ).run()
+
+        self.assertEqual(jobs["episode-a"].state, JobState.COMMITTED)
+        self.assertEqual(jobs["episode-a"].attempt, 1)
+        self.assertFalse(target.exists())
+
     def _manifest(self, *episode_ids: str) -> RunManifest:
         config = StreamingConversionConfig(
             1,
@@ -222,6 +409,43 @@ class StreamingCoordinatorTest(unittest.TestCase):
             stage_runner=stage_runner,
             conversion_runner=conversion_runner,
             executor_factory=lambda count: ThreadPoolExecutor(max_workers=count),
+        )
+
+    def _prefetch_coordinator(
+        self,
+        manifest: RunManifest,
+        stage_runner,
+        conversion_runner,
+        *,
+        stage_workers: int,
+        conversion_workers: int,
+        target_bytes: int,
+        max_bytes: int,
+        max_episodes: int,
+        progress_reporter=None,
+    ) -> StreamingCoordinator:
+        runtime = PrefetchRuntimeConfig(
+            pfs_root=self.root,
+            streaming_root=self.root / "streaming",
+            stage_workers=stage_workers,
+            conversion_workers=conversion_workers,
+            prefetch_target_bytes=target_bytes,
+            prefetch_max_bytes=max_bytes,
+            prefetch_max_episodes=max_episodes,
+        )
+        executor_factory = lambda count: ThreadPoolExecutor(max_workers=count)
+        return StreamingCoordinator(
+            manifest,
+            self.source_root,
+            self.recipe,
+            "folding the cloth",
+            "local/fold",
+            runtime,
+            stage_runner=stage_runner,
+            conversion_runner=conversion_runner,
+            stage_executor_factory=executor_factory,
+            conversion_executor_factory=executor_factory,
+            progress_reporter=progress_reporter,
         )
 
 

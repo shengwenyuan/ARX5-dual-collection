@@ -10,6 +10,7 @@ from typing import Any
 
 from arx5_collection.atomic import staged_directory
 
+from .config import PrefetchRuntimeConfig
 from .config import StreamingConversionConfig
 from .models import DiscoveryResult
 from .models import FileIdentity
@@ -20,7 +21,8 @@ from .models import RunDefinition
 from .models import SelectionEntry
 
 
-RUN_SCHEMA_VERSION = 2
+RUN_SCHEMA_VERSION = 3
+_SUPPORTED_RUN_SCHEMA_VERSIONS = {2, RUN_SCHEMA_VERSION}
 SELECTION_SCHEMA_VERSION = 2
 JOB_EVENT_SCHEMA_VERSION = 1
 _REASON_CODE = re.compile(r"^[a-z][a-z0-9_]*(/[a-z][a-z0-9_]*)*$")
@@ -137,7 +139,7 @@ class RunManifest:
             "streaming_root": str(config.runtime.streaming_root),
             "output_path": str(output_path),
             "repo_id": repo_id or config.output.repo_id_for(output_path),
-            "workers": config.runtime.workers,
+            "runtime": _runtime_value(config.runtime),
             "recipe": {
                 "name": config.recipe.name,
                 "profile": config.recipe.profile,
@@ -164,23 +166,28 @@ class RunManifest:
         clock: Callable[[], datetime] | None = None,
     ) -> RunManifest:
         run_value = _read_json(run_dir / "run.json")
+        schema_version = run_value.get("schema_version")
+        if (
+            isinstance(schema_version, bool)
+            or not isinstance(schema_version, int)
+            or schema_version not in _SUPPORTED_RUN_SCHEMA_VERSIONS
+        ):
+            raise ValueError("unsupported run manifest schema_version")
+        common_keys = {
+            "schema_version",
+            "run_id",
+            "created_at",
+            "source_root",
+            "streaming_root",
+            "output_path",
+            "repo_id",
+            "recipe",
+        }
         _exact_keys(
             run_value,
-            {
-                "schema_version",
-                "run_id",
-                "created_at",
-                "source_root",
-                "streaming_root",
-                "output_path",
-                "repo_id",
-                "workers",
-                "recipe",
-            },
+            common_keys | ({"workers"} if schema_version == 2 else {"runtime"}),
             "run manifest",
         )
-        if run_value["schema_version"] != RUN_SCHEMA_VERSION:
-            raise ValueError("unsupported run manifest schema_version")
         run_id = _path_component(run_value["run_id"], "run_id")
         if run_dir.name != run_id:
             raise ValueError("run directory name does not match run_id")
@@ -194,7 +201,7 @@ class RunManifest:
         return cls(
             run_dir,
             run_id,
-            _run_definition(run_value),
+            _run_definition(run_value, schema_version),
             selection,
             events,
             clock,
@@ -371,7 +378,24 @@ def _validate_reason(state: JobState, reason_code: str | None) -> None:
         raise ValueError(f"state={state.value} must not contain reason_code")
 
 
-def _run_definition(value: dict[str, Any]) -> RunDefinition:
+def _runtime_value(value: object) -> dict[str, object]:
+    if isinstance(value, PrefetchRuntimeConfig):
+        return {
+            "mode": "bounded_prefetch",
+            "pfs_root": str(value.pfs_root),
+            "stage_workers": value.stage_workers,
+            "conversion_workers": value.conversion_workers,
+            "prefetch_target_bytes": value.prefetch_target_bytes,
+            "prefetch_max_bytes": value.prefetch_max_bytes,
+            "prefetch_max_episodes": value.prefetch_max_episodes,
+        }
+    workers = getattr(value, "workers", None)
+    if isinstance(workers, bool) or not isinstance(workers, int) or workers < 1:
+        raise ValueError("legacy runtime workers must be positive")
+    return {"mode": "legacy_shared_pool", "workers": workers}
+
+
+def _run_definition(value: dict[str, Any], schema_version: int) -> RunDefinition:
     recipe = value["recipe"]
     _exact_keys(recipe, {"name", "profile", "task"}, "run recipe")
     source_root = Path(_string(value["source_root"], "run source_root"))
@@ -379,20 +403,113 @@ def _run_definition(value: dict[str, Any]) -> RunDefinition:
     output_path = Path(_string(value["output_path"], "run output_path"))
     if not all(path.is_absolute() for path in (source_root, streaming_root, output_path)):
         raise ValueError("run paths must be absolute")
-    workers = _non_negative_int(value["workers"], "run workers")
-    if workers == 0:
-        raise ValueError("run workers must be positive")
+    if schema_version == 2:
+        workers = _positive_run_int(value["workers"], "run workers")
+        runtime_values: dict[str, object] = {
+            "workers": workers,
+            "pfs_root": None,
+            "stage_workers": None,
+            "conversion_workers": None,
+            "prefetch_target_bytes": None,
+            "prefetch_max_bytes": None,
+            "prefetch_max_episodes": None,
+        }
+    else:
+        runtime_values = _run_runtime(value["runtime"], streaming_root, output_path)
     return RunDefinition(
         run_id=_path_component(value["run_id"], "run_id"),
         source_root=source_root,
         streaming_root=streaming_root,
         output_path=output_path,
         repo_id=_string(value["repo_id"], "run repo_id"),
-        workers=workers,
+        workers=runtime_values["workers"],
+        pfs_root=runtime_values["pfs_root"],
+        stage_workers=runtime_values["stage_workers"],
+        conversion_workers=runtime_values["conversion_workers"],
+        prefetch_target_bytes=runtime_values["prefetch_target_bytes"],
+        prefetch_max_bytes=runtime_values["prefetch_max_bytes"],
+        prefetch_max_episodes=runtime_values["prefetch_max_episodes"],
         recipe_name=_string(recipe["name"], "run recipe name"),
         recipe_profile=_string(recipe["profile"], "run recipe profile"),
         recipe_task=_string(recipe["task"], "run recipe task"),
     )
+
+
+def _run_runtime(
+    value: object,
+    streaming_root: Path,
+    output_path: Path,
+) -> dict[str, object]:
+    if not isinstance(value, dict):
+        raise ValueError("run runtime must be an object")
+    mode = value.get("mode")
+    if mode == "legacy_shared_pool":
+        _exact_keys(value, {"mode", "workers"}, "run runtime")
+        return {
+            "workers": _positive_run_int(value["workers"], "run runtime workers"),
+            "pfs_root": None,
+            "stage_workers": None,
+            "conversion_workers": None,
+            "prefetch_target_bytes": None,
+            "prefetch_max_bytes": None,
+            "prefetch_max_episodes": None,
+        }
+    if mode != "bounded_prefetch":
+        raise ValueError("run runtime mode is unsupported")
+    _exact_keys(
+        value,
+        {
+            "mode",
+            "pfs_root",
+            "stage_workers",
+            "conversion_workers",
+            "prefetch_target_bytes",
+            "prefetch_max_bytes",
+            "prefetch_max_episodes",
+        },
+        "run runtime",
+    )
+    pfs_root = Path(_string(value["pfs_root"], "run runtime pfs_root"))
+    if not pfs_root.is_absolute():
+        raise ValueError("run runtime pfs_root must be absolute")
+    normalized_pfs = pfs_root.resolve(strict=False)
+    normalized_streaming = streaming_root.resolve(strict=False)
+    normalized_output = output_path.resolve(strict=False)
+    if (
+        normalized_pfs not in normalized_streaming.parents
+        or normalized_pfs not in normalized_output.parents
+    ):
+        raise ValueError("run streaming and output paths must be below pfs_root")
+    target_bytes = _positive_run_int(
+        value["prefetch_target_bytes"], "run runtime prefetch_target_bytes"
+    )
+    max_bytes = _positive_run_int(
+        value["prefetch_max_bytes"], "run runtime prefetch_max_bytes"
+    )
+    if target_bytes > max_bytes:
+        raise ValueError("run prefetch target must not exceed maximum")
+    return {
+        "workers": None,
+        "pfs_root": pfs_root,
+        "stage_workers": _positive_run_int(
+            value["stage_workers"], "run runtime stage_workers"
+        ),
+        "conversion_workers": _positive_run_int(
+            value["conversion_workers"], "run runtime conversion_workers"
+        ),
+        "prefetch_target_bytes": target_bytes,
+        "prefetch_max_bytes": max_bytes,
+        "prefetch_max_episodes": _positive_run_int(
+            value["prefetch_max_episodes"], "run runtime prefetch_max_episodes"
+        ),
+    }
+
+
+def _positive_run_int(value: object, label: str) -> int:
+    number = _non_negative_int(value, label)
+    if number == 0:
+        raise ValueError(f"{label} must be positive")
+    return number
 
 
 def _selection_value(item: SelectionEntry) -> dict[str, object]:

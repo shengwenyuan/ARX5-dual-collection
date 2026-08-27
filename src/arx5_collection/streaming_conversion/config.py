@@ -20,6 +20,25 @@ class RuntimeConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class PrefetchRuntimeConfig:
+    pfs_root: Path
+    streaming_root: Path
+    stage_workers: int
+    conversion_workers: int
+    prefetch_target_bytes: int
+    prefetch_max_bytes: int
+    prefetch_max_episodes: int
+
+
+RuntimeSettings = RuntimeConfig | PrefetchRuntimeConfig
+
+MAX_STAGE_WORKERS = 32
+MAX_CONVERSION_WORKERS = 112
+MAX_PREFETCH_BYTES = 2_000_000_000_000
+MAX_PREFETCH_EPISODES = 128
+
+
+@dataclass(frozen=True, slots=True)
 class OutputConfig:
     lerobot_root: Path
     dataset_name: str
@@ -54,7 +73,7 @@ class RecipeConfig:
 class StreamingConversionConfig:
     schema_version: int
     source: SourceConfig
-    runtime: RuntimeConfig
+    runtime: RuntimeSettings
     output: OutputConfig
     recipe: RecipeConfig
 
@@ -67,15 +86,35 @@ class StreamingConversionConfig:
             {"schema_version", "source", "runtime", "output", "recipe"},
             "config",
         )
-        if payload["schema_version"] != 1:
-            raise ValueError("streaming config schema_version must be 1")
+        schema_version = payload["schema_version"]
+        if (
+            isinstance(schema_version, bool)
+            or not isinstance(schema_version, int)
+            or schema_version not in {1, 2}
+        ):
+            raise ValueError("streaming config schema_version must be 1 or 2")
 
         source = _table(payload, "source")
         runtime = _table(payload, "runtime")
         output = _table(payload, "output")
         recipe = _table(payload, "recipe")
         _exact_keys(source, {"root", "include_paths", "block"}, "source")
-        _exact_keys(runtime, {"streaming_root", "workers"}, "runtime")
+        if schema_version == 1:
+            _exact_keys(runtime, {"streaming_root", "workers"}, "runtime")
+        else:
+            _exact_keys(
+                runtime,
+                {
+                    "pfs_root",
+                    "streaming_root",
+                    "stage_workers",
+                    "conversion_workers",
+                    "prefetch_target_bytes",
+                    "prefetch_max_bytes",
+                    "prefetch_max_episodes",
+                },
+                "runtime",
+            )
         _exact_keys(
             output,
             {"lerobot_root", "dataset_name", "repo_id"},
@@ -83,28 +122,21 @@ class StreamingConversionConfig:
         )
         _exact_keys(recipe, {"name", "profile", "task"}, "recipe")
 
-        workers = runtime["workers"]
-        if isinstance(workers, bool) or not isinstance(workers, int) or workers < 1:
-            raise ValueError("runtime.workers must be a positive integer")
+        runtime_config = _runtime_config(schema_version, runtime)
         dataset_name = _single_component(
             output["dataset_name"], "output.dataset_name"
         )
         repo_id = _repo_id(output["repo_id"])
         if repo_id.partition("/")[2] != dataset_name:
             raise ValueError("output.repo_id dataset must equal output.dataset_name")
-        return cls(
-            schema_version=1,
+        config = cls(
+            schema_version=schema_version,
             source=SourceConfig(
                 root=_absolute_path(source["root"], "source.root"),
                 include_paths=_include_paths(source["include_paths"]),
                 block=_block_names(source["block"]),
             ),
-            runtime=RuntimeConfig(
-                streaming_root=_absolute_path(
-                    runtime["streaming_root"], "runtime.streaming_root"
-                ),
-                workers=workers,
-            ),
+            runtime=runtime_config,
             output=OutputConfig(
                 lerobot_root=_absolute_path(
                     output["lerobot_root"], "output.lerobot_root"
@@ -118,6 +150,65 @@ class StreamingConversionConfig:
                 task=_non_empty_string(recipe["task"], "recipe.task"),
             ),
         )
+        if isinstance(runtime_config, PrefetchRuntimeConfig):
+            _require_within(
+                config.output.lerobot_root,
+                runtime_config.pfs_root,
+                "output.lerobot_root",
+            )
+        return config
+
+
+def _runtime_config(
+    schema_version: int,
+    value: dict[str, object],
+) -> RuntimeSettings:
+    streaming_root = _absolute_path(value["streaming_root"], "runtime.streaming_root")
+    if schema_version == 1:
+        return RuntimeConfig(
+            streaming_root=streaming_root,
+            workers=_positive_int(value["workers"], "runtime.workers"),
+        )
+
+    pfs_root = _absolute_path(value["pfs_root"], "runtime.pfs_root")
+    _require_within(streaming_root, pfs_root, "runtime.streaming_root")
+    stage_workers = _bounded_positive_int(
+        value["stage_workers"],
+        "runtime.stage_workers",
+        MAX_STAGE_WORKERS,
+    )
+    conversion_workers = _bounded_positive_int(
+        value["conversion_workers"],
+        "runtime.conversion_workers",
+        MAX_CONVERSION_WORKERS,
+    )
+    target_bytes = _bounded_positive_int(
+        value["prefetch_target_bytes"],
+        "runtime.prefetch_target_bytes",
+        MAX_PREFETCH_BYTES,
+    )
+    max_bytes = _bounded_positive_int(
+        value["prefetch_max_bytes"],
+        "runtime.prefetch_max_bytes",
+        MAX_PREFETCH_BYTES,
+    )
+    if target_bytes > max_bytes:
+        raise ValueError(
+            "runtime.prefetch_target_bytes must not exceed prefetch_max_bytes"
+        )
+    return PrefetchRuntimeConfig(
+        pfs_root=pfs_root,
+        streaming_root=streaming_root,
+        stage_workers=stage_workers,
+        conversion_workers=conversion_workers,
+        prefetch_target_bytes=target_bytes,
+        prefetch_max_bytes=max_bytes,
+        prefetch_max_episodes=_bounded_positive_int(
+            value["prefetch_max_episodes"],
+            "runtime.prefetch_max_episodes",
+            MAX_PREFETCH_EPISODES,
+        ),
+    )
 
 
 def _table(payload: dict[str, object], name: str) -> dict[str, object]:
@@ -143,6 +234,26 @@ def _absolute_path(value: object, label: str) -> Path:
     if not path.is_absolute():
         raise ValueError(f"{label} must be an absolute path")
     return path
+
+
+def _positive_int(value: object, label: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise ValueError(f"{label} must be a positive integer")
+    return value
+
+
+def _bounded_positive_int(value: object, label: str, maximum: int) -> int:
+    number = _positive_int(value, label)
+    if number > maximum:
+        raise ValueError(f"{label} must not exceed {maximum}")
+    return number
+
+
+def _require_within(path: Path, root: Path, label: str) -> None:
+    normalized_path = path.resolve(strict=False)
+    normalized_root = root.resolve(strict=False)
+    if normalized_path == normalized_root or normalized_root not in normalized_path.parents:
+        raise ValueError(f"{label} must be below runtime.pfs_root")
 
 
 def _single_component(value: object, label: str) -> str:

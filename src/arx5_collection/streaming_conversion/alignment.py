@@ -5,6 +5,7 @@ from datetime import date
 from pathlib import Path
 from typing import TextIO
 
+from .config import PrefetchRuntimeConfig
 from .config import StreamingConversionConfig
 from .models import DiscoveryResult
 
@@ -33,6 +34,12 @@ def build_alignment_report(
     output_path = output_override or config.output.dated_path(today)
     if not output_path.is_absolute():
         raise ValueError("streaming output override must be an absolute path")
+    if (
+        isinstance(config.runtime, PrefetchRuntimeConfig)
+        and config.runtime.pfs_root.resolve(strict=False)
+        not in output_path.resolve(strict=False).parents
+    ):
+        raise ValueError("streaming output must be below runtime.pfs_root")
     return AlignmentReport(config, discovery, output_path)
 
 
@@ -43,10 +50,33 @@ def render_alignment(report: AlignmentReport) -> str:
         f"source_root: {discovery.source_root}",
         f"streaming_root: {report.config.runtime.streaming_root}",
         f"output: {report.output_path}",
-        f"workers: {report.config.runtime.workers}",
-        f"training_task: {report.config.recipe.task}",
-        "include_paths:",
     ]
+    runtime = report.config.runtime
+    if isinstance(runtime, PrefetchRuntimeConfig):
+        lines.extend(
+            [
+                "runtime_mode: bounded_prefetch",
+                f"pfs_root: {runtime.pfs_root}",
+                f"stage_workers: {runtime.stage_workers}",
+                f"conversion_workers: {runtime.conversion_workers}",
+                f"prefetch_target_bytes: {runtime.prefetch_target_bytes}",
+                f"prefetch_max_bytes: {runtime.prefetch_max_bytes}",
+                f"prefetch_max_episodes: {runtime.prefetch_max_episodes}",
+            ]
+        )
+    else:
+        lines.extend(
+            [
+                "runtime_mode: legacy_shared_pool",
+                f"workers: {runtime.workers}",
+            ]
+        )
+    lines.extend(
+        [
+            f"training_task: {report.config.recipe.task}",
+            "include_paths:",
+        ]
+    )
     lines.extend(f"  - {path}" for path in report.config.source.include_paths)
     lines.append("block:")
     lines.extend(f"  - {name}" for name in report.config.source.block)

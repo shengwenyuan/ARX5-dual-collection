@@ -11,8 +11,10 @@ from .alignment import render_alignment
 from .alignment import require_enter_confirmation
 from .builder import SnapshotBuildResult
 from .builder import build_lerobot_v21_snapshot
+from .config import PrefetchRuntimeConfig
 from .config import SourceConfig
 from .config import StreamingConversionConfig
+from .coordinator import CoordinatorProgress
 from .coordinator import StreamingCoordinator
 from .discovery import discover_episodes
 from .manifest import RunManifest
@@ -110,7 +112,8 @@ def execute_streaming_conversion(
         recipe,
         config.recipe.task,
         manifest.definition.repo_id,
-        config.runtime.workers,
+        config.runtime,
+        progress_reporter=lambda progress: _write_progress(output_stream, progress),
     ).run()
     snapshot = builder(
         manifest,
@@ -170,7 +173,6 @@ def _validate_resume_config(
         "source_root": config.source.root.resolve(strict=True),
         "streaming_root": config.runtime.streaming_root,
         "repo_id": config.output.repo_id_for(frozen.output_path),
-        "workers": config.runtime.workers,
         "recipe_name": config.recipe.name,
         "recipe_profile": config.recipe.profile,
         "recipe_task": config.recipe.task,
@@ -179,14 +181,75 @@ def _validate_resume_config(
         "source_root": frozen.source_root,
         "streaming_root": frozen.streaming_root,
         "repo_id": frozen.repo_id,
-        "workers": frozen.workers,
         "recipe_name": frozen.recipe_name,
         "recipe_profile": frozen.recipe_profile,
         "recipe_task": frozen.recipe_task,
     }
+    current.update(_config_runtime_values(config))
+    expected.update(_frozen_runtime_values(manifest))
     changed = [key for key, value in current.items() if value != expected[key]]
     if changed:
         raise ValueError(f"resume config differs from frozen run: {changed}")
+
+
+def _config_runtime_values(config: StreamingConversionConfig) -> dict[str, object]:
+    runtime = config.runtime
+    if isinstance(runtime, PrefetchRuntimeConfig):
+        return {
+            "runtime_mode": "bounded_prefetch",
+            "pfs_root": runtime.pfs_root,
+            "stage_workers": runtime.stage_workers,
+            "conversion_workers": runtime.conversion_workers,
+            "prefetch_target_bytes": runtime.prefetch_target_bytes,
+            "prefetch_max_bytes": runtime.prefetch_max_bytes,
+            "prefetch_max_episodes": runtime.prefetch_max_episodes,
+        }
+    return {
+        "runtime_mode": "legacy_shared_pool",
+        "workers": runtime.workers,
+    }
+
+
+def _frozen_runtime_values(manifest: RunManifest) -> dict[str, object]:
+    frozen = manifest.definition
+    if frozen.workers is not None:
+        return {
+            "runtime_mode": "legacy_shared_pool",
+            "workers": frozen.workers,
+        }
+    return {
+        "runtime_mode": "bounded_prefetch",
+        "pfs_root": frozen.pfs_root,
+        "stage_workers": frozen.stage_workers,
+        "conversion_workers": frozen.conversion_workers,
+        "prefetch_target_bytes": frozen.prefetch_target_bytes,
+        "prefetch_max_bytes": frozen.prefetch_max_bytes,
+        "prefetch_max_episodes": frozen.prefetch_max_episodes,
+    }
+
+
+def _write_progress(
+    output_stream: TextIO,
+    progress: CoordinatorProgress,
+) -> None:
+    output_stream.write(
+        json.dumps(
+            {
+                "streaming_progress": {
+                    "stage_active": progress.stage_active,
+                    "stage_ready": progress.stage_ready,
+                    "convert_active": progress.convert_active,
+                    "convert_ready": progress.convert_ready,
+                    "reserved_staging_bytes": progress.reserved_staging_bytes,
+                    "reserved_staging_episodes": progress.reserved_staging_episodes,
+                    "states": progress.states,
+                }
+            },
+            sort_keys=True,
+        )
+        + "\n"
+    )
+    output_stream.flush()
 
 
 def _default_run_id(value: datetime, dataset_name: str) -> str:

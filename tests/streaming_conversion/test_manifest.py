@@ -7,6 +7,7 @@ import tempfile
 import unittest
 
 from arx5_collection.streaming_conversion.config import OutputConfig
+from arx5_collection.streaming_conversion.config import PrefetchRuntimeConfig
 from arx5_collection.streaming_conversion.config import RecipeConfig
 from arx5_collection.streaming_conversion.config import RuntimeConfig
 from arx5_collection.streaming_conversion.config import SourceConfig
@@ -156,6 +157,49 @@ class RunManifestTest(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "event_index must be contiguous"):
             RunManifest.open(run.run_dir)
+
+    def test_opens_legacy_run_schema_two_for_existing_resume(self) -> None:
+        run = self._create()
+        path = run.run_dir / "run.json"
+        value = json.loads(path.read_text())
+        value["schema_version"] = 2
+        value["workers"] = value.pop("runtime")["workers"]
+        path.write_text(json.dumps(value))
+
+        reopened = RunManifest.open(run.run_dir)
+
+        self.assertEqual(reopened.definition.workers, 25)
+        self.assertIsNone(reopened.definition.stage_workers)
+
+    def test_freezes_bounded_prefetch_runtime(self) -> None:
+        config = StreamingConversionConfig(
+            2,
+            SourceConfig(self.root / "source", (Path("task"),), ()),
+            PrefetchRuntimeConfig(
+                self.root,
+                self.root / "streaming-v2",
+                16,
+                64,
+                1_500_000_000_000,
+                2_000_000_000_000,
+                128,
+            ),
+            OutputConfig(self.root / "lerobot", "fold", "local/fold"),
+            RecipeConfig("pi05-equal-eef-v3", "recipe.toml", "folding the cloth"),
+        )
+        run = RunManifest.create(
+            config,
+            self.discovery,
+            self.output,
+            "prefetch-run",
+            clock=lambda: NOW,
+        )
+
+        self.assertIsNone(run.definition.workers)
+        self.assertEqual(run.definition.pfs_root, self.root)
+        self.assertEqual(run.definition.stage_workers, 16)
+        self.assertEqual(run.definition.conversion_workers, 64)
+        self.assertEqual(run.definition.prefetch_max_bytes, 2_000_000_000_000)
 
     def _create(self) -> RunManifest:
         return RunManifest.create(

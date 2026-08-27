@@ -143,6 +143,22 @@ class StreamingApplicationTest(unittest.TestCase):
                 builder=_fake_builder,
             )
 
+    def test_prefetch_resume_rejects_changed_frozen_capacity(self) -> None:
+        self._write_prefetch_config(conversion_workers=64)
+        self._create_manifest("resume-prefetch")
+        self._write_prefetch_config(conversion_workers=80)
+
+        with self.assertRaisesRegex(ValueError, "conversion_workers"):
+            execute_streaming_conversion(
+                StreamingRunRequest(
+                    self.config_path,
+                    resume_run_id="resume-prefetch",
+                ),
+                _TTY(),
+                _TTY(),
+                builder=_fake_builder,
+            )
+
     def test_request_rejects_ambiguous_run_controls(self) -> None:
         for request, reason in (
             (
@@ -195,6 +211,36 @@ block = []
 [runtime]
 streaming_root = "{self.root / 'streaming'}"
 workers = {workers}
+
+[output]
+lerobot_root = "{self.root / 'lerobot'}"
+dataset_name = "fold"
+repo_id = "local/fold"
+
+[recipe]
+name = "pi05-equal-eef-v3"
+profile = "{RECIPE}"
+task = "folding the cloth"
+'''
+        )
+
+    def _write_prefetch_config(self, *, conversion_workers: int) -> None:
+        self.config_path.write_text(
+            f'''schema_version = 2
+
+[source]
+root = "{self.source}"
+include_paths = ["task"]
+block = []
+
+[runtime]
+pfs_root = "{self.root}"
+streaming_root = "{self.root / 'streaming'}"
+stage_workers = 2
+conversion_workers = {conversion_workers}
+prefetch_target_bytes = 1000
+prefetch_max_bytes = 2000
+prefetch_max_episodes = 4
 
 [output]
 lerobot_root = "{self.root / 'lerobot'}"
