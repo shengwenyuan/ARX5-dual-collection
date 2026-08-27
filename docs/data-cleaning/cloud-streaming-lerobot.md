@@ -346,6 +346,7 @@ discovered
 - 未提交的隐藏临时 staging 且没有活动 lease：清理后重试，不发布。
 - source identity 在确认后改变：标记 `discarded/source_changed_after_confirmation`，不重新发现或替换。
 - failed：保留结构化错误，可按稳定 reason code 选择重试。
+- 已提交但校验失败的 staging cache：移入 run 内 `quarantine/staging/` 保留审计证据，再从冻结 source identity 重建，不重复消费损坏 cache。
 - excluded/discarded：同一 run 恢复时不重复转换。
 - Coordinator 崩溃不影响已经提交的 Fragment。
 
@@ -356,7 +357,7 @@ discovered
 复杂参数统一进入版本化 TOML profile。CLI 只保留配置路径和可选的绝对输出覆盖：
 
 ```toml
-schema_version = 2
+schema_version = 3
 
 [source]
 root = "/mnt/bos/datainfra-demo"
@@ -371,9 +372,11 @@ pfs_root = "/mnt/pfs/swy"
 streaming_root = "/mnt/pfs/swy/dataset/1011/arx5/fold_cloth/streaming"
 stage_workers = 16
 conversion_workers = 64
-prefetch_target_bytes = 1_500_000_000_000
-prefetch_max_bytes = 2_000_000_000_000
-prefetch_max_episodes = 128
+ready_low_bytes = 128_000_000_000
+ready_high_bytes = 256_000_000_000
+temporary_hard_max_bytes = 2_000_000_000_000
+max_staged_episodes = 128
+min_free_bytes = 5_000_000_000_000
 
 [output]
 lerobot_root = "/mnt/pfs/swy/dataset/1011/arx5/fold_cloth/lerobot"
@@ -387,6 +390,10 @@ task = "folding the cloth"
 ```
 
 `include_paths` 是本次 LeRobot 的显式来源，不再另设隐式日期参数。`block` 默认空列表，示例值只是配方选择，不是代码内建规则。
+
+schema v3 的 low/high 只控制 conversion 前方的 ready buffer；`temporary_hard_max_bytes` 与 `min_free_bytes` 是独立安全边界。`stage_workers=16`、`conversion_workers=64` 和 2 TB 上限属于当前 `pi05-cpu` deployment profile，不是通用库的跨设备常量。schema v1/v2 仅用于旧 run 的原语义 resume。
+
+每个 run 在 `metrics.jsonl` 持久化 stage/conversion wall time、源字节、frame 数、内部 conversion phase、队列水位、累计吞吐和 PFS 剩余空间。标准输出保留同一份 progress 快照，便于 tmux 直接监督。
 
 首版 recipe 的 `task` 是临时兼容字段，字符串原样进入全部训练 Segment。真实 Episode metadata 目前仍写入通用采集描述；采集侧修复见 `docs/episode-runtime/task-description-todo.md`。该 TODO 验收前不允许从目录名猜测 task；验收后再以显式 schema 版本迁移到逐 Episode metadata task。
 

@@ -1,279 +1,156 @@
-# Streaming MCAP → LeRobot 吞吐提升计划
+# Streaming MCAP → LeRobot 第二轮吞吐改进计划
 
-- Status: `completed`
-- Date: `2026-08-26`
-- Host: `pi05-cpu`
-- Scope: BOS 只读 staging、Episode 级并行转换、有界预取、资源上限与可恢复性
-- Non-goal: 修改 MCAP 内容、数据选择语义、gripper 契约或当前正在运行的 run
+- Status: `implementation-in-progress`
+- Date: `2026-08-27`
+- Baseline host: `pi05-cpu`
+- Predecessor: commits `8ecc80b`, `75ae295`, `0f261db`, `1495f89`
+- Scope: 回顾第一轮代码，收紧调度语义，建立可解释的性能观测，再优化单 Episode 转换成本
+- Non-goal: 修改 gripper、selection、fps、分辨率、CRF 或其他训练语义
 
-## 问题定位
+## 已知事实
 
-当前 `StreamingCoordinator` 使用一个 `ProcessPoolExecutor`，staging 和 conversion 共用同一个 `workers` 上限，且已完成 staging 的 conversion 优先。
+1. BOS 只读、PFS 落盘的整条 staging 路径在 16 readers 时实测 `1.216 GB/s`；24 readers 退化到约 `0.199 GB/s`。这是当前 BOS→PFS 路径实测值，不是 BOS 服务的理论上限。
+2. 96 个最小 Episode、约 `0.952 TB / 211,766 frames` 的端到端基线：64 conversion workers 用时 `1899.5 s`，80 workers 用时 `2078.2 s`，后者慢 `8.6%`。
+3. 64/80 两档无新增 CPU throttling、OOM 或产物数量差异。增加 worker 并没有增加有效 conversion 并发。
+4. 基线端到端平均消费源数据约 `0.50 GB/s`，低于 staging 的 `1.216 GB/s`。因此继续扩大 BOS 预取量不是当前提速主线。
+5. 第一轮样本特意选了最小的 96 个 Episode，可用于比较 64/80，但不足以证明 64 是全局最优，也不应直接用 Episodes/hour 预测全量时间。
 
-这会导致：
+## 上一轮 commit 处置
 
-1. 启动阶段 BOS 并发读取，随后 conversion 占满 worker，BOS 读取变为间歇式。
-2. 无法独立调整 BOS/PFS I/O 并发和 CPU 转换并发。
-3. 当 conversion 吞吐足够高时，后续 Episode 可能等待 BOS 复制；当 staging 过快时，又缺少独立的字节级空间边界。
+| Commit | 结论 | 处置 |
+| --- | --- | --- |
+| `8ecc80b` bounded prefetch | 架构方向正确，但混入了主机/任务策略和未完整的水位语义 | 保留解耦、原子性和 resume；重构容量与观测部分 |
+| `75ae295` benchmark tool | 保留了实验证据，但脚本是一次性 campaign runner | 用通用 benchmark harness 替换，再删除一次性逻辑 |
+| `0f261db` PTY confirm | 仅用于绕过交互式 ENTER，不应成为正式执行依赖 | 删除 PTY 注入，benchmark 改用已冻结 manifest 的内部入口 |
+| `1495f89` results/docs | 实测结果有价值，但“正式值冻结”表述过强 | 保留数据；改为 `pi05-cpu` 当前 baseline，不当作跨设备上限 |
 
-目标不是追求最大进程数，而是让 BOS 持续处于有效顺序读取、conversion 不等待数据，同时确保 PFS 占用不失控。
+## 继续保留的逻辑
 
-## 目标架构
+- BOS source 只读，selection manifest 在执行前冻结。
+- staging 使用独立 `ThreadPoolExecutor`，conversion 使用 `ProcessPoolExecutor(spawn)`。
+- staging 和 conversion 可重叠，一方占满不会消耗另一方的 worker slot。
+- staging 和 Fragment 使用隐藏临时目录、校验后原子提交。
+- 成功/Excluded Episode 精确释放 staging；失败现场不为了继续调度而静默删除。
+- run 内冻结调度参数，resume 拒绝无声更换语义。
+- 写路径必须位于配置的 PFS containment root 下。
+- `stage_workers=16` 和 `conversion_workers=64` 作为 `pi05-cpu` 下一轮基线，直到有代表性新数据否定它们。
 
-```text
-Frozen source manifest
-        |
-        v
-bounded stage scheduler --reserve source bytes--> stage executor
-        |                                          (BOS -> PFS)
-        |                                                |
-        +<----------- validated StageReceipt ------------+
-                         |
-                         v
-              bounded ready-stage queue
-                         |
-                         v
-                 conversion executor
-                         |
-                         v
-              committed Episode fragment
-```
+## 需要删除或替换的逻辑
 
-### 1. 解耦执行器
+### 1. 删除通用库中的主机/任务硬编码
 
-- staging 使用独立执行器，首选小型 `ThreadPoolExecutor`。复制为大文件顺序 I/O，无需为每个 copy 付出 Python spawn 成本。
-- conversion 继续使用 `ProcessPoolExecutor(spawn)`，保持 ROS、PyAV/ffmpeg、LeRobot writer 的进程隔离。
-- Coordinator 仍是 manifest 和 Job state 的唯一写者。
-- staging 完成顺序不影响最终 LeRobot 顺序；Builder 仍按冻结 manifest 确定性组装。
+当前 `MAX_STAGE_WORKERS=32`、`MAX_CONVERSION_WORKERS=112`、`MAX_PREFETCH_BYTES=2 TB` 和 `MAX_PREFETCH_EPISODES=128` 被写在通用 config parser 中。它们来自本次 `pi05-cpu/fold_cloth` 策略，不是数据格式或转换算法的通用限制。
 
-### 2. 有界预取
+替换方案：
 
-同时使用 Episode 数和预留字节数两道硬上限。仅限制 Episode 数不足以约束空间，因为当前单集 MCAP 约为 `7–23.3 GB`。
+- 通用库只校验正整数、水位关系和路径 containment。
+- `2 TB`、`16/64` 和任务 Episode 上限放入 deployment profile 或显式 resource policy。
+- 若需防止操作员误配，由 profile lint 或 host policy 拒绝，不由通用 schema 假定全球上限。
 
-提交 staging 前使用冻结 `SelectionEntry.mcap.size` 预留完整容量：
+### 2. 替换 `prefetch_target_bytes` 的假软水位
 
-```text
-can_stage =
-  reserved_episode_count + 1 <= prefetch_max_episodes
-  and reserved_staging_bytes + candidate.mcap.size <= prefetch_max_bytes
-```
+当前实现在 `reserved_bytes >= prefetch_target_bytes` 时立即停止新 staging，没有 low/high hysteresis。失败数据被保留后，还可能在未达 `prefetch_max_bytes` 时将调度终止。
 
-`reserved_staging_bytes` 必须包括：
+替换为两类独立概念：
 
-- 正在复制的隐藏临时 staging。
-- 已提交、等待 conversion 的 staging。
-- 正在 conversion 使用的 staging。
-- 因 failed/discarded 而保留的 staging，直到显式处理。
+- `ready_low_bytes / ready_high_bytes`：只管理可供 conversion 消费的 staging 缓冲，低于 low 后补到 high。
+- `temporary_hard_max_bytes`：统计本 run staging、隐藏 partial、保留失败现场和 Fragment 的临时占用，任何时候都不可越过。
 
-committed/excluded 继续精确删除本 Episode staging 并释放预留。不允许为继续预取而静默删除失败现场；若失败数据耗尽预算，Coordinator 应停止新 staging 并给出明确原因。
+2 TB 仍作为本任务的部署硬上限保留，但不再把 1.5 TB 当作日常必填充目标。第二轮从 `128/256 GB` low/high 候选开始，通过 conversion 空转时间决定是否扩大。
 
-### 3. 背压与公平性
+### 3. 删除无代表性的 benchmark 假设
 
-- conversion 只要有 `StageReceipt` 且有空闲 conversion slot 就立即执行。
-- staging 在未达硬上限时持续补充，不再受 conversion future 数量挤占。
-- 首版保持 source manifest 顺序；当队首 Episode 无法放入剩余字节预算时等待空间，不做自动跨越，使调度和恢复更容易审计。
-- 可选水位仅用于减少频繁启停：低于 target 时补充，达到 max 时停止。max 始终是硬边界。
+当前脚本硬编码了 PFS root、日期型 run-id、dataset/repo/task/recipe，并只选最小 Episode。这些逻辑不进入下一版 harness。
 
-## 建议配置模型
+新 harness 必须：
 
-新 run 使用 streaming config schema v2：
+- 全部输入通过 CLI/profile 显式传入，run-id 自动唯一且可重入检查。
+- 从冻结 manifest 按 source bytes/frame count/station/date 分层取样，不再只选最小项。
+- 不向生产 CLI 伪造 PTY ENTER；使用已冻结 manifest 的 benchmark 内部入口。
+- 同时输出 source GB/s、frames/s、wall time、phase time、p50/p95 Episode time、CPU/RSS/I/O pressure 和错误数。
+- cleanup 只能删除本 benchmark run 的隔离目录，metrics 与配置永久保留。
 
-```toml
-schema_version = 2
+### 4. 暂不删除 legacy shared-pool
 
-[runtime]
-streaming_root = "/mnt/pfs/swy/dataset/1011/arx5/fold_cloth/streaming"
+schema v1/run schema v2 的 `_run_legacy` 仍是旧 run resume 兼容边界，现在删除会破坏可恢复性。处置方式：
 
-# 两条独立流水线
-stage_workers = 16
-conversion_workers = 64
+1. 新 run 默认使用新 schema，不再新增 v1 profile。
+2. 保留 v1 读取和 resume，并加 deprecated 提示。
+3. 确认没有未完成 v1 run，并经过一个完整发布周期后，再单独提交删除。
 
-# 软目标与硬上限
-prefetch_target_bytes = 1_500_000_000_000
-prefetch_max_bytes = 2_000_000_000_000
-prefetch_max_episodes = 128
-```
+## 第二轮开发
 
-兼容性边界：
+### P0：先修正调度和 resume 语义
 
-- 当前 schema v1 及其 `workers` 保留 legacy 读取和 resume 语义，不被新调度默默重解释。
-- 当前运行中的 run 不迁移、不修改冻结参数。
-- v2 把全部调度参数写入 `run.json`；resume 时必须精确匹配，防止恢复时偷换资源和空间语义。
+1. 引入明确的 capacity ledger，区分 `active_stage`、`ready_stage`、`active_conversion`、`retained_failure`、`fragment` 和 hidden partial 字节。
+2. 硬上限使用“已占用 + 待提交预留”判断；同时增加 PFS 最小剩余空间停止线。
+3. 失败保留数据只在触发 hard max 时阻止新 staging，不得因 ready high watermark 导致假死。
+4. resume 遇到无效或 identity 不匹配的 committed staging 时，移入 run 内 quarantine 保留证据，再从冻结 source identity 重建；不得反复重入同一失败目录。
+5. 容量账本和作业状态的更新保持单写者，并通过故障注入验证 crash/retry。
 
-## 起始值与待对齐上限
+### P1：补齐性能观测
 
-下表的“起始值”是实现后的首轮压测值，不是最终性能上限。“候选范围”需要结合实际 cgroup 和存储指标对齐。
+当前 progress 只有队列数和预留字节，无法说明 conversion 慢在哪一段。下一版需要持久化 `metrics.jsonl`：
 
-| 参数 | 起始值 | 候选范围 | 主要边界 |
-| --- | ---: | ---: | --- |
-| `stage_workers` | 16 | 8 / 16 / 24 / 32 | BOS 总吞吐平台、I/O wait、PFS 写带宽 |
-| `conversion_workers` | 64 | 40 / 64 / 80 / 96 | cgroup CPU quota、CPU throttling、单 worker RSS、SVT 内部线程 |
-| `prefetch_target_bytes` | 1.5 TB | 已对齐 | 让 BOS 大批量连续读取，硬上限前留 0.5 TB 弹性 |
-| `prefetch_max_bytes` | 2 TB | 已对齐 | 本任务 staging 的行政硬上限，不因 PFS 实际空间较大而放宽 |
-| `prefetch_max_episodes` | 128 | 已对齐 | 防止大量小 Episode 绕过字节约束，字节上限仍为主约束 |
+- stage queue wait、copy wall time、bytes/s、短窗口和累计 GB/s。
+- conversion queue wait 以及 load/clean/classify/select/export/video/validate 各 phase wall time。
+- Episode 级 source bytes、frames、segments、p50/p95/max wall time。
+- conversion workers 实际 active 数、frames/s、source GB/s 和长尾等待时间。
+- cgroup CPU use/throttling、anon/file memory、I/O pressure、PFS 剩余空间。
+- 基于已完成 bytes/frames 的 ETA，目标是运行 20% 后误差不超过 `±15%`。
 
-### 2026-08-26 资源实测与决策
+### P1：建立有代表性的新基线
 
-`pi05-cpu` 当前只读检查：
+1. 从全量 manifest 选择小/中/大 Episode，覆盖 w3/w4 和不同日期，固定一份 stratified sample。
+2. staging 基线仍使用 16 readers，conversion 并发补测 `48/56/64`。64 是 baseline，不再向 80/96 扩展。
+3. 分开记录 staging、Episode conversion、Builder 和 final validation，不只看一个端到端 wall time。
+4. 确认新水位下 conversion starvation 接近零；如 `128/256 GB` 已足够，不再扩大 staging。
 
-- CPU quota: `12500000 / 100000 = 125 cores`。
-- cpuset: `0-191`，可见 `192` logical CPUs。
-- memory limit: `268435456000 bytes = 250 GiB`。
-- PID limit: `629145`，file descriptor soft limit: `1048576`。
-- `/mnt/pfs/swy` 可用约 `179 TB`，物理空间不是当前限制。
-- 正在运行的 `25` 个 conversion worker 合计约使用 `22 cores / 43 GiB RSS`；单 worker 约 `0.85–0.95 core / 1.7–1.8 GiB RSS`。
-- 单 worker 可见 `170+` 线程，个别更高。线程多不等于同时占用同样多 CPU，但扩大 worker 后需要观察调度开销。
+### P2：单 Episode 转换 A/B
 
-因此暂不申请更高配额。新调度的 conversion 首轮直接使用 `64 workers`，再比较 `80/96`。只有当 `96 workers` 仍显著提高 Episodes/hour，且 CPU 或内存已接近硬上限，才形成明确的扩容申请依据。
+只在 phase metrics 证明瓶颈后执行，每次只改一项：
 
-并发递增的停止条件为：相邻档聚合 Episodes/hour 收益低于 `10%`、memory current 超过 `220 GiB`、出现持续 CPU throttling，或 conversion 错误率/PFS 延迟上升。如果 `80 -> 96` 仍有充分收益且上述边界均未触发，可以再短测 `112 workers`，但不直接作为正式默认值。
+1. 优先检查 MCAP 重复扫描和中间数据重复物化，尝试复用索引/一次解码结果。
+2. 根据 SVT 实际 CPU/线程数测试 encoder 内部线程上限，避免 64 个 Episode worker 内部过度订阅。
+3. SVT preset 候选必须比较 wall time、视频字节、可解码性和固定帧抽检；未通过前保持 preset 8 / CRF 30。
+4. TorchCodec 只在其平台 wheel 和视频解码契约可验证时测试；当前 warning 本身不构成安装理由。
 
-SVT-AV1 内部会创建编码线程，所以“conversion worker 尽量大”的定义是聚合 Episodes/hour 仍在上升，而不是把进程数直接开到 CPU 或 PID 硬上限。首轮不改 SVT 线程参数；若 `64 -> 80 -> 96` 的扩展效率明显下降，再定向约束 encoder 线程。
+## Schema 与兼容性
 
-PFS 边界冻结为：
+- 如果替换水位字段，新 streaming config 使用 schema v3，不在 v2 上重解释旧字段。
+- 新 run manifest 升级 schema，完整冻结 resource policy 和容量语义。
+- v1/v2 config 及旧 run 继续按原语义读取/resume，禁止在 resume 时自动迁移。
+- 新 profile 不再设置 `prefetch_target_bytes=1.5 TB`；2 TB 仅出现在 `pi05-cpu` 部署策略中。
 
-- staging 和 streaming 中间产物必须位于 `/mnt/pfs/swy/` 下，不考虑本地 NVMe。
-- 本任务 staging 预留总量最多 `2_000_000_000_000 bytes`，在线更改不允许越过该上限。
-- 仅在最终 LeRobot 通过验证、snapshot 与 reports 已提交后，自动释放 staging 和 Fragments。
-- 失败时保留可 resume 现场，但仍计入 2 TB 上限；不为继续调度而静默删除。
+## 开发与 commit 顺序
 
-并发上限不应由代码猜测。实施前需读取并记录：
+1. `test: specify streaming capacity and invalid-stage recovery`
+   - 先增加会在当前实现上失败的水位、hard max、失败保留、无效 staging resume 和 PFS free-space 测试。
+2. `refactor: separate streaming buffer and capacity policies`
+   - 只实现 capacity ledger、low/high 水位和 schema 兼容。
+3. `feat: persist streaming phase metrics`
+   - 独立增加 phase timing、资源采样和 ETA，不混入 encoder 调参。
+4. `tools: generalize streaming benchmark harness`
+   - 先用新 harness 读取旧 metrics 并复现 baseline，再删除硬编码和 PTY 逻辑。
+5. `perf: optimize measured conversion bottleneck`
+   - 每个 A/B 候选独立 commit，只保留通过性能与产物契约的项。
+6. `docs: freeze pi05 streaming profile after round two`
+   - 最后才更新正式 profile、ETA 和运维指令。
 
-- `cpu.max`/cgroup v1 quota、cpuset、可见 CPU 和实际 throttling 比例。
-- cgroup memory limit、单 conversion worker RSS 的 p50/p95/max。
-- PFS 剩余空间与本任务 2 TB staging 预算的实时使用量。
-- BOS 在 8/16/24/32 个顺序 reader 下的聚合 GB/s 和错误/限流率。
-- PFS 同时写 staging、Fragment 和视频时的吞吐与延迟。
-- process/file descriptor/PID 上限，以及每个 SVT-AV1 进程的实际线程数。
+每个 commit 必须可单独回滚；不再将 schema、scheduler、benchmark、文档和 1000+ 行测试混入同一个功能 commit。
 
-## 可继续提速的参数层级
+## 静态与实测验收
 
-后续对齐时把参数分为三类，避免把资源扩容和数据语义变更混在一起。
+- 单元测试覆盖上述 P0 状态，全量测试无回归。
+- 新 run 的任何临时占用不超 deployment hard max，PFS 低于保留空间时不再发起 staging。
+- 中断/resume 不重复 committed conversion，无效 staging 不循环失败，失败现场可审计。
+- 同一 stratified sample 的 committed/excluded/discarded/failed、Episode 数、frame 数、gripper contract 和视频可解码性与 baseline 一致。
+- 新默认配置相对代表性 baseline 至少降低 `15%` wall time；如果未达到，保留 16/64 基线并不合并未证明的性能改动。
+- 300+ Episode 正式全量前，先用新 metrics 完成一次代表性小样本，给出按 bytes/frames 加权的 ETA 和资源边界。
 
-### A. 只影响吞吐，优先拉高
+## 当前决策
 
-- staging/conversion 并发度。
-- 预取 target/max bytes 和 Episode 上限。
-- CPU、RAM、PID/file descriptor 配额。
-- staging 位置固定为 `/mnt/pfs/swy/` 下，优化对象只是并发和搬运次数。
-- 解码、resize 和 encoder 内部线程数，防止多层过度订阅。
-- Builder 的 I/O 路径和临时文件复制放大。
-
-### B. 可能改变性能和产物字节，需要小样本对照验证
-
-- TorchCodec 与 PyAV 解码后端。
-- SVT-AV1 `preset`、encoder threads/tile 设置。
-- 视频编码的临时缓存和数据搬运方式。
-- MCAP clean/select/export 多次扫描的合并或索引复用。
-
-“第二轮 A/B”只是第二阶段小样本对照：固定同一批 `2–4` 个 Episode，基线组使用当前 PyAV + SVT preset 8，候选组每次只改一项，比较 wall time、CPU/RSS、frames 与最终验证。它不是重做 300+ Episode，也不是新建训练数据版本。
-
-第一阶段只做调度与资源提速，保持 PyAV、SVT preset 8、CRF 30 和 MCAP 扫描语义不变。TorchCodec/SVT preset/MCAP 扫描优化不阻塞本次方案，等第一阶段找到新的主瓶颈后再决定是否执行小样本对照。
-
-### C. 可能影响训练语义，默认不为提速修改
-
-- 输出分辨率、fps、帧对齐策略。
-- CRF/码率、色彩格式、位深。
-- selection tolerance、数据排除规则、gripper 归一化契约。
-
-## 可观测性
-
-每 `5–10 s` 输出一次轻量进度快照，至少包含：
-
-- `stage_active`、`stage_ready`、`convert_active` 和各 Job 终态数量。
-- `reserved_staging_bytes`、`failed_staging_bytes`、队列水位。
-- BOS 瞬时/滑动平均 GB/s、单 Episode stage s/GB。
-- conversion Episodes/hour、frames/s、队列等待时间。
-- 整体 CPU、memory、I/O wait、cgroup throttling 和 PFS 可用空间。
-
-性能调整依据是聚合吞吐和 conversion 空转比例，不以单个 worker 速度或瞬时 BOS 带宽为唯一指标。
-
-## 实施顺序
-
-1. 新增 schema v2 参数与严格校验，保留 v1 legacy resume。
-2. 将 Coordinator 拆为 stage/convert 两个 executor 和两类 active future。
-3. 实现提交前字节预留、Episode/字节硬上限及精确释放。
-4. 恢复时校验已存在 staging，重建预留和 ready-stage 队列。
-5. 增加状态快照和性能指标，不让调优依赖 tmux 进程猜测。
-6. 完成单元、故障注入和 resume 静态验收。
-7. 在小批量真实 Episode 上执行 stage/conversion 参数矩阵，再冻结 300+ Episode 正式 profile。
-
-## 验收边界
-
-- 任意时刻 active stage 、ready stage、active conversion 与失败保留数据的总预留不超过字节/Episode 硬上限。
-- staging 和 conversion 确实重叠，一类 worker 占满不会阻止另一类的已授权工作。
-- source 前后 identity 校验、原子 staging、`stage.json`、Fragment commit 和 Builder 确定性不退化。
-- 中断后 resume 可重建队列与字节预留，不重复转换 committed Episode。
-- staging/conversion 单独故障不泄漏 worker slot，不破坏其他 Episode。
-- 当 PFS 可用空间低于配置安全余量时停止新 staging，已开始的 conversion 可继续排空。
-- 运行中 schema v1 run 不受新实现影响。
-
-## 待下一步对齐
-
-1. staging reader 小样本测试的具体执行时机：当前全量 run 完成后，比较 `8/16/24/32` 的聚合 GB/s。
-2. conversion 小样本测试的具体执行时机：新调度静态验收后，比较 `64/80/96` 的 Episodes/hour。
-3. 第一阶段找到新瓶颈后，再决定是否执行 TorchCodec、SVT preset 或 MCAP 扫描的小样本对照。
-
-BOS reader 短测不改转换产物：从冻结 manifest 选不同的大 Episode，分别以 `8/16/24/32` 并发只读 BOS 并复制到 `/mnt/pfs/swy/` 下的隔离临时目录，记录聚合 GB/s，完成后精确释放该测试目录。相邻档提升低于 `10%` 即认为进入平台，正式值取达到最佳吞吐 `95%` 的最小 reader 数。
-
-## 2026-08-27 凌晨执行策略
-
-- 北京时间 `02:00` 和 `04:00` 各触发一次；两次必须通过 benchmark run-id、metrics 和进程实现幂等，禁止重复启动。
-- `02:00` 若旧 schema v1 全量 run 仍活跃，只读记录状态，不发送 tmux 按键、不停止、不部署、不并发压测，留待 `04:00` 再执行。
-- `04:00` 若旧 run 仍活跃，低频只读监控并尽量等待结束；无法隔离关键资源时不强行并发。
-- 除硬安全边界外，不因耗时、单档失败或普通 warning 提前放弃；高档失败时保留已完成指标，降档继续。
-- 硬停止边界：BOS 只读无法保证、写路径逃逸 `/mnt/pfs/swy/`、staging 将超过 `2 TB`、memory current 接近/超过 `220 GiB`、PFS 错误可能损坏其他数据、source identity 变化，或与旧全量任务存在无法隔离的关键资源争用。
-- 若旧全量落盘、Builder、validation、manifest 或 loader 验收存在错误，先把现象与只读证据写入 `plans/streaming-current-run-anomaly-2026-08-27.md`，不覆盖/删除旧 run 或旧输出。
-- 全量产物错误不自动等价为吞吐测试阻塞；优先使用冻结 source manifest、独立 benchmark run-id、只读 BOS 和隔离 PFS 目录，绕开旧 Builder/最终输出，完成 staging 与 Episode Fragment conversion 吞吐测试。
-
-## 2026-08-27 实测验收
-
-实测使用旧全量 run 的冻结 selection manifest。BOS 始终只读，所有写入均位于：
-
-```text
-/mnt/pfs/swy/dataset/1011/arx5/fold_cloth/streaming/benchmarks/20260827-bounded-prefetch-v1/
-```
-
-### BOS staging
-
-固定同一批 32 个 Episode、约 `280.4 GB`：
-
-| Readers | 结果 | 相对前档 |
-| ---: | ---: | ---: |
-| 8 | `0.970 GB/s` | baseline |
-| 16 | `1.216 GB/s` | `+25.3%` |
-| 24 | 前 `213 s` 仅 `0.199 GB/s` | 持续退化，按停止规则中止 |
-| 32 | 未执行 | 24 已触发 `<10%` 收益停止规则 |
-
-正式值冻结为 `stage_workers = 16`。24 readers 的退化伴随持续高 I/O full pressure；继续扩大 reader 只会增加 BOS/PFS 争用。
-
-### 有界预取端到端
-
-固定冻结 manifest 中 MCAP 最小的 96 个 Episode，源数据约 `0.952 TB`。两档都完成 `96/96 committed`、Builder 和最终验证，产物均为 `211,766 frames`，随后精确清理临时 run/output。
-
-| Conversion workers | Wall time | End-to-end throughput | 结果 |
-| ---: | ---: | ---: | --- |
-| 64 | `1899.5 s` | `181.94 Episodes/hour` | baseline |
-| 80 | `2078.2 s` | `166.30 Episodes/hour` | `-8.6%`，无收益 |
-| 96 | 未执行 | - | 80 已触发 `<10%` 收益停止规则 |
-
-80-worker 档实际有效 conversion 并发没有超过 64；额外进程只增加常驻开销。正式值冻结为 `conversion_workers = 64`，首轮不改 SVT-AV1 内部线程或 PyAV 后端。
-
-### 安全与正确性
-
-- 64/80 两档均为 `96 committed / 0 failed / 0 discarded / 0 excluded`，帧数一致。
-- 两档新增 CPU throttling 均为 `0`，OOM/oom_kill 为 `0`。
-- 64/80 的匿名内存峰值分别约 `81.2 GB / 86.1 GB`；`memory.current` 接近 cgroup 上限是大文件复制形成的可回收 page cache，不是匿名 working-set 泄漏。
-- schema v2 的真实运行确认 staging 和 conversion 能同时活跃，conversion 不再占用 BOS reader slot。
-- spawn worker 需要同时 source `/opt/ros/jazzy/setup.bash` 和仓库 `ros2_ws/install/setup.bash`；漏掉后者会缺少 `arx5_collection_interfaces`。失败的隔离 benchmark 已保留指标并清理临时数据。
-- benchmark 临时 staging、Fragments、run 和 LeRobot output 已清理，仅保留约 `1.1 MB` 配置、日志和指标。
-
-最终正式 profile 保持：
-
-```toml
-stage_workers = 16
-conversion_workers = 64
-prefetch_target_bytes = 1_500_000_000_000
-prefetch_max_bytes = 2_000_000_000_000
-prefetch_max_episodes = 128
-```
+- 不继续提高 stage/conversion worker 数。
+- 不立即安装 TorchCodec，不立即改 SVT preset。
+- 暂不用当前 schema v2 profile 开始新的 300+ Episode 正式全量。
+- 先完成 P0 语义修正和 P1 观测，再决定哪个 conversion 优化进入正式 profile。

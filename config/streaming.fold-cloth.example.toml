@@ -1,4 +1,4 @@
-schema_version = 2
+schema_version = 3
 
 [source]
 root = "/mnt/bos/datainfra-demo"
@@ -13,9 +13,11 @@ pfs_root = "/mnt/pfs/swy"
 streaming_root = "/mnt/pfs/swy/dataset/1011/arx5/fold_cloth/streaming"
 stage_workers = 16
 conversion_workers = 64
-prefetch_target_bytes = 1_500_000_000_000
-prefetch_max_bytes = 2_000_000_000_000
-prefetch_max_episodes = 128
+ready_low_bytes = 128_000_000_000
+ready_high_bytes = 256_000_000_000
+temporary_hard_max_bytes = 2_000_000_000_000
+max_staged_episodes = 128
+min_free_bytes = 5_000_000_000_000
 
 [output]
 lerobot_root = "/mnt/pfs/swy/dataset/1011/arx5/fold_cloth/lerobot"
