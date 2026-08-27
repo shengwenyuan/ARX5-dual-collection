@@ -1,8 +1,8 @@
 # 云端 Episode 流式转换与 LeRobot Fragment 计划
 
-- Status: `unit-8-verified`
+- Status: `unit-9-verified`
 - Date: `2026-08-25`
-- Updated: `2026-08-26`
+- Updated: `2026-08-27`
 - Parent: `docs/data-cleaning/pi05-mcap-to-lerobot.md`
 - DAgger recipe: `docs/data-cleaning/dagger-postprocess.md`
 - DAgger outcome routing TODO: `docs/episode-runtime/dagger-outcome-directory-todo.md`
@@ -620,6 +620,11 @@ src/arx5_collection/dataset_cli.py
 当前入口：
 
 ```bash
+cd /root/workspace/ARX5-dual-collection
+source /opt/ros/jazzy/setup.bash
+source ros2_ws/install/setup.bash
+export PYTHONPATH="$PWD/src:${PYTHONPATH:-}"
+
 cp config/streaming.fold-cloth.example.toml /tmp/fold-cloth.toml
 # 编辑 include_paths / block / schema v2 runtime 参数
 arx5-dataset stream-to-lerobot --config /tmp/fold-cloth.toml

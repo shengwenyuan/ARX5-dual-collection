@@ -1,6 +1,6 @@
 # Streaming MCAP → LeRobot 吞吐提升计划
 
-- Status: `proposed`
+- Status: `completed`
 - Date: `2026-08-26`
 - Host: `pi05-cpu`
 - Scope: BOS 只读 staging、Episode 级并行转换、有界预取、资源上限与可恢复性
@@ -225,3 +225,55 @@ BOS reader 短测不改转换产物：从冻结 manifest 选不同的大 Episode
 - 硬停止边界：BOS 只读无法保证、写路径逃逸 `/mnt/pfs/swy/`、staging 将超过 `2 TB`、memory current 接近/超过 `220 GiB`、PFS 错误可能损坏其他数据、source identity 变化，或与旧全量任务存在无法隔离的关键资源争用。
 - 若旧全量落盘、Builder、validation、manifest 或 loader 验收存在错误，先把现象与只读证据写入 `plans/streaming-current-run-anomaly-2026-08-27.md`，不覆盖/删除旧 run 或旧输出。
 - 全量产物错误不自动等价为吞吐测试阻塞；优先使用冻结 source manifest、独立 benchmark run-id、只读 BOS 和隔离 PFS 目录，绕开旧 Builder/最终输出，完成 staging 与 Episode Fragment conversion 吞吐测试。
+
+## 2026-08-27 实测验收
+
+实测使用旧全量 run 的冻结 selection manifest。BOS 始终只读，所有写入均位于：
+
+```text
+/mnt/pfs/swy/dataset/1011/arx5/fold_cloth/streaming/benchmarks/20260827-bounded-prefetch-v1/
+```
+
+### BOS staging
+
+固定同一批 32 个 Episode、约 `280.4 GB`：
+
+| Readers | 结果 | 相对前档 |
+| ---: | ---: | ---: |
+| 8 | `0.970 GB/s` | baseline |
+| 16 | `1.216 GB/s` | `+25.3%` |
+| 24 | 前 `213 s` 仅 `0.199 GB/s` | 持续退化，按停止规则中止 |
+| 32 | 未执行 | 24 已触发 `<10%` 收益停止规则 |
+
+正式值冻结为 `stage_workers = 16`。24 readers 的退化伴随持续高 I/O full pressure；继续扩大 reader 只会增加 BOS/PFS 争用。
+
+### 有界预取端到端
+
+固定冻结 manifest 中 MCAP 最小的 96 个 Episode，源数据约 `0.952 TB`。两档都完成 `96/96 committed`、Builder 和最终验证，产物均为 `211,766 frames`，随后精确清理临时 run/output。
+
+| Conversion workers | Wall time | End-to-end throughput | 结果 |
+| ---: | ---: | ---: | --- |
+| 64 | `1899.5 s` | `181.94 Episodes/hour` | baseline |
+| 80 | `2078.2 s` | `166.30 Episodes/hour` | `-8.6%`，无收益 |
+| 96 | 未执行 | - | 80 已触发 `<10%` 收益停止规则 |
+
+80-worker 档实际有效 conversion 并发没有超过 64；额外进程只增加常驻开销。正式值冻结为 `conversion_workers = 64`，首轮不改 SVT-AV1 内部线程或 PyAV 后端。
+
+### 安全与正确性
+
+- 64/80 两档均为 `96 committed / 0 failed / 0 discarded / 0 excluded`，帧数一致。
+- 两档新增 CPU throttling 均为 `0`，OOM/oom_kill 为 `0`。
+- 64/80 的匿名内存峰值分别约 `81.2 GB / 86.1 GB`；`memory.current` 接近 cgroup 上限是大文件复制形成的可回收 page cache，不是匿名 working-set 泄漏。
+- schema v2 的真实运行确认 staging 和 conversion 能同时活跃，conversion 不再占用 BOS reader slot。
+- spawn worker 需要同时 source `/opt/ros/jazzy/setup.bash` 和仓库 `ros2_ws/install/setup.bash`；漏掉后者会缺少 `arx5_collection_interfaces`。失败的隔离 benchmark 已保留指标并清理临时数据。
+- benchmark 临时 staging、Fragments、run 和 LeRobot output 已清理，仅保留约 `1.1 MB` 配置、日志和指标。
+
+最终正式 profile 保持：
+
+```toml
+stage_workers = 16
+conversion_workers = 64
+prefetch_target_bytes = 1_500_000_000_000
+prefetch_max_bytes = 2_000_000_000_000
+prefetch_max_episodes = 128
+```
