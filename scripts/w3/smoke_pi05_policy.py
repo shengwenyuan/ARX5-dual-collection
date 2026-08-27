@@ -64,7 +64,12 @@ def main() -> None:
     del base_model, base_params
     gc.collect()
 
-    dataset = LeRobotDataset(REPO_ID, root=args.dataset_root / REPO_ID, download_videos=False)
+    dataset = LeRobotDataset(
+        REPO_ID,
+        root=args.dataset_root / REPO_ID,
+        download_videos=False,
+        video_backend="pyav",
+    )
     sample = dataset[args.index]
     observation = {
         "state": np.asarray(sample["observation.state"], dtype=np.float32),

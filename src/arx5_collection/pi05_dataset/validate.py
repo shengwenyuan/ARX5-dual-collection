@@ -32,6 +32,7 @@ def validate_lerobot(
         root=dataset_root,
         delta_timestamps={"action": [step / DATASET_FPS for step in range(action_horizon)]},
         download_videos=False,
+        video_backend="pyav",
     )
     missing = EXPECTED_KEYS - set(dataset.features)
     if missing:

@@ -82,6 +82,7 @@ def export_lerobot(
                 use_videos=mode == "video",
                 image_writer_processes=0,
                 image_writer_threads=0,
+                video_backend="pyav",
             )
             segments_by_episode: dict[str, list[dict[str, Any]]] = defaultdict(list)
             for segment in segment_rows:
