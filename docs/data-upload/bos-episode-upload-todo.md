@@ -170,6 +170,8 @@ tests/test_bos_upload_episodes.py     # 定向契约测试
 
 正式入口同时支持 `--commands-file <path>` 和 stdin 多行粘贴；两者进入同一个逐行解析器。交互粘贴以空行结束，commands file 便于审计和复跑。
 
+10% LeRobot 深检默认开启。只有显式传入 `--full-check false` 才跳过该阶段；全量粗筛、时长统计、目标冲突检查和上传后完整性校验始终执行。最终确认页必须显示实际 `full_check` 值。
+
 ## 已冻结决策
 
 - 最小 MCAP 为 `2 GiB`。

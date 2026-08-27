@@ -525,6 +525,7 @@ def execute(
     commands: Sequence[SyncCommand],
     policy: UploadPolicy,
     *,
+    full_check: bool = True,
     runner: ProcessRunner | None = None,
     deep_validate: Callable[[Episode], None] | None = None,
 ) -> None:
@@ -544,11 +545,14 @@ def execute(
     all_episodes = tuple(episode for episodes in grouped.values() for episode in episodes)
     if not all_episodes:
         raise RuntimeError("没有可上传的合格 Episode")
-    validate = deep_validate or DeepGate(policy).validate
-    samples = choose_samples(all_episodes, policy)
-    for index, episode in enumerate(samples, 1):
-        print(f"深检 {index}/{len(samples)}：{episode.directory}")
-        validate(episode)
+    if full_check:
+        validate = deep_validate or DeepGate(policy).validate
+        samples = choose_samples(all_episodes, policy)
+        for index, episode in enumerate(samples, 1):
+            print(f"深检 {index}/{len(samples)}：{episode.directory}")
+            validate(episode)
+    else:
+        print("深检：SKIPPED (--full-check false)")
     total_duration = 0.0
     for command in commands:
         seconds, formatted = summarize_duration(command, len(grouped[command]))
@@ -556,7 +560,8 @@ def execute(
         print(f"时长：{command.source} episodes={len(grouped[command])} duration={formatted}")
     print(
         f"READY commands={len(commands)} episodes={len(all_episodes)} "
-        f"bytes={sum(item.mcap_size or 0 for item in all_episodes)} duration_s={total_duration:.3f}"
+        f"bytes={sum(item.mcap_size or 0 for item in all_episodes)} "
+        f"duration_s={total_duration:.3f} full_check={str(full_check).lower()}"
     )
     _confirm("按 ENTER 开始上传；其他输入取消：", sys.stdin, sys.stdout)
     help_result = runner.run(["bcecmd", "bos", "sync", "--help"])
@@ -601,13 +606,22 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="审计并上传 ARX5 Episodes 到 BOS")
     parser.add_argument("--commands-file", type=Path)
     parser.add_argument(
+        "--full-check",
+        choices=("true", "false"),
+        default="true",
+    )
+    parser.add_argument(
         "--policy",
         type=Path,
         default=Path(__file__).resolve().parents[1] / "config/bos-upload-validation.v1.toml",
     )
     args = parser.parse_args(argv)
     try:
-        execute(parse_commands(_command_lines(args.commands_file)), UploadPolicy.load(args.policy))
+        execute(
+            parse_commands(_command_lines(args.commands_file)),
+            UploadPolicy.load(args.policy),
+            full_check=args.full_check == "true",
+        )
     except (OSError, RuntimeError, ValueError) as error:
         parser.error(str(error))
     return 0

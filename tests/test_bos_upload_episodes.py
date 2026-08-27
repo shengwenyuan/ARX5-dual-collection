@@ -187,9 +187,12 @@ class FakeRunner:
         return 0
 
 
+@pytest.mark.parametrize(("full_check", "expected_checks"), ((True, 1), (False, 0)))
 def test_execute_runs_preflight_upload_and_postcheck(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    full_check: bool,
+    expected_checks: int,
 ) -> None:
     episode = write_episode(tmp_path, "episode")
     command = SyncCommand(tmp_path, "bos:/bucket/task/", ("--concurrency", "16"))
@@ -208,8 +211,17 @@ def test_execute_runs_preflight_upload_and_postcheck(
         (),
     )
     output = io.StringIO()
+    checked: list[Episode] = []
     monkeypatch.setattr(sys, "stdin", io.StringIO("\n"))
     monkeypatch.setattr(sys, "stdout", output)
-    execute((command,), current, runner=runner, deep_validate=lambda _: None)
+    execute(
+        (command,),
+        current,
+        full_check=full_check,
+        runner=runner,
+        deep_validate=checked.append,
+    )
     assert runner.uploaded
+    assert len(checked) == expected_checks
     assert "UPLOAD COMPLETE" in output.getvalue()
+    assert f"full_check={str(full_check).lower()}" in output.getvalue()
