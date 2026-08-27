@@ -4,7 +4,9 @@ from collections import defaultdict
 from pathlib import Path
 import shutil
 import tempfile
+import time
 from typing import Any
+from typing import Callable
 from typing import Sequence
 
 from arx5_collection.artifacts import message_ref_from_artifact
@@ -22,6 +24,10 @@ from arx5_collection.pi05_dataset.openpi_contract import LEROBOT_COMMIT
 from arx5_collection.pi05_dataset.openpi_contract import MOTOR_NAMES
 from arx5_collection.pi05_dataset.openpi_contract import OPENPI_COMMIT
 from arx5_collection.pi05_dataset.openpi_contract import lerobot_features
+from arx5_collection.pi05_dataset.video import VideoEncodingConfig
+from arx5_collection.pi05_dataset.video import configured_lerobot_encoder
+
+
 def export_lerobot(
     source_roots: Path | Sequence[Path],
     selection_dir: Path,
@@ -30,6 +36,8 @@ def export_lerobot(
     *,
     mode: str = "video",
     dataset_root: Path | None = None,
+    video: VideoEncodingConfig | None = None,
+    phase_reporter: Callable[[str, float], None] | None = None,
 ) -> Path:
     if mode not in {"video", "image"}:
         raise ValueError("mode must be video or image")
@@ -81,43 +89,59 @@ def export_lerobot(
 
             exported_frames = 0
             exported_segment_ids = []
-            for episode_id, episode_segments in segments_by_episode.items():
-                refs = {
-                    message_ref_from_artifact(sample["images"][camera])
-                    for segment in episode_segments
-                    for sample in samples_by_segment[str(segment["segment_id"])]
-                    for camera in CAMERA_KEYS
-                }
-                episode_cache = cache_parent / episode_id
-                try:
-                    source_episode = source_episodes[episode_id]
-                except KeyError as error:
-                    raise ValueError(
-                        f"selected episode {episode_id!r} is missing from input roots"
-                    ) from error
-                image_paths = extract_selected_rgb(source_episode, refs, episode_cache)
-                for segment in episode_segments:
-                    segment_id = str(segment["segment_id"])
-                    rows = sorted(
-                        samples_by_segment[segment_id], key=lambda row: row["source_sample_index"]
-                    )
-                    if len(rows) != int(segment["frame_count"]):
-                        raise ValueError(f"sample count does not match segment manifest: {segment_id}")
-                    for row in rows:
-                        frame = {
-                            "observation.state": np.asarray(row["state"], dtype=np.float32),
-                            "action": np.asarray(row["action"], dtype=np.float32),
-                            "task": str(segment["task"]),
-                        }
-                        for camera in CAMERA_KEYS:
-                            ref = message_ref_from_artifact(row["images"][camera])
-                            with Image.open(image_paths[(ref.topic, ref.sequence)]) as image:
-                                frame[f"observation.images.{camera}"] = image.convert("RGB").copy()
-                        dataset.add_frame(frame)
-                        exported_frames += 1
-                    dataset.save_episode()
-                    exported_segment_ids.append(segment_id)
-                shutil.rmtree(episode_cache)
+            with configured_lerobot_encoder(video, phase_reporter):
+                for episode_id, episode_segments in segments_by_episode.items():
+                    refs = {
+                        message_ref_from_artifact(sample["images"][camera])
+                        for segment in episode_segments
+                        for sample in samples_by_segment[str(segment["segment_id"])]
+                        for camera in CAMERA_KEYS
+                    }
+                    episode_cache = cache_parent / episode_id
+                    try:
+                        source_episode = source_episodes[episode_id]
+                    except KeyError as error:
+                        raise ValueError(
+                            f"selected episode {episode_id!r} is missing from input roots"
+                        ) from error
+                    started = time.monotonic()
+                    image_paths = extract_selected_rgb(source_episode, refs, episode_cache)
+                    _report_phase(phase_reporter, "decode_rgb", started)
+                    for segment in episode_segments:
+                        segment_id = str(segment["segment_id"])
+                        rows = sorted(
+                            samples_by_segment[segment_id],
+                            key=lambda row: row["source_sample_index"],
+                        )
+                        if len(rows) != int(segment["frame_count"]):
+                            raise ValueError(
+                                f"sample count does not match segment manifest: {segment_id}"
+                            )
+                        started = time.monotonic()
+                        for row in rows:
+                            frame = {
+                                "observation.state": np.asarray(
+                                    row["state"], dtype=np.float32
+                                ),
+                                "action": np.asarray(row["action"], dtype=np.float32),
+                                "task": str(segment["task"]),
+                            }
+                            for camera in CAMERA_KEYS:
+                                ref = message_ref_from_artifact(row["images"][camera])
+                                with Image.open(
+                                    image_paths[(ref.topic, ref.sequence)]
+                                ) as image:
+                                    frame[f"observation.images.{camera}"] = (
+                                        image.convert("RGB").copy()
+                                    )
+                            dataset.add_frame(frame)
+                            exported_frames += 1
+                        _report_phase(phase_reporter, "materialize_frames", started)
+                        started = time.monotonic()
+                        dataset.save_episode()
+                        _report_phase(phase_reporter, "save_episode", started)
+                        exported_segment_ids.append(segment_id)
+                    shutil.rmtree(episode_cache)
 
         report_dir = output_root / "reports"
         report_dir.mkdir(parents=True, exist_ok=True)
@@ -140,6 +164,8 @@ def export_lerobot(
             "gripper_calibration": selection_report["gripper_calibration"],
             "tasks": sorted({str(segment["task"]) for segment in segment_rows}),
         }
+        if video is not None:
+            report["video_encoding"] = video.as_report()
         if "sampling_contract" in selection_report:
             report["sampling_contract"] = selection_report["sampling_contract"]
         if source_manifest:
@@ -177,3 +203,12 @@ def export_lerobot(
         if cache_parent.exists():
             shutil.rmtree(cache_parent)
     return final_root
+
+
+def _report_phase(
+    reporter: Callable[[str, float], None] | None,
+    name: str,
+    started: float,
+) -> None:
+    if reporter is not None:
+        reporter(name, max(time.monotonic() - started, 0.0))

@@ -57,6 +57,8 @@ class ConvertEpisodeFragmentTest(unittest.TestCase):
                 "clean",
                 "select",
                 "export",
+                "export_decode_rgb",
+                "export_video_encode",
                 "validate",
                 "finalize",
             },
@@ -193,6 +195,25 @@ class ConvertEpisodeFragmentTest(unittest.TestCase):
         fragment = json.loads((target / "fragment.json").read_text())
         self.assertEqual(fragment["source_station_id"], "w5")
         self.assertEqual(fragment["recipe"]["gripper_contract"], "arx5-gripper-v1")
+
+    def test_records_explicit_video_policy_in_fragment(self) -> None:
+        receipt = self._stage("demonstration", "success", "success")
+        target = self.root / "fragments" / receipt.episode_id
+        recipe = Pi05ConversionRecipe.load(
+            "config/conversion.pi05-equal-eef-v3-svt-p8.toml"
+        )
+
+        with self._successful_pipeline(receipt.episode_id, target):
+            convert_episode_fragment(
+                receipt,
+                target,
+                recipe,
+                "folding the cloth",
+                "local/fragment-test",
+            )
+
+        fragment = json.loads((target / "fragment.json").read_text())
+        self.assertEqual(fragment["recipe"]["video"]["preset"], 8)
 
     def test_pipeline_failure_cleans_partial_fragment(self) -> None:
         receipt = self._stage("demonstration", "success", "success")
@@ -343,7 +364,12 @@ class ConvertEpisodeFragmentTest(unittest.TestCase):
         repo_id: str,
         *,
         dataset_root: Path,
+        video=None,
+        phase_reporter=None,
     ) -> Path:
+        if phase_reporter is not None:
+            phase_reporter("decode_rgb", 1.0)
+            phase_reporter("video_encode", 2.0)
         dataset_root.mkdir()
         reports = output_root / "reports"
         reports.mkdir()

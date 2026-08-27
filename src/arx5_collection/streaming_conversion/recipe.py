@@ -9,6 +9,7 @@ from arx5_collection.gripper import ARX5_GRIPPER_CALIBRATION
 from arx5_collection.gripper import ARX5_GRIPPER_CONTRACT_ID
 from arx5_collection.gripper import GripperCalibration
 from arx5_collection.pi05_dataset.eef_selection import EqualEefPolicy
+from arx5_collection.pi05_dataset.video import VideoEncodingConfig
 
 
 @dataclass(frozen=True, slots=True)
@@ -21,26 +22,27 @@ class Pi05ConversionRecipe:
     gripper: GripperCalibration
     cleaning: CleaningPolicy
     selection: EqualEefPolicy
+    video: VideoEncodingConfig | None = None
 
     @classmethod
     def load(cls, path: str | Path) -> Pi05ConversionRecipe:
         with Path(path).open("rb") as stream:
             payload = tomllib.load(stream)
-        _exact_keys(
-            payload,
-            {
-                "schema_version",
-                "name",
-                "builder_backend",
-                "gripper_normalization",
-                "gripper_contract",
-                "cleaning",
-                "selection",
-            },
-            "conversion recipe",
-        )
-        if payload["schema_version"] != 2:
-            raise ValueError("conversion recipe schema_version must be 2")
+        schema_version = payload.get("schema_version")
+        if schema_version not in {2, 3}:
+            raise ValueError("conversion recipe schema_version must be 2 or 3")
+        expected_keys = {
+            "schema_version",
+            "name",
+            "builder_backend",
+            "gripper_normalization",
+            "gripper_contract",
+            "cleaning",
+            "selection",
+        }
+        if schema_version == 3:
+            expected_keys.add("video")
+        _exact_keys(payload, expected_keys, "conversion recipe")
         name = _string(payload["name"], "name")
         if name != "pi05-equal-eef-v3":
             raise ValueError("unsupported conversion recipe name")
@@ -58,6 +60,7 @@ class Pi05ConversionRecipe:
 
         cleaning = _table(payload, "cleaning")
         selection = _table(payload, "selection")
+        video = _video_config(payload) if schema_version == 3 else None
         _exact_keys(
             cleaning,
             {
@@ -89,7 +92,7 @@ class Pi05ConversionRecipe:
             "selection",
         )
         return cls(
-            schema_version=2,
+            schema_version=schema_version,
             name=name,
             builder_backend=backend,
             gripper_normalization=normalization,
@@ -161,7 +164,25 @@ class Pi05ConversionRecipe:
                     "selection.max_episode_duration_s",
                 ),
             ),
+            video=video,
         )
+
+
+def _video_config(payload: dict[str, object]) -> VideoEncodingConfig:
+    video = _table(payload, "video")
+    _exact_keys(
+        video,
+        {"codec", "pixel_format", "gop", "crf", "preset", "threads"},
+        "video",
+    )
+    return VideoEncodingConfig(
+        codec=_string(video["codec"], "video.codec"),
+        pixel_format=_string(video["pixel_format"], "video.pixel_format"),
+        gop=_int(video["gop"], "video.gop"),
+        crf=_int(video["crf"], "video.crf"),
+        preset=_int(video["preset"], "video.preset"),
+        threads=_int(video["threads"], "video.threads"),
+    )
 
 
 def _table(payload: dict[str, object], name: str) -> dict[str, object]:

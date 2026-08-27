@@ -231,6 +231,8 @@ def _validate_fragment_recipe(
         "gripper_normalization": recipe.gripper_normalization,
         "gripper_contract": recipe.gripper_contract,
     }
+    if recipe.video is not None:
+        expected["video"] = recipe.video.as_report()
     for key, expected_value in expected.items():
         if value.get(key) != expected_value:
             raise ValueError(f"Fragment recipe mismatch: {key}")
@@ -645,6 +647,11 @@ def _write_reports(
             "name": recipe.name,
             "gripper_normalization": recipe.gripper_normalization,
             "gripper_contract": recipe.gripper_contract,
+            **(
+                {"video": recipe.video.as_report()}
+                if recipe.video is not None
+                else {}
+            ),
         },
         "source_episode_count": len(descriptors),
         "fragment_count": len(descriptors),

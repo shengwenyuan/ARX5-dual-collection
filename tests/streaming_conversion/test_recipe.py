@@ -8,6 +8,7 @@ from arx5_collection.streaming_conversion.recipe import Pi05ConversionRecipe
 
 
 RECIPE = Path("config/conversion.pi05-equal-eef-v3.toml")
+SVT_RECIPE = Path("config/conversion.pi05-equal-eef-v3-svt-p8.toml")
 
 
 class Pi05ConversionRecipeTest(unittest.TestCase):
@@ -25,6 +26,26 @@ class Pi05ConversionRecipeTest(unittest.TestCase):
         self.assertEqual(recipe.gripper.closed_value, 0.0)
         self.assertEqual(recipe.gripper.open_tolerance, 0.05)
         self.assertEqual(recipe.gripper.closed_tolerance, 0.10)
+        self.assertIsNone(recipe.video)
+
+    def test_loads_explicit_svt_policy(self) -> None:
+        recipe = Pi05ConversionRecipe.load(SVT_RECIPE)
+
+        self.assertEqual(recipe.schema_version, 3)
+        self.assertIsNotNone(recipe.video)
+        self.assertEqual(recipe.video.codec, "libsvtav1")
+        self.assertEqual(recipe.video.pixel_format, "yuv420p")
+        self.assertEqual(recipe.video.gop, 2)
+        self.assertEqual(recipe.video.crf, 30)
+        self.assertEqual(recipe.video.preset, 8)
+        self.assertEqual(recipe.video.threads, 0)
+
+    def test_rejects_invalid_svt_policy(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "recipe.toml"
+            path.write_text(SVT_RECIPE.read_text().replace("preset = 8", "preset = 20"))
+            with self.assertRaisesRegex(ValueError, "preset"):
+                Pi05ConversionRecipe.load(path)
 
     def test_rejects_unknown_gripper_contract(self) -> None:
         self._reject_replacement(

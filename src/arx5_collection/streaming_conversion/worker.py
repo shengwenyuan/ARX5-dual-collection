@@ -169,6 +169,10 @@ def convert_episode_fragment(
                     temporary,
                     repo_id,
                     dataset_root=temporary / "lerobot",
+                    video=recipe.video,
+                    phase_reporter=lambda name, seconds: phases.append(
+                        (f"export_{name}", seconds)
+                    ),
                 ),
             )
             validation = timed(
@@ -337,6 +341,11 @@ def _fragment_value(
             "builder_backend": recipe.builder_backend,
             "gripper_normalization": recipe.gripper_normalization,
             "gripper_contract": recipe.gripper_contract,
+            **(
+                {"video": recipe.video.as_report()}
+                if recipe.video is not None
+                else {}
+            ),
         },
         "repo_id": repo_id,
         "segment_count": int(validation["episodes"]),
