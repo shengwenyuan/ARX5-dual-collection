@@ -17,6 +17,7 @@ import shutil
 import sys
 import threading
 import time
+import traceback
 from typing import Any
 
 from arx5_collection.streaming_conversion.application import (
@@ -442,18 +443,25 @@ def run_e2e(args: argparse.Namespace) -> int:
     before = _resources(args.cgroup_root)
     started = time.monotonic()
     execution_log = io.StringIO()
+    result = None
+    error = None
     with ResourceSampler(args.cgroup_root) as sampler:
-        result = execute_frozen_streaming_run(
-            config,
-            recipe,
-            manifest,
-            execution_log,
-        )
+        try:
+            result = execute_frozen_streaming_run(
+                config,
+                recipe,
+                manifest,
+                execution_log,
+            )
+        except Exception as exception:
+            error = f"{type(exception).__name__}: {exception}"
+            execution_log.write(traceback.format_exc())
     elapsed = time.monotonic() - started
     after = _resources(args.cgroup_root)
     states = _job_counts(manifest.run_dir)
     accepted = (
-        states.get("failed", 0) == 0
+        error is None
+        and states.get("failed", 0) == 0
         and states.get("discarded", 0) == 0
         and states.get("committed", 0) + states.get("excluded", 0) == len(entries)
     )
@@ -469,14 +477,15 @@ def run_e2e(args: argparse.Namespace) -> int:
         "source_gb_s": (
             sum(entry.source_bytes for entry in entries) / 1_000_000_000 / elapsed
         ),
-        "frames": result.snapshot.frame_count,
-        "frames_s": result.snapshot.frame_count / elapsed,
+        "frames": result.snapshot.frame_count if result is not None else 0,
+        "frames_s": result.snapshot.frame_count / elapsed if result is not None else 0.0,
         "video_bytes": _video_bytes(output),
         "states": states,
         "phase_seconds": _phase_summary(manifest.run_dir),
         "resource": sampler.summary(),
         "cpu_delta": _cpu_delta(before, after),
         "accepted": accepted,
+        "error": error,
         "output": str(output),
     }
     evidence = benchmark_root / "results" / run_id
