@@ -1,0 +1,74 @@
+[policy]
+checkpoint = "/checkpoints/fold_cloth_arx5_20260826_2_pi05_train_rtc_v1/19999"
+checkpoint_sha256 = "659e54c8dbc49f0e32aa2402ce85c7ce40b1fb2fdcafd4e1b53a892546e3d4ea"
+repo_id = "local/fold_cloth_arx5_2026-08-26_2"
+prompt = "folding the cloth"
+host = "0.0.0.0"
+port = 8000
+base_checkpoint = "gs://openpi-assets/checkpoints/pi05_base/params"
+
+[checkpoint_profile]
+policy_type = "training_time_rtc"
+action_horizon = 50
+action_dimension = 14
+model_action_dimension = 32
+sequential_execution_steps = 10
+control_rate_hz = 25.0
+max_delay_steps = 10
+flow_steps = 10
+action_semantics = "absolute_joint"
+prefix_mode = "hard_prefix"
+hard_prefix_tolerance = 0.00001
+gripper_normalization = "linear_open_closed_0_1"
+gripper_contract = "arx5-gripper-v1"
+
+[model_input]
+width = 640
+height = 360
+channels = 3
+layout = "chw"
+color = "rgb"
+dtype = "uint8"
+resize = "inter_area"
+crop = "none"
+pad = "none"
+model_width = 224
+model_height = 224
+model_resize = "resize_with_pad"
+camera_high_source = "overview"
+camera_left_wrist_source = "left"
+camera_right_wrist_source = "right"
+
+[rollout]
+prefetch_after_steps = 10
+initial_delay_steps = 3
+delay_history_size = 10
+delay_estimator = "rolling_max"
+
+[robot]
+profile = "dagger"
+
+[collector]
+server_host = "127.0.0.1"
+server_port = 8000
+inference_timeout_s = 30.0
+
+[gateway]
+state_timeout_s = 0.1
+policy_wait_timeout_s = 0.5
+command_watchdog_s = 0.12
+
+[safety]
+max_joint_step_rad = 0.28
+max_joint_departure_rad = 1.5
+min_normalized_gripper = 0.0
+max_normalized_gripper = 1.0
+
+[observation]
+max_camera_span_ms = 40.0
+max_arm_age_ms = 2.0
+max_snapshot_age_ms = 100.0
+service_timeout_ms = 500.0
+
+[gripper]
+contract = "arx5-gripper-v1"
