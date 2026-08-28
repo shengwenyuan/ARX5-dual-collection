@@ -11,6 +11,7 @@ from arx5_collection.episode.models import (
     EpisodeRequest,
     RecordingStopping,
 )
+from arx5_collection.capture import RGB_ONLY_STREAMS
 from arx5_collection.production.checks import CheckFailure, CheckPhase, CheckResult
 from arx5_collection.production.config import load_station_config
 from arx5_collection.production.orchestrator import ProductionSession
@@ -63,8 +64,8 @@ class FakeReadiness:
             for stream_id in stream_ids
         )
 
-    def require_ready(self):
-        self.events.append("gate:require")
+    def require_ready(self, stream_ids):
+        self.events.append(f"gate:require:{','.join(stream_ids)}")
 
     def results(self, stream_ids):
         return tuple(
@@ -77,8 +78,8 @@ class FakeReadiness:
 
 
 class FailingReadiness(FakeReadiness):
-    def require_ready(self):
-        self.events.append("gate:require")
+    def require_ready(self, stream_ids):
+        self.events.append(f"gate:require:{','.join(stream_ids)}")
         raise CheckFailure(
             (CheckResult("camera_left", CheckPhase.EPISODE, False, "stopped"),)
         )
@@ -172,6 +173,38 @@ class FakeHomeController:
 
 
 class ProductionSessionTest(unittest.TestCase):
+    def test_rgb_only_waits_for_only_five_required_streams(self) -> None:
+        events: list[str] = []
+        station = load_station_config(ROOT / "config" / "station.example.json")
+        with tempfile.TemporaryDirectory() as directory:
+            session = ProductionSession(
+                station,
+                Path(directory) / "episodes",
+                Path(directory) / "logs",
+                "0.1.0",
+                min_free_bytes=0,
+                identity=FakeIdentity(),  # type: ignore[arg-type]
+                system=FakeSystem(events),  # type: ignore[arg-type]
+                supervisor=FakeSupervisor(events),  # type: ignore[arg-type]
+                readiness=FakeReadiness(events),  # type: ignore[arg-type]
+                commands=FakeCommands(),  # type: ignore[arg-type]
+                monitor=FakeSessionMonitor(events),
+                home_controller=FakeHomeController(events),
+                required_stream_ids=tuple(RGB_ONLY_STREAMS),
+            )
+            session.start()
+            session.stop()
+
+        camera_wait = next(
+            event for event in events if event.startswith("gate:wait:camera_")
+        )
+        self.assertNotIn("aligned_depth", camera_wait)
+        self.assertIn("camera_overview_color", camera_wait)
+        require = next(
+            event for event in events if event.startswith("gate:require:")
+        )
+        self.assertNotIn("aligned_depth", require)
+
     def test_one_session_starts_sources_once_and_stops_in_reverse(self) -> None:
         events: list[str] = []
         station = load_station_config(ROOT / "config" / "station.example.json")
@@ -270,7 +303,12 @@ class ProductionSessionTest(unittest.TestCase):
             runtime.pre_episode_check()
             session.stop()
 
-        self.assertLess(events.index("gate:require"), events.index("home:reset"))
+        require_index = next(
+            index
+            for index, event in enumerate(events)
+            if event.startswith("gate:require:")
+        )
+        self.assertLess(require_index, events.index("home:reset"))
 
     def test_pre_episode_failure_enters_gcomp_and_is_recoverable(self) -> None:
         events: list[str] = []

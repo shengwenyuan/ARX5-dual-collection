@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TextIO
 
+from arx5_collection.capture import CaptureProfile
 from arx5_collection.episode.cli import load_request, run_episode_loop
 from arx5_collection.episode.models import EpisodeRequest
 from arx5_collection.production.checks import CheckResult
@@ -481,7 +482,8 @@ class DaggerApplicationBuilder:
     def _load(
         spec: DaggerRunSpec,
     ) -> tuple[DaggerCollectorSettings, EpisodeRequest]:
-        validate_task_streams(spec.task_config)
+        if validate_task_streams(spec.task_config) is not CaptureProfile.RGBD:
+            raise ValueError("DAgger requires the fixed RGB-D stream contract")
         settings = DaggerCollectorSettings.load(spec.policy_config)
         request = load_request(
             spec.task_config,

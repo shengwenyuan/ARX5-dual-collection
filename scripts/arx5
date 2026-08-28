@@ -20,9 +20,13 @@ def required(name: str) -> str:
     return value
 
 
-def collect() -> int:
+def collect(rgb_only: bool = False) -> int:
     required("ARX5_OUTPUT_ROOT")
     required("ARX5_TASK_DESCRIPTION")
+    environment = os.environ.copy()
+    environment.pop("ARX5_TASK_CONFIG", None)
+    if rgb_only:
+        environment["ARX5_TASK_CONFIG"] = "/workspace/config/task.rgb-only.json"
     return subprocess.call(
         [
             "docker",
@@ -34,6 +38,7 @@ def collect() -> int:
             "collector",
         ],
         cwd=ROOT,
+        env=environment,
     )
 
 
@@ -103,7 +108,14 @@ def upload(full_check: str) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(prog="arx5")
     commands = parser.add_subparsers(dest="command", required=True)
-    commands.add_parser("collect", help="start a production collection Session")
+    collect_parser = commands.add_parser(
+        "collect", help="start a production collection Session"
+    )
+    collect_parser.add_argument(
+        "--rgb-only",
+        action="store_true",
+        help="temporarily omit aligned depth from the recorded MCAP",
+    )
     dagger_parser = commands.add_parser("dagger", help="start a DAgger Session")
     dagger_parser.add_argument(
         "--mode", choices=("takeover", "shadow"), default="takeover"
@@ -117,7 +129,7 @@ def main() -> int:
     args = parser.parse_args()
     try:
         if args.command == "collect":
-            return collect()
+            return collect(args.rgb_only)
         if args.command == "dagger":
             return dagger(args.mode)
         return upload(args.full_check)

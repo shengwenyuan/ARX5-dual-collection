@@ -19,7 +19,7 @@ class MessageRefArtifact(TypedDict):
 class ImagePairArtifact(TypedDict):
     stamp_ns: int
     color: MessageRefArtifact
-    depth: MessageRefArtifact
+    depth: MessageRefArtifact | None
 
 
 class ArmRefArtifact(TypedDict):

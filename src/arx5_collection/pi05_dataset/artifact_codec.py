@@ -94,9 +94,16 @@ def load_frame_groups(frame_index_path: Path, scan: EpisodeScan) -> tuple[FrameG
         image_pairs = {}
         for role in ("overview", "left", "right"):
             pair = _mapping(images[role], f"images.{role}")
+            depth = pair["depth"]
             image_pairs[role] = ImagePair(
                 color=_checked_ref(_mapping(pair["color"], f"images.{role}.color"), refs),
-                depth=_checked_ref(_mapping(pair["depth"], f"images.{role}.depth"), refs),
+                depth=(
+                    None
+                    if depth is None
+                    else _checked_ref(
+                        _mapping(depth, f"images.{role}.depth"), refs
+                    )
+                ),
             )
         arm_refs = _mapping(row["arms"], "arms")
         arm_samples = {}

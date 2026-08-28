@@ -4,6 +4,7 @@ from pathlib import Path
 import unittest
 
 from arx5_collection.cleaning.models import ArmSample
+from arx5_collection.capture import CaptureProfile
 from arx5_collection.cleaning.models import CleaningPolicy
 from arx5_collection.cleaning.models import EpisodeScan
 from arx5_collection.cleaning.models import LEFT_ARM_TOPIC
@@ -75,6 +76,31 @@ class PairingTest(unittest.TestCase):
 
         self.assertEqual(len(result.frame_groups), 2)
         self.assertEqual(result.rejected_arm_age, 1)
+
+    def test_rgb_only_groups_real_color_frames_without_depth_stub(self) -> None:
+        rgbd_scan = make_scan()
+        refs = {
+            topic: items
+            for topic, items in rgbd_scan.refs_by_topic.items()
+            if "aligned_depth" not in topic
+        }
+        scan = EpisodeScan(
+            episode_dir=rgbd_scan.episode_dir,
+            refs_by_topic=refs,
+            left_arm=rgbd_scan.left_arm,
+            right_arm=rgbd_scan.right_arm,
+            topic_types={},
+            capture_profile=CaptureProfile.RGB_ONLY,
+        )
+
+        result = build_frame_groups(
+            scan,
+            CleaningPolicy(cross_camera_tolerance_ns=10, arm_max_age_ns=2),
+        )
+
+        self.assertEqual(len(result.frame_groups), 3)
+        self.assertIsNone(result.frame_groups[1].overview.depth)
+        self.assertEqual(result.camera_stats["overview"].color_only_count, 0)
 
 if __name__ == "__main__":
     unittest.main()

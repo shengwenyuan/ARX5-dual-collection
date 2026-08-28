@@ -7,20 +7,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from arx5_collection.capture import CaptureProfile
+from arx5_collection.capture import RGBD_STREAMS
+from arx5_collection.capture import profile_for_streams
+
 
 ARM_ROLES = ("left", "right")
 CAMERA_ROLES = ("left", "right", "overview")
 TRIGGER_ROLES = ("activate", "abort")
-EXPECTED_STREAMS = {
-    "left_arm_state": "/embodiments/left_arm/state",
-    "right_arm_state": "/embodiments/right_arm/state",
-    "camera_left_color": "/sensors/camera_left/color/image_raw",
-    "camera_left_aligned_depth": "/sensors/camera_left/aligned_depth/image_raw",
-    "camera_right_color": "/sensors/camera_right/color/image_raw",
-    "camera_right_aligned_depth": "/sensors/camera_right/aligned_depth/image_raw",
-    "camera_overview_color": "/sensors/camera_overview/color/image_raw",
-    "camera_overview_aligned_depth": "/sensors/camera_overview/aligned_depth/image_raw",
-}
+EXPECTED_STREAMS = RGBD_STREAMS
 MIN_ROS_DOMAIN_ID = 0
 MAX_ROS_DOMAIN_ID = 232
 TASK_UPLOAD_DIRECTORY = re.compile(r"[a-z0-9][a-z0-9_-]*")
@@ -274,7 +269,7 @@ def set_process_ros_domain_id(value: object) -> int:
     return ros_domain_id
 
 
-def validate_task_streams(path: Path) -> None:
+def validate_task_streams(path: Path) -> CaptureProfile:
     payload = _load_object(path, "task")
     _require_exact_keys(payload, {"task_id", "task_description", "streams"}, "task")
     streams = payload["streams"]
@@ -294,8 +289,7 @@ def validate_task_streams(path: Path) -> None:
         if stream_id in actual:
             raise ValueError("stream ids must be unique")
         actual[stream_id] = topic
-    if actual != EXPECTED_STREAMS:
-        raise ValueError("production task must contain the fixed eight-stream contract")
+    return profile_for_streams(actual)
 
 
 def _load_object(path: Path, label: str) -> dict[str, Any]:

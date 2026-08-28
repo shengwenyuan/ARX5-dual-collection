@@ -15,8 +15,8 @@ from arx5_collection.cleaning.models import CleaningPolicy
 from arx5_collection.cleaning.models import FrameGroup
 from arx5_collection.cleaning.models import ImagePair
 from arx5_collection.cleaning.models import LEFT_ARM_TOPIC
-from arx5_collection.cleaning.models import REQUIRED_TOPICS
 from arx5_collection.cleaning.models import RIGHT_ARM_TOPIC
+from arx5_collection.cleaning.models import required_topics
 from arx5_collection.cleaning.pairing import PairingResult
 from arx5_collection.cleaning.pairing import build_frame_groups
 from arx5_collection.cleaning.reader import load_metadata
@@ -63,7 +63,11 @@ def _pair(pair: ImagePair) -> ImagePairArtifact:
     return ImagePairArtifact(
         stamp_ns=pair.stamp_ns,
         color=message_ref_to_artifact(pair.color),
-        depth=message_ref_to_artifact(pair.depth),
+        depth=(
+            None
+            if pair.depth is None
+            else message_ref_to_artifact(pair.depth)
+        ),
     )
 
 
@@ -109,7 +113,7 @@ def inspect_episode(
     scan = read_episode_scan(episode_dir)
     timeline = {
         topic: audit_timeline(scan.refs_by_topic[topic]).to_dict()
-        for topic in REQUIRED_TOPICS
+        for topic in required_topics(scan.capture_profile)
     }
     pairing = build_frame_groups(scan, policy)
     timeline_has_errors = any(
@@ -150,6 +154,7 @@ def inspect_episode(
         },
         "outcome": metadata["outcome"],
         "task": metadata["task"],
+        "capture_profile": scan.capture_profile.value,
         "timeline": timeline,
         "camera_pairing": {
             role: stats.to_dict() for role, stats in pairing.camera_stats.items()

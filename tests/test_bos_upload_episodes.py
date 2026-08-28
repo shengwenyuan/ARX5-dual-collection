@@ -45,7 +45,12 @@ def policy(min_mcap_bytes: int = 1) -> UploadPolicy:
     )
 
 
-def metadata(episode_id: str, *, outcome: str = "success") -> dict[str, object]:
+def metadata(
+    episode_id: str,
+    *,
+    outcome: str = "success",
+    rgb_only: bool = False,
+) -> dict[str, object]:
     stream_ids = (
         "left_arm_state",
         "right_arm_state",
@@ -56,7 +61,7 @@ def metadata(episode_id: str, *, outcome: str = "success") -> dict[str, object]:
         "camera_overview_color",
         "camera_overview_aligned_depth",
     )
-    return {
+    value = {
         "schema_version": 1,
         "collection_type": "demonstration",
         "episode_id": episode_id,
@@ -70,6 +75,19 @@ def metadata(episode_id: str, *, outcome: str = "success") -> dict[str, object]:
         ],
         "errors": [],
     }
+    if rgb_only:
+        value["streams"] = [
+            stream
+            for stream in value["streams"]
+            if "aligned_depth" not in stream["id"]
+        ]
+        value["extensions"] = {
+            "capture": {
+                "profile": "rgb_only",
+                "omitted_streams": [],
+            }
+        }
+    return value
 
 
 def write_episode(root: Path, episode_id: str, *, size: int = 8) -> Episode:
@@ -130,6 +148,18 @@ def test_coarse_gate_rejects_tiny_and_missing_stream(tmp_path: Path) -> None:
     issues = coarse_issues(episode, policy(min_mcap_bytes=9))
     assert any("MCAP 小于" in issue.reason for issue in issues)
     assert any("camera_overview_aligned_depth" in issue.reason for issue in issues)
+
+
+def test_coarse_gate_accepts_explicit_rgb_only_contract(tmp_path: Path) -> None:
+    episode = write_episode(tmp_path, "episode")
+    episode.metadata.clear()
+    episode.metadata.update(metadata("episode", rgb_only=True))
+
+    assert coarse_issues(episode, policy()) == ()
+
+    episode.metadata["streams"].pop()
+    issues = coarse_issues(episode, policy())
+    assert any("camera_overview_color" in issue.reason for issue in issues)
 
 
 def test_invalid_episode_moves_to_abort_after_enter(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

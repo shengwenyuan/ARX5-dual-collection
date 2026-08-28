@@ -26,7 +26,7 @@ services:
       - arx5-collect
       - run
       - --task-config
-      - /workspace/config/task.eight-stream.json
+      - "${ARX5_TASK_CONFIG:-/workspace/config/task.eight-stream.json}"
       - --output-root
       - "${ARX5_OUTPUT_ROOT:-}"
       - --task-description

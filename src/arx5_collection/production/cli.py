@@ -8,6 +8,7 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import TextIO
 
+from arx5_collection.capture import metadata_extensions
 from arx5_collection.episode.cli import (
     load_request,
     non_negative_int,
@@ -261,7 +262,7 @@ def run_station_set_ros_domain_id(
 def run_session(args: argparse.Namespace) -> int:
     station = load_configured_station(args.station_config)
     station.task_upload_directory(args.task_description)
-    validate_task_streams(args.task_config)
+    capture_profile = validate_task_streams(args.task_config)
     request = load_request(
         args.task_config,
         args.output_root,
@@ -287,6 +288,7 @@ def run_session(args: argparse.Namespace) -> int:
         check_sink=check_sink,
         warning_sink=lambda message: print(f"WARNING {message}", file=sys.stderr),
         compression_enabled=not args.no_compress,
+        required_stream_ids=tuple(stream.id for stream in request.streams),
     )
     with termination_as_interrupt(), session:
         print(f"SESSION READY logs={session_log_dir}", flush=True)
@@ -294,7 +296,11 @@ def run_session(args: argparse.Namespace) -> int:
             status_sink=lambda message: print(message, file=sys.stderr, flush=True)
         )
         with trigger_factory.open(station) as trigger:
-            runtime = session.create_runtime(request, trigger)
+            runtime = session.create_runtime(
+                request,
+                trigger,
+                metadata_extensions=metadata_extensions(capture_profile),
+            )
             return run_episode_loop(
                 runtime,
                 request,

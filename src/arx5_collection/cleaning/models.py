@@ -3,6 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from arx5_collection.capture import CaptureProfile
+from arx5_collection.capture import stream_contract
+
 
 CAMERA_ROLES = ("left", "right", "overview")
 CAMERA_LEAVES = ("color", "aligned_depth")
@@ -15,11 +18,11 @@ def camera_topic(role: str, leaf: str) -> str:
 
 LEFT_ARM_TOPIC = "/embodiments/left_arm/state"
 RIGHT_ARM_TOPIC = "/embodiments/right_arm/state"
-REQUIRED_TOPICS = tuple(
-    camera_topic(role, leaf)
-    for role in CAMERA_ROLES
-    for leaf in CAMERA_LEAVES
-) + (LEFT_ARM_TOPIC, RIGHT_ARM_TOPIC)
+REQUIRED_TOPICS = tuple(stream_contract(CaptureProfile.RGBD).values())
+
+
+def required_topics(profile: CaptureProfile) -> tuple[str, ...]:
+    return tuple(stream_contract(profile).values())
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,10 +57,13 @@ class ArmSample:
 @dataclass(frozen=True, slots=True)
 class ImagePair:
     color: MessageRef
-    depth: MessageRef
+    depth: MessageRef | None
 
     def __post_init__(self) -> None:
-        if self.color.header_stamp_ns != self.depth.header_stamp_ns:
+        if (
+            self.depth is not None
+            and self.color.header_stamp_ns != self.depth.header_stamp_ns
+        ):
             raise ValueError("paired color and depth timestamps must match")
 
     @property
@@ -93,6 +99,7 @@ class EpisodeScan:
     left_arm: tuple[ArmSample, ...]
     right_arm: tuple[ArmSample, ...]
     topic_types: dict[str, str]
+    capture_profile: CaptureProfile = CaptureProfile.RGBD
 
     @property
     def mcap_path(self) -> Path:

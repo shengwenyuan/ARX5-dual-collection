@@ -18,22 +18,15 @@ import tomllib
 from dataclasses import dataclass
 from typing import Callable, Iterable, Sequence, TextIO
 
+from arx5_collection.capture import CaptureProfile
+from arx5_collection.capture import profile_from_metadata
+from arx5_collection.capture import stream_contract
 from arx5_collection.production.config import load_configured_station
 
 
 MCAP_NAME = "episode.mcap"
 METADATA_NAME = "metadata.json"
 ABORT_DIRECTORY = "abort"
-STREAM_IDS = {
-    "left_arm_state",
-    "right_arm_state",
-    "camera_left_color",
-    "camera_left_aligned_depth",
-    "camera_right_color",
-    "camera_right_aligned_depth",
-    "camera_overview_color",
-    "camera_overview_aligned_depth",
-}
 VALUE_OPTIONS = {"--concurrency", "--sync-type", "--traffic-limit"}
 RETRY_EXIT_CODE = 75
 DEFAULT_BOS_ROOT = "bos:/datainfra-demo"
@@ -239,7 +232,16 @@ def coarse_issues(episode: Episode, policy: UploadPolicy) -> tuple[GateIssue, ..
     } if isinstance(streams, list) else {}
     if not isinstance(streams, list) or len(by_id) != len(streams):
         reasons.append("metadata streams 缺失或存在重复 id")
-    for stream_id in sorted(STREAM_IDS):
+    try:
+        capture_profile = profile_from_metadata(metadata)
+    except ValueError as error:
+        reasons.append(str(error))
+        capture_profile = CaptureProfile.RGBD
+    expected_stream_ids = set(stream_contract(capture_profile))
+    unexpected_stream_ids = set(by_id) - expected_stream_ids
+    if unexpected_stream_ids:
+        reasons.append(f"metadata 含 profile 外 stream：{sorted(unexpected_stream_ids)}")
+    for stream_id in sorted(expected_stream_ids):
         stream = by_id.get(stream_id)
         if (
             stream is None
@@ -247,7 +249,9 @@ def coarse_issues(episode: Episode, policy: UploadPolicy) -> tuple[GateIssue, ..
             or not isinstance(stream.get("message_count"), int)
             or int(stream["message_count"]) <= 0
         ):
-            reasons.append(f"八路 metadata 不合格：{stream_id}")
+            reasons.append(
+                f"{capture_profile.value} metadata 不合格：{stream_id}"
+            )
     collection_type = metadata.get("collection_type")
     outcome = metadata.get("outcome")
     dagger_fail = (
@@ -308,8 +312,11 @@ class DeepGate:
             )
             if timeline["max_positive_gap_ns"] > limit:
                 raise ValueError(f"时间间隔超限：{topic}")
-        self._validate_images(episode.directory)
         metadata = episode.metadata or {}
+        self._validate_images(
+            episode.directory,
+            profile_from_metadata(metadata),
+        )
         task = str(metadata["task"]["description"])
         calibration = recipe.calibration_for(str(metadata["station"]["id"]))
         with tempfile.TemporaryDirectory(prefix="arx5-bos-deep-") as temporary_text:
@@ -343,7 +350,11 @@ class DeepGate:
                 expected_task=task,
             )
 
-    def _validate_images(self, episode_dir: Path) -> None:
+    def _validate_images(
+        self,
+        episode_dir: Path,
+        capture_profile: CaptureProfile,
+    ) -> None:
         import rosbag2_py
         from rclpy.serialization import deserialize_message
         from sensor_msgs.msg import Image
@@ -353,7 +364,11 @@ class DeepGate:
                 self.policy.rgb_encoding if leaf == "color" else self.policy.depth_encoding
             )
             for role in ("left", "right", "overview")
-            for leaf in ("color", "aligned_depth")
+            for leaf in (
+                ("color", "aligned_depth")
+                if capture_profile is CaptureProfile.RGBD
+                else ("color",)
+            )
         }
         reader = rosbag2_py.SequentialReader()
         reader.open(

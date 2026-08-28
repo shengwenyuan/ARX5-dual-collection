@@ -10,6 +10,7 @@ from typing import Iterator
 
 from arx5_collection.collection_metadata import MetadataContext
 from arx5_collection.episode.finalization import McapFinalizer
+from arx5_collection.capture import RGBD_STREAMS
 from arx5_collection.episode.models import (
     EpisodeBlocked,
     EpisodeOutcome,
@@ -77,6 +78,7 @@ class ProductionSession:
         fail_directory: str = "fail",
         compression_enabled: bool = True,
         finalizer: EpisodeArtifactFinalizer | None = None,
+        required_stream_ids: tuple[str, ...] = tuple(RGBD_STREAMS),
     ) -> None:
         if min_free_bytes < 0:
             raise ValueError("min_free_bytes must not be negative")
@@ -112,6 +114,7 @@ class ProductionSession:
             enabled=compression_enabled,
             warning_sink=self.warning_sink,
         )
+        self.required_stream_ids = required_stream_ids
         self._system_started = False
         self._readiness_started = False
         self._monitor_open = False
@@ -173,11 +176,8 @@ class ProductionSession:
                 self.readiness.wait_for(
                     tuple(
                         stream_id
-                        for role in ("left", "right", "overview")
-                        for stream_id in (
-                            f"camera_{role}_color",
-                            f"camera_{role}_aligned_depth",
-                        )
+                        for stream_id in self.required_stream_ids
+                        if stream_id.startswith("camera_")
                     ),
                     self.readiness_timeout_s,
                     self.supervisor.require_running,
@@ -199,7 +199,7 @@ class ProductionSession:
     def pre_episode_check(self) -> None:
         self.supervisor.require_running()
         self._report(require_passed(self.system.check()))
-        self.readiness.require_ready()
+        self.readiness.require_ready(self._stream_ids())
         self._report(self.readiness.results(tuple(self._stream_ids())))
         self._report(require_passed((self._disk_check(CheckPhase.EPISODE),)))
 
@@ -323,18 +323,8 @@ class ProductionSession:
             f"free_bytes={free_bytes}, required>={self.min_free_bytes}",
         )
 
-    @staticmethod
-    def _stream_ids() -> tuple[str, ...]:
-        return (
-            "left_arm_state",
-            "right_arm_state",
-            "camera_left_color",
-            "camera_left_aligned_depth",
-            "camera_right_color",
-            "camera_right_aligned_depth",
-            "camera_overview_color",
-            "camera_overview_aligned_depth",
-        )
+    def _stream_ids(self) -> tuple[str, ...]:
+        return self.required_stream_ids
 
 
 @contextmanager

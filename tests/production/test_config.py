@@ -11,6 +11,8 @@ from arx5_collection.production.config import (
     load_station_config,
     validate_task_streams,
 )
+from arx5_collection.capture import CaptureProfile
+from arx5_collection.capture import RGB_ONLY_STREAMS
 
 
 ROOT = Path(__file__).parents[2]
@@ -114,11 +116,20 @@ class ProductionConfigTest(unittest.TestCase):
 
     def test_production_task_is_exactly_eight_required_streams(self) -> None:
         path = ROOT / "config" / "task.eight-stream.json"
-        validate_task_streams(path)
+        self.assertIs(validate_task_streams(path), CaptureProfile.RGBD)
         payload = json.loads(path.read_text())
         self.assertEqual(
             {stream["id"]: stream["topic"] for stream in payload["streams"]},
             EXPECTED_STREAMS,
+        )
+
+    def test_rgb_only_task_is_exactly_five_required_streams(self) -> None:
+        path = ROOT / "config" / "task.rgb-only.json"
+        self.assertIs(validate_task_streams(path), CaptureProfile.RGB_ONLY)
+        payload = json.loads(path.read_text())
+        self.assertEqual(
+            {stream["id"]: stream["topic"] for stream in payload["streams"]},
+            RGB_ONLY_STREAMS,
         )
 
     def test_task_rejects_missing_or_optional_stream(self) -> None:
@@ -126,7 +137,7 @@ class ProductionConfigTest(unittest.TestCase):
             (ROOT / "config" / "task.eight-stream.json").read_text()
         )
         payload["streams"].pop()
-        with self.assertRaisesRegex(ValueError, "fixed eight-stream"):
+        with self.assertRaisesRegex(ValueError, "fixed RGB-D or RGB-only"):
             validate_task_streams(self.write_json(payload))
 
         payload = json.loads(

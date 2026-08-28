@@ -6,12 +6,14 @@ from pathlib import Path
 import struct
 from typing import Any
 
+from arx5_collection.capture import profile_from_metadata
+from arx5_collection.capture import stream_contract
 from arx5_collection.cleaning.models import ArmSample
 from arx5_collection.cleaning.models import EpisodeScan
 from arx5_collection.cleaning.models import LEFT_ARM_TOPIC
 from arx5_collection.cleaning.models import MessageRef
-from arx5_collection.cleaning.models import REQUIRED_TOPICS
 from arx5_collection.cleaning.models import RIGHT_ARM_TOPIC
+from arx5_collection.cleaning.models import required_topics
 
 
 IMAGE_TYPE = "sensor_msgs/msg/Image"
@@ -50,7 +52,7 @@ def _expected_type(topic: str) -> str:
 
 
 def read_episode_scan(episode_dir: Path) -> EpisodeScan:
-    """Read the eight required streams without retaining image payloads.
+    """Read the profile's required streams without retaining image payloads.
 
     ROS imports stay inside this adapter so the pure cleaning package remains importable
     in development and unit-test environments without ROS installed.
@@ -64,7 +66,20 @@ def read_episode_scan(episode_dir: Path) -> EpisodeScan:
     mcap_path = episode_dir / "episode.mcap"
     if not mcap_path.is_file():
         raise FileNotFoundError(mcap_path)
-    load_metadata(episode_dir)
+    metadata = load_metadata(episode_dir)
+    profile = profile_from_metadata(metadata)
+    expected_streams = stream_contract(profile)
+    expected_topics = required_topics(profile)
+    metadata_streams = metadata.get("streams")
+    actual_streams = {
+        item.get("id"): item.get("topic")
+        for item in metadata_streams
+        if isinstance(item, dict)
+    } if isinstance(metadata_streams, list) else {}
+    if actual_streams != expected_streams:
+        raise ValueError(
+            f"metadata streams do not match capture profile {profile.value}"
+        )
 
     reader = rosbag2_py.SequentialReader()
     reader.open(
@@ -72,22 +87,22 @@ def read_episode_scan(episode_dir: Path) -> EpisodeScan:
         rosbag2_py.ConverterOptions("", ""),
     )
     topic_types = {item.name: item.type for item in reader.get_all_topics_and_types()}
-    missing = sorted(set(REQUIRED_TOPICS) - set(topic_types))
+    missing = sorted(set(expected_topics) - set(topic_types))
     if missing:
         raise ValueError(f"missing required topics: {missing}")
     wrong_types = {
         topic: {"expected": _expected_type(topic), "actual": topic_types[topic]}
-        for topic in REQUIRED_TOPICS
+        for topic in expected_topics
         if topic_types[topic] != _expected_type(topic)
     }
     if wrong_types:
         raise ValueError(f"unexpected topic types: {wrong_types}")
 
     arm_message_type = get_message(ARM_TYPE)
-    refs: dict[str, list[MessageRef]] = {topic: [] for topic in REQUIRED_TOPICS}
+    refs: dict[str, list[MessageRef]] = {topic: [] for topic in expected_topics}
     left_arm: list[ArmSample] = []
     right_arm: list[ArmSample] = []
-    sequences = {topic: 0 for topic in REQUIRED_TOPICS}
+    sequences = {topic: 0 for topic in expected_topics}
 
     while reader.has_next():
         topic, payload, bag_timestamp_ns = reader.read_next()
@@ -123,4 +138,5 @@ def read_episode_scan(episode_dir: Path) -> EpisodeScan:
         left_arm=tuple(left_arm),
         right_arm=tuple(right_arm),
         topic_types=topic_types,
+        capture_profile=profile,
     )

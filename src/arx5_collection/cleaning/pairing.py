@@ -5,14 +5,15 @@ from bisect import bisect_right
 from collections import defaultdict
 from dataclasses import dataclass
 
+from arx5_collection.capture import CaptureProfile
 from arx5_collection.cleaning.models import ArmSample
 from arx5_collection.cleaning.models import CleaningPolicy
 from arx5_collection.cleaning.models import EpisodeScan
 from arx5_collection.cleaning.models import FrameGroup
 from arx5_collection.cleaning.models import ImagePair
 from arx5_collection.cleaning.models import MessageRef
-from arx5_collection.cleaning.models import REQUIRED_TOPICS
 from arx5_collection.cleaning.models import camera_topic
+from arx5_collection.cleaning.models import required_topics
 
 
 @dataclass(frozen=True, slots=True)
@@ -113,16 +114,21 @@ def build_frame_groups(scan: EpisodeScan, policy: CleaningPolicy = CleaningPolic
     paired: dict[str, tuple[ImagePair, ...]] = {}
     camera_stats: dict[str, CameraPairingStats] = {}
     for role in ("left", "right", "overview"):
-        pairs, stats = _pair_same_camera(
-            scan.refs_by_topic[camera_topic(role, "color")],
-            scan.refs_by_topic[camera_topic(role, "aligned_depth")],
-        )
+        color_refs = scan.refs_by_topic[camera_topic(role, "color")]
+        if scan.capture_profile is CaptureProfile.RGB_ONLY:
+            pairs = tuple(ImagePair(color, None) for color in color_refs)
+            stats = CameraPairingStats(len(pairs), 0, 0)
+        else:
+            pairs, stats = _pair_same_camera(
+                color_refs,
+                scan.refs_by_topic[camera_topic(role, "aligned_depth")],
+            )
         paired[role] = pairs
         camera_stats[role] = stats
 
     first_stamps = []
     last_stamps = []
-    for topic in REQUIRED_TOPICS:
+    for topic in required_topics(scan.capture_profile):
         refs = scan.refs_by_topic[topic]
         if not refs:
             return PairingResult((), camera_stats, None, None, 0, 0, 0)

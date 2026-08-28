@@ -184,6 +184,24 @@ class EpisodeRuntimeTest(unittest.TestCase):
         self.assertEqual(result.outcome, EpisodeOutcome.SUCCESS)
         self.assertEqual(metadata["streams"][0]["warnings"], ["low rate"])
 
+    def test_runtime_writes_truthful_capture_extensions(self) -> None:
+        extensions = {
+            "capture": {
+                "profile": "rgb_only",
+                "omitted_streams": [{"id": "depth", "status": "intentionally_omitted"}],
+            }
+        }
+        runtime = self.runtime(
+            trigger=FakeTrigger([True, True]),
+            metadata_extensions=extensions,
+        )
+
+        result = runtime.run_once(self.request())
+
+        metadata = json.loads(result.metadata_path.read_text())
+        self.assertEqual(metadata["extensions"], extensions)
+        self.assertEqual(len(metadata["streams"]), 1)
+
     def test_runtime_accepts_typed_dagger_metadata_context(self) -> None:
         runtime = self.runtime(
             trigger=FakeTrigger([True, True]),
