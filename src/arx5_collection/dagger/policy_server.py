@@ -317,6 +317,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--config", type=Path, required=True)
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO)
+    logging.getLogger("websockets.server").setLevel(logging.WARNING)
     serve(PolicyServerSettings.load(args.config))
 
 

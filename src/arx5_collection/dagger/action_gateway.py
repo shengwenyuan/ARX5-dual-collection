@@ -45,6 +45,8 @@ class JointActionSafety:
     max_joint_departure_rad: float
     min_normalized_gripper: float
     max_normalized_gripper: float
+    min_policy_gripper: float = -1.0
+    max_policy_gripper: float = 2.0
 
     def __post_init__(self) -> None:
         values = (
@@ -52,6 +54,8 @@ class JointActionSafety:
             self.max_joint_departure_rad,
             self.min_normalized_gripper,
             self.max_normalized_gripper,
+            self.min_policy_gripper,
+            self.max_policy_gripper,
         )
         if not all(math.isfinite(value) for value in values):
             raise ValueError("action safety limits must be finite")
@@ -59,6 +63,19 @@ class JointActionSafety:
             raise ValueError("joint safety limits must be positive")
         if self.min_normalized_gripper >= self.max_normalized_gripper:
             raise ValueError("normalized gripper limits are invalid")
+        if (
+            self.min_policy_gripper > self.min_normalized_gripper
+            or self.max_policy_gripper < self.max_normalized_gripper
+        ):
+            raise ValueError("policy gripper range must contain the command range")
+
+
+@dataclass(frozen=True, slots=True)
+class GripperSaturation:
+    side: str
+    action_index: int
+    input_value: float
+    output_value: float
 
 
 class JointStateSource(Protocol):
@@ -139,6 +156,7 @@ class Pi05JointActionContract:
         self,
         actions: tuple[tuple[float, ...], ...],
         state: DualArmJointState,
+        saturation_sink: Callable[[GripperSaturation], None] | None = None,
     ) -> tuple[DualArmJointCommand, ...]:
         commands: list[DualArmJointCommand] = []
         previous_left = state.left
@@ -150,8 +168,12 @@ class Pi05JointActionContract:
             left_gripper = action[6]
             right = tuple(action[7:13])
             right_gripper = action[13]
-            self._validate_gripper(left_gripper, "left", index)
-            self._validate_gripper(right_gripper, "right", index)
+            left_gripper = self._bound_gripper(
+                left_gripper, "left", index, saturation_sink
+            )
+            right_gripper = self._bound_gripper(
+                right_gripper, "right", index, saturation_sink
+            )
             self._validate_arm(left, previous_left, state.left, "left", index)
             self._validate_arm(right, previous_right, state.right, "right", index)
             commands.append(
@@ -191,17 +213,30 @@ class Pi05JointActionContract:
                 f"{self.safety.max_joint_departure_rad:.6f} rad"
             )
 
-    def _validate_gripper(self, value: float, side: str, index: int) -> None:
+    def _bound_gripper(
+        self,
+        value: float,
+        side: str,
+        index: int,
+        saturation_sink: Callable[[GripperSaturation], None] | None,
+    ) -> float:
         if not (
-            self.safety.min_normalized_gripper
+            self.safety.min_policy_gripper
             <= value
-            <= self.safety.max_normalized_gripper
+            <= self.safety.max_policy_gripper
         ):
             raise RuntimeError(
                 f"{side} action[{index}] normalized gripper {value:.6f} is outside "
-                f"[{self.safety.min_normalized_gripper:.6f}, "
-                f"{self.safety.max_normalized_gripper:.6f}]"
+                f"accepted policy range [{self.safety.min_policy_gripper:.6f}, "
+                f"{self.safety.max_policy_gripper:.6f}]"
             )
+        bounded = min(
+            self.safety.max_normalized_gripper,
+            max(self.safety.min_normalized_gripper, value),
+        )
+        if bounded != value and saturation_sink is not None:
+            saturation_sink(GripperSaturation(side, index, value, bounded))
+        return bounded
 
     def _denormalize_left(self, value: float) -> float:
         return self.grippers.denormalize(value)

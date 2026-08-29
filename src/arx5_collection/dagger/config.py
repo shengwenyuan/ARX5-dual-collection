@@ -120,6 +120,12 @@ class DaggerCollectorSettings:
                     max_normalized_gripper=float(
                         safety.get("max_normalized_gripper", 1.0)
                     ),
+                    min_policy_gripper=float(
+                        safety.get("min_policy_gripper", -1.0)
+                    ),
+                    max_policy_gripper=float(
+                        safety.get("max_policy_gripper", 2.0)
+                    ),
                 ),
                 state_timeout_s=float(gateway.get("state_timeout_s", 0.1)),
                 policy_wait_timeout_s=float(

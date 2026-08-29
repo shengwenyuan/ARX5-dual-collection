@@ -15,6 +15,7 @@ from .action_gateway import (
     AsyncPolicy,
     DualArmCommandSink,
     DualArmJointCommand,
+    GripperSaturation,
     JointStateSource,
     Pi05JointActionContract,
     PolicyModeController,
@@ -362,10 +363,19 @@ class RtcActionScheduler:
         actions = ticket.action_chunk[start:stop]
         if len(actions) != self.safe_window_steps:
             raise RuntimeError("RTC response cannot provide the required safe window")
-        commands = self.contract.validate_actions(actions, self.state_source.read())
+        saturations: list[GripperSaturation] = []
+        commands = self.contract.validate_actions(
+            actions,
+            self.state_source.read(),
+            saturation_sink=saturations.append,
+        )
+        executed_actions = [list(action) for action in actions]
+        for saturation in saturations:
+            column = 6 if saturation.side == "left" else 13
+            executed_actions[saturation.action_index][column] = saturation.output_value
         replacement = deque(
-            QueuedRtcAction(raw, command)
-            for raw, command in zip(actions, commands)
+            QueuedRtcAction(tuple(raw), command)
+            for raw, command in zip(executed_actions, commands)
         )
         with self._lock:
             if (
@@ -393,6 +403,14 @@ class RtcActionScheduler:
                 queue_size=len(self._queue),
                 round_trip_ms=(self.clock() - pending.submitted_at_s) * 1000.0,
             )
+            if saturations:
+                self._emit_locked(
+                    "gripper_saturated",
+                    count=len(saturations),
+                    sides=sorted({item.side for item in saturations}),
+                    min_input_value=min(item.input_value for item in saturations),
+                    max_input_value=max(item.input_value for item in saturations),
+                )
 
     def _fail(self, error: BaseException) -> None:
         with self._lock:

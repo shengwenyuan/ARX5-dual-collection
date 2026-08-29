@@ -16,6 +16,7 @@ from arx5_collection.production.lifecycle import termination_as_interrupt
 from arx5_collection.production.orchestrator import GIB, ProductionSession
 from arx5_collection.production.processes import CameraSnapshotConfig
 from arx5_collection.reset import ResetState
+from arx5_collection.ros2_adapters.monitor import RosStreamMonitor
 from arx5_collection.ros2_adapters.recording import RosbagRecordingBackend
 from arx5_collection.snapshot_shared_memory import (
     snapshot_arena_path,
@@ -33,8 +34,11 @@ from .shadow import (
     ShadowInferenceLoop,
     ShadowRecordTrigger,
 )
-from .triggers import DaggerAutoTriggerFactory
 from .topics import DAGGER_RECORDING_TOPICS
+from .triggers import DaggerAutoTriggerFactory
+
+
+DAGGER_STREAM_STATUS_PERIOD_S = 10.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,6 +78,9 @@ class DaggerSessionBuilder:
     ) -> ProductionSession:
         station = load_configured_station(spec.station_config)
         station.task_upload_directory(spec.task_description)
+        backend = RosbagRecordingBackend(
+            additional_topics=additional_recording_topics
+        )
         return ProductionSession(
             station=station,
             output_root=spec.output_root,
@@ -91,12 +98,10 @@ class DaggerSessionBuilder:
                 arena_path=snapshot_arena_path(station.ros_domain_id),
                 socket_path=snapshot_socket_path(station.ros_domain_id),
             ),
-            backend=(
-                RosbagRecordingBackend(
-                    additional_topics=additional_recording_topics
-                )
-                if additional_recording_topics
-                else None
+            backend=backend,
+            monitor=RosStreamMonitor(
+                backend,
+                display_period_s=DAGGER_STREAM_STATUS_PERIOD_S,
             ),
             home_state_sink=self._render_reset_state,
             home_timing_sink=self._render_home_timing,

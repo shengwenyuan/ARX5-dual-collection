@@ -53,12 +53,19 @@ CHECKPOINT = Pi05CheckpointProfile(
 ROLLOUT = RtcRolloutProfile(2, 1, 3, "rolling_max")
 
 
-def action(value: float = 0.0) -> tuple[float, ...]:
-    return (value,) * 6 + (0.0,) + (value,) * 6 + (0.0,)
+def action(value: float = 0.0, right_gripper: float = 0.0) -> tuple[float, ...]:
+    return (value,) * 6 + (0.0,) + (value,) * 6 + (right_gripper,)
 
 
-def ticket(epoch: int, value: float = 0.0, fixed_prefix: int = 0) -> InferenceTicket:
-    actions = (action(),) * fixed_prefix + (action(value),) * (8 - fixed_prefix)
+def ticket(
+    epoch: int,
+    value: float = 0.0,
+    fixed_prefix: int = 0,
+    right_gripper: float = 0.0,
+) -> InferenceTicket:
+    actions = (action(),) * fixed_prefix + (
+        action(value, right_gripper),
+    ) * (8 - fixed_prefix)
     return InferenceTicket("request", epoch, SHA, actions, EXECUTION)
 
 
@@ -159,6 +166,26 @@ class RtcSchedulerTest(unittest.TestCase):
         context = policy.calls[1][3]
         self.assertEqual(context.estimated_delay_steps, 1)
         self.assertEqual(context.action_prefix, (action(),))
+
+    def test_records_gripper_saturation_without_faulting(self) -> None:
+        scheduler, policy, _, _, clock, diagnostics = self.make_scheduler()
+        scheduler.prepare_policy("episode-1", 0)
+        policy.futures[0].set_result(ticket(0, right_gripper=-0.002147))
+
+        self.assertTrue(scheduler.policy_ready("episode-1", 0))
+
+        saturated = [
+            row for row in diagnostics if row["event"] == "gripper_saturated"
+        ]
+        self.assertEqual(len(saturated), 1)
+        self.assertEqual(saturated[0]["sides"], ["right"])
+        self.assertEqual(saturated[0]["min_input_value"], -0.002147)
+        self.assertEqual(saturated[0]["max_input_value"], -0.002147)
+        self.assertIsNone(scheduler.take_fault())
+
+        self.issue(scheduler, clock, 2)
+        context = policy.calls[1][3]
+        self.assertEqual(context.action_prefix[0][13], 0.0)
 
     def test_accepts_delay_two_and_atomically_replaces_safe_tail(self) -> None:
         scheduler, policy, _, _, clock, diagnostics = self.make_scheduler()

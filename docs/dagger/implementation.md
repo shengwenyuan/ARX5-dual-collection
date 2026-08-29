@@ -251,3 +251,10 @@ D1a 的本地纯逻辑与 Application 组装测试已通过。W3 无硬件集成
 - 首条 Episode 最终仅因模型给出右夹爪归一化值`-0.002147`、违反冻结边界`[0,1]`而进入`FAULT_HOLD`，正确落入`dagger_fail/`并让Session返回READY。该故障与Snapshot、Policy通信无关。
 - 同一Session第二条 Episode 持续68.11秒并success；96/96次推理接受，控制队列最低7步，无通信或调度故障。该条以人工控制区间结束，metadata边界闭合。
 - 本轮确认本地IPC已覆盖真实Shadow和Take-over。夹爪边界容差及终端日志降噪作为独立后续修改，不回混Snapshot transport提交。
+
+## 2026-08-29 夹爪输出边界与终端降噪
+
+- 模型归一化夹爪输出的可接受范围冻结为`[-1,2]`；`[-1,0]`饱和为`0`，`[1,2]`饱和为`1`，区间外仍fail-closed。关节action继续禁止clamp或插值。
+- RTC每次接受response后只写一条聚合`gripper_saturated` JSONL事件，记录数量、涉及侧和输入极值；不向终端逐action打印。
+- Policy Server将`websockets.server`降至WARNING，健康检查不再反复打印`connection rejected (200 OK)`；健康检查本身保持启用。
+- DAgger八路健康摘要从每2秒调整为每10秒；状态切换、故障、启动检查、RTC JSONL和Vendor文件日志均保留。

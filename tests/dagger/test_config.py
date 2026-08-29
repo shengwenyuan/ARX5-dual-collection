@@ -71,6 +71,8 @@ class DaggerConfigTest(unittest.TestCase):
         self.assertEqual(collector.arm_profile.name, "dagger")
         self.assertEqual(collector.control.safety.max_joint_step_rad, 0.25)
         self.assertEqual(collector.control.safety.max_joint_departure_rad, 1.5)
+        self.assertEqual(collector.control.safety.min_policy_gripper, -1.0)
+        self.assertEqual(collector.control.safety.max_policy_gripper, 2.0)
         self.assertEqual(collector.control.state_timeout_s, 0.1)
         self.assertEqual(collector.control.policy_wait_timeout_s, 0.5)
         self.assertEqual(collector.control.command_watchdog_s, 0.12)

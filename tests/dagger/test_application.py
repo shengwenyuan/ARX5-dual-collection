@@ -60,6 +60,7 @@ class DaggerApplicationBuilderTest(unittest.TestCase):
             session.camera_snapshot.socket_path,
             Path("/tmp/arx5-vla-snapshot-31.sock"),
         )
+        self.assertEqual(session.monitor.display_period_s, 10.0)
 
     def test_builds_shadow_from_profile_without_starting_resources(self) -> None:
         fake_session_builder = FakeSessionBuilder()

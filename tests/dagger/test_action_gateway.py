@@ -146,10 +146,30 @@ class Pi05JointActionContractTest(unittest.TestCase):
         self.assertEqual(commands[0].left, (0.0,) * 6 + (-3.4,))
         self.assertEqual(commands[0].right, (0.0,) * 6 + (0.0,))
 
+    def test_saturates_accepted_policy_gripper_range(self) -> None:
+        saturations = []
+        commands = self.contract.validate_actions(
+            (
+                action(left_gripper=-1.0, right_gripper=2.0),
+                action(left_gripper=-0.002147, right_gripper=1.1),
+            ),
+            self.state,
+            saturation_sink=saturations.append,
+        )
+
+        self.assertEqual(commands[0].left[-1], -3.4)
+        self.assertEqual(commands[0].right[-1], 0.0)
+        self.assertEqual(commands[1].left[-1], -3.4)
+        self.assertEqual(commands[1].right[-1], 0.0)
+        self.assertEqual(len(saturations), 4)
+        self.assertEqual(saturations[2].input_value, -0.002147)
+        self.assertEqual(saturations[2].output_value, 0.0)
+
     def test_rejects_step_gripper_epoch_and_checkpoint(self) -> None:
         invalid = (
             ticket(actions=[action(), action(0.3), action(), action()]),
-            ticket(actions=[action(left_gripper=1.1)] * 4),
+            ticket(actions=[action(left_gripper=2.000001)] * 4),
+            ticket(actions=[action(left_gripper=-1.000001)] * 4),
         )
         for candidate in invalid:
             with self.subTest(candidate=candidate):
@@ -224,7 +244,7 @@ class PolicyActionGatewayTest(unittest.TestCase):
         gateway, policy = self.make_gateway(mode)
         gateway.prepare_policy("episode-1", 0)
         policy.future.set_result(
-            ticket(actions=[action(left_gripper=2.0)] * 4)
+            ticket(actions=[action(left_gripper=2.000001)] * 4)
         )
 
         with self.assertRaises(RuntimeError):
