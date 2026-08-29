@@ -84,6 +84,7 @@ class AutoTriggerFactoryTest(unittest.TestCase):
             status_sink=self.messages.append,
         )
         with factory.open(station()) as trigger:
+            trigger.arm()
             os.write(self.master_fd, b" ")
             self.assertIs(trigger.wait(0.1).event, TriggerEvent.ACTIVATE)
             os.write(self.master_fd, b"a")
@@ -133,6 +134,20 @@ class AutoTriggerFactoryTest(unittest.TestCase):
         self.assertEqual(run.station_config, Path("/var/lib/arx5-collection/station.json"))
         self.assertEqual(run.output_root, Path("/reports/episodes"))
         self.assertEqual(run.task_description, " Folding 衣服 ")
+        self.assertFalse(run.no_compress)
+        no_compress = parser.parse_args(
+            [
+                "run",
+                "--task-config",
+                "task.json",
+                "--output-root",
+                "/reports/episodes",
+                "--task-description",
+                "folding the cloth",
+                "--no-compress",
+            ]
+        )
+        self.assertTrue(no_compress.no_compress)
         shadow = parser.parse_args(
             [
                 "dagger",
@@ -148,6 +163,7 @@ class AutoTriggerFactoryTest(unittest.TestCase):
             ]
         )
         self.assertEqual(shadow.dagger_command, "shadow")
+        self.assertFalse(shadow.no_compress)
         dry_run = parser.parse_args(
             [
                 "dagger",

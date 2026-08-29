@@ -50,11 +50,12 @@ class EpisodeRuntimeTest(unittest.TestCase):
         )
         started: list[RecordingStarted] = []
         stopping: list[RecordingStopping] = []
-        runtime = self.runtime(
-            trigger=FakeTrigger(
+        trigger = FakeTrigger(
                 [True, False, True],
                 clock_ns=iter_clock_ns([90.0, 190.25]),
-            ),
+            )
+        runtime = self.runtime(
+            trigger=trigger,
             wall_clock=lambda: next(wall_times),
             monotonic_clock=lambda: 100.0,
             recording_started_hook=started.append,
@@ -69,6 +70,10 @@ class EpisodeRuntimeTest(unittest.TestCase):
         self.assertEqual(stopping[0].monotonic_time_ns, 190_250_000_000)
         self.assertTrue(result.committed)
         self.assertEqual(runtime.state, EpisodeState.READY)
+        self.assertEqual(
+            trigger.lifecycle,
+            ["arm", "disarm", "arm", "disarm"],
+        )
         self.assertEqual(
             {path.name for path in result.mcap_path.parent.iterdir()},
             {"episode.mcap", "metadata.json"},
@@ -191,14 +196,52 @@ class EpisodeRuntimeTest(unittest.TestCase):
         self.assertEqual(metadata["collection_type"], "dagger")
         self.assertEqual(metadata["dagger"]["checkpoint_sha256"], "a" * 64)
 
-    def test_finalization_failure_preserves_partial_and_resets_state(self) -> None:
+    def test_finalizer_runs_before_metadata_and_merges_extensions(self) -> None:
+        calls: list[Path] = []
+
+        class Finalizer:
+            def finalize(self, mcap_path, streams, expected_metrics):
+                self.assertions(mcap_path, streams, expected_metrics)
+                return {
+                    "mcap_compression": {
+                        "algorithm": "zstd",
+                        "status": "compressed",
+                    }
+                }
+
+            def assertions(self, mcap_path, streams, expected_metrics):
+                self_path = Path(mcap_path)
+                assert self_path.read_bytes() == b"mcap"
+                assert streams == (STREAM,)
+                assert expected_metrics == METRICS
+                calls.append(self_path)
+
         runtime = self.runtime(
             trigger=FakeTrigger([True, True]),
+            finalizer=Finalizer(),
+            metadata_extensions={"capture": {"profile": "rgb_only"}},
+        )
+
+        result = runtime.run_once(self.request())
+
+        metadata = json.loads(result.metadata_path.read_text())
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(metadata["extensions"]["capture"]["profile"], "rgb_only")
+        self.assertEqual(
+            metadata["extensions"]["mcap_compression"]["algorithm"],
+            "zstd",
+        )
+
+    def test_finalization_failure_preserves_partial_and_stays_finalizing(self) -> None:
+        trigger = FakeTrigger([True, True])
+        runtime = self.runtime(
+            trigger=trigger,
             backend=FakeBackend(stop_error=RuntimeError("close failed")),
         )
         with self.assertRaisesRegex(RuntimeError, "close failed"):
             runtime.run_once(self.request())
-        self.assertEqual(runtime.state, EpisodeState.READY)
+        self.assertEqual(runtime.state, EpisodeState.FINALIZING)
+        self.assertEqual(trigger.lifecycle[-1], "disarm")
         self.assertEqual(len(EpisodeStore(self.output_root).list_partials()), 1)
 
     def test_recording_started_hook_failure_still_closes_components(self) -> None:
@@ -243,7 +286,7 @@ class EpisodeRuntimeTest(unittest.TestCase):
                 runtime.run_once(self.request())
 
         partials = store.list_partials()
-        self.assertEqual(runtime.state, EpisodeState.READY)
+        self.assertEqual(runtime.state, EpisodeState.FINALIZING)
         self.assertEqual(len(partials), 1)
         self.assertEqual(
             {path.name for path in partials[0].iterdir()},
@@ -285,6 +328,8 @@ class EpisodeRuntimeTest(unittest.TestCase):
         runtime_check=None,
         recording_started_hook=None,
         recording_stopping_hook=None,
+        finalizer=None,
+        metadata_extensions=None,
     ) -> EpisodeRuntime:
         return EpisodeRuntime(
             store=store or EpisodeStore(self.output_root),
@@ -299,6 +344,8 @@ class EpisodeRuntimeTest(unittest.TestCase):
             runtime_check=runtime_check,
             recording_started_hook=recording_started_hook,
             recording_stopping_hook=recording_stopping_hook,
+            finalizer=finalizer,
+            metadata_extensions=metadata_extensions,
             poll_interval_s=0.01,
         )
 

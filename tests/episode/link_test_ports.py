@@ -7,6 +7,12 @@ from arx5_collection.episode.models import StreamMetrics, StreamSpec
 
 
 class Trigger:
+    def arm(self) -> None:
+        pass
+
+    def disarm(self) -> None:
+        pass
+
     def wait(self, timeout_s: float) -> bool:
         return True
 

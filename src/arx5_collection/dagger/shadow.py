@@ -272,6 +272,12 @@ class ShadowRecordTrigger:
         self.trigger = trigger
         self.status_sink = status_sink or (lambda message: None)
 
+    def arm(self) -> None:
+        self.trigger.arm()
+
+    def disarm(self) -> None:
+        self.trigger.disarm()
+
     def wait(self, timeout_s: float) -> TriggerSignal | None:
         signal = self.trigger.wait(timeout_s)
         if signal is None:

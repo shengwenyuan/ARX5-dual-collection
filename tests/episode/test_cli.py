@@ -219,6 +219,31 @@ class EpisodeCliTest(unittest.TestCase):
         self.assertIn("result: not_started", errors.getvalue())
         self.assertFalse(any(self.output_root.glob(".*.partial")))
 
+    def test_finalization_failure_never_announces_ready_again(self) -> None:
+        trigger = ContextTrigger([True, True])
+        request = load_request(self.task_config, self.output_root, STATION_PATH)
+        runtime = self.runtime_factory()(request, trigger)
+
+        class BrokenFinalizer:
+            def finalize(self, mcap_path, streams, expected_metrics):
+                raise RuntimeError("compression failed")
+
+        runtime.finalizer = BrokenFinalizer()
+        errors = io.StringIO()
+
+        with self.assertRaisesRegex(RuntimeError, "compression failed"):
+            run_episode_loop(
+                runtime,
+                request,
+                episodes=2,
+                stdout=io.StringIO(),
+                stderr=errors,
+            )
+
+        self.assertEqual(errors.getvalue().count("READY:"), 1)
+        self.assertEqual(errors.getvalue().count("FINALIZING"), 1)
+        self.assertEqual(runtime.state.value, "finalizing")
+
     def runtime_factory(self, fail_first_episode: bool = False):
         ids = iter(["episode-001", "episode-002"])
         clock_values = iter([0.0, 1.0, 2.0, 3.0])

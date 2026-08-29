@@ -20,6 +20,8 @@ def test_collector_targets_inherit_one_installed_application_layer() -> None:
     assert "FROM runtime-base AS dagger-collector" in dockerfile
     assert dockerfile.count("COPY src/ /opt/arx5-runtime/src/") == 1
     assert dockerfile.count("/opt/arx5-runtime") >= 1
+    assert "mcap-linux-amd64" in dockerfile
+    assert "/usr/local/bin/mcap --version" in dockerfile
 
 
 def test_matching_revision_and_package_manifest_pass() -> None:

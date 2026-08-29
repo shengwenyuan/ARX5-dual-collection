@@ -102,6 +102,11 @@ def add_session_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--episodes", type=non_negative_int, default=0)
     parser.add_argument("--min-free-gib", type=positive_int, default=80)
     parser.add_argument("--readiness-timeout-s", type=positive_float, default=30.0)
+    parser.add_argument(
+        "--no-compress",
+        action="store_true",
+        help="skip MCAP compression while retaining normal validation",
+    )
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -281,6 +286,7 @@ def run_session(args: argparse.Namespace) -> int:
         ),
         check_sink=check_sink,
         warning_sink=lambda message: print(f"WARNING {message}", file=sys.stderr),
+        compression_enabled=not args.no_compress,
     )
     with termination_as_interrupt(), session:
         print(f"SESSION READY logs={session_log_dir}", flush=True)
@@ -334,6 +340,7 @@ def _dagger_run_spec(args: argparse.Namespace):
         readiness_timeout_s=args.readiness_timeout_s,
         software_version=_software_version(),
         session_id=_session_id(),
+        compression_enabled=not args.no_compress,
     )
 
 

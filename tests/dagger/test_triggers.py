@@ -23,6 +23,13 @@ from arx5_collection.production.config import (
 class FakeRecordTrigger:
     def __init__(self, events):
         self.events = iter(events)
+        self.armed = False
+
+    def arm(self) -> None:
+        self.armed = True
+
+    def disarm(self) -> None:
+        self.armed = False
 
     def wait(self, timeout_s: float):
         event = next(self.events, None)
@@ -68,12 +75,15 @@ class DaggerPedalTriggerAdapterTest(unittest.TestCase):
         trigger = DaggerPedalTriggerAdapter(
             FakeRecordTrigger([TriggerEvent.ACTIVATE, TriggerEvent.ABORT, None])
         )
+        trigger.arm()
         first = trigger.wait(0.1)
         second = trigger.wait(0.1)
         self.assertIs(first.event, DaggerTriggerEvent.RECORD_TOGGLE)
         self.assertIs(second.event, DaggerTriggerEvent.OWNERSHIP_TOGGLE)
         self.assertEqual(first.monotonic_time_ns, 123)
         self.assertIsNone(trigger.wait(0.1))
+        trigger.disarm()
+        self.assertFalse(trigger.trigger.armed)
 
 
 class DaggerKeyboardTriggerTest(unittest.TestCase):
@@ -87,6 +97,7 @@ class DaggerKeyboardTriggerTest(unittest.TestCase):
 
     def test_space_t_and_a_are_distinct(self) -> None:
         with DaggerKeyboardTrigger(self.stream) as trigger:
+            trigger.arm()
             os.write(self.master_fd, b" ")
             self.assertIs(
                 trigger.wait(0.1).event,
@@ -108,6 +119,7 @@ class DaggerKeyboardTriggerTest(unittest.TestCase):
             status_sink=messages.append,
         )
         with factory.open(station()) as trigger:
+            trigger.arm()
             os.write(self.master_fd, b"t")
             self.assertIs(
                 trigger.wait(0.1).event,

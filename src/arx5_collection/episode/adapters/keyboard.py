@@ -25,6 +25,7 @@ class KeyboardTrigger:
         self.key = key
         self.monotonic_clock = monotonic_clock
         self._original_settings: list[object] | None = None
+        self._armed = False
 
     def __enter__(self) -> KeyboardTrigger:
         if not self.stream.isatty():
@@ -47,10 +48,22 @@ class KeyboardTrigger:
                 self._original_settings,
             )
             self._original_settings = None
+            self._armed = False
+
+    def arm(self) -> None:
+        if self._original_settings is None:
+            raise RuntimeError("keyboard trigger must be used as a context manager")
+        termios.tcflush(self.stream.fileno(), termios.TCIFLUSH)
+        self._armed = True
+
+    def disarm(self) -> None:
+        self._armed = False
 
     def wait(self, timeout_s: float) -> TriggerSignal | None:
         if self._original_settings is None:
             raise RuntimeError("keyboard trigger must be used as a context manager")
+        if not self._armed:
+            raise RuntimeError("keyboard trigger is disarmed")
         readable, _, _ = select.select([self.stream], [], [], timeout_s)
         if not readable:
             return None

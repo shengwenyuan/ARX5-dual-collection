@@ -163,6 +163,7 @@ class PedalTrigger:
             TriggerEvent.ABORT: float("-inf"),
         }
         self._entered = False
+        self._armed = False
 
     def __enter__(self) -> PedalTrigger:
         self._entered = True
@@ -185,10 +186,41 @@ class PedalTrigger:
             except OSError:
                 pass
         self._entered = False
+        self._armed = False
+
+    def arm(self) -> None:
+        if not self._entered:
+            raise RuntimeError("pedal trigger must be used as a context manager")
+        self._drain_pending_reports()
+        self._armed = True
+
+    def disarm(self) -> None:
+        self._armed = False
+
+    def _drain_pending_reports(self) -> None:
+        while True:
+            try:
+                readable, _, _ = self.select_function(
+                    tuple(self._events_by_fd), (), (), 0.0
+                )
+                if not readable:
+                    return
+                for file_descriptor in readable:
+                    report = self.read_function(file_descriptor, len(PRESS_REPORT))
+                    if not report:
+                        raise RuntimeError("pedal disconnected")
+            except BlockingIOError:
+                return
+            except OSError as error:
+                raise RuntimeError(
+                    f"pedal disconnected or unreadable: {error}"
+                ) from error
 
     def wait(self, timeout_s: float) -> TriggerSignal | None:
         if not self._entered:
             raise RuntimeError("pedal trigger must be used as a context manager")
+        if not self._armed:
+            raise RuntimeError("pedal trigger is disarmed")
         if timeout_s < 0:
             raise ValueError("timeout_s must not be negative")
         try:

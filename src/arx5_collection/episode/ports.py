@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from pathlib import Path
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
 from typing import Protocol, runtime_checkable
 
 from .models import StreamMetrics, StreamSpec
@@ -31,8 +31,28 @@ class TriggerSignal:
 
 @runtime_checkable
 class RecordTrigger(Protocol):
+    def arm(self) -> None:
+        """Discard stale input and begin delivering new trigger events."""
+        ...
+
+    def disarm(self) -> None:
+        """Stop delivering trigger events until the next arm()."""
+        ...
+
     def wait(self, timeout_s: float) -> TriggerSignal | None:
         """Return the trigger event received before the timeout, if any."""
+        ...
+
+
+@runtime_checkable
+class EpisodeArtifactFinalizer(Protocol):
+    def finalize(
+        self,
+        mcap_path: Path,
+        streams: tuple[StreamSpec, ...],
+        expected_metrics: tuple[StreamMetrics, ...],
+    ) -> dict[str, object]:
+        """Finalize one closed MCAP and return its metadata extension."""
         ...
 
 

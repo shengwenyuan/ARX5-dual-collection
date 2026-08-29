@@ -53,6 +53,7 @@ class DaggerRunSpec:
     readiness_timeout_s: float
     software_version: str
     session_id: str
+    compression_enabled: bool = True
 
     @property
     def log_dir(self) -> Path:
@@ -110,6 +111,7 @@ class DaggerSessionBuilder:
                 f"WARNING {message}", file=self.stderr
             ),
             fail_directory="dagger_fail",
+            compression_enabled=spec.compression_enabled,
         )
 
     def _render_check(self, result: CheckResult) -> None:

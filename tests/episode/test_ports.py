@@ -23,6 +23,12 @@ class FakeTrigger:
     def __init__(self, presses: list[bool]) -> None:
         self.presses = iter(presses)
 
+    def arm(self) -> None:
+        pass
+
+    def disarm(self) -> None:
+        pass
+
     def wait(self, timeout_s: float) -> bool:
         return next(self.presses, False)
 

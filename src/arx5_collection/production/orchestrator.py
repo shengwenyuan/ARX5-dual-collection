@@ -9,6 +9,7 @@ from types import TracebackType
 from typing import Iterator
 
 from arx5_collection.collection_metadata import MetadataContext
+from arx5_collection.episode.finalization import McapFinalizer
 from arx5_collection.episode.models import (
     EpisodeBlocked,
     EpisodeOutcome,
@@ -16,7 +17,7 @@ from arx5_collection.episode.models import (
     RecordingStarted,
     RecordingStopping,
 )
-from arx5_collection.episode.ports import RecordTrigger
+from arx5_collection.episode.ports import EpisodeArtifactFinalizer, RecordTrigger
 from arx5_collection.episode.runtime import EpisodeRuntime
 from arx5_collection.episode.store import EpisodeStore
 from arx5_collection.reset import ResetCoordinator, ResetState
@@ -74,6 +75,8 @@ class ProductionSession:
         check_sink: CheckSink | None = None,
         warning_sink: WarningSink | None = None,
         fail_directory: str = "fail",
+        compression_enabled: bool = True,
+        finalizer: EpisodeArtifactFinalizer | None = None,
     ) -> None:
         if min_free_bytes < 0:
             raise ValueError("min_free_bytes must not be negative")
@@ -105,6 +108,10 @@ class ProductionSession:
         self.check_sink = check_sink or (lambda result: None)
         self.warning_sink = warning_sink or (lambda warning: None)
         self.fail_directory = fail_directory
+        self.finalizer = finalizer or McapFinalizer(
+            enabled=compression_enabled,
+            warning_sink=self.warning_sink,
+        )
         self._system_started = False
         self._readiness_started = False
         self._monitor_open = False
@@ -203,6 +210,7 @@ class ProductionSession:
         metadata_context_provider: Callable[[], MetadataContext] | None = None,
         recording_started_hook: Callable[[RecordingStarted], None] | None = None,
         recording_stopping_hook: Callable[[RecordingStopping], None] | None = None,
+        metadata_extensions: dict[str, object] | None = None,
     ) -> EpisodeRuntime:
         def prepare_episode() -> None:
             try:
@@ -240,6 +248,8 @@ class ProductionSession:
             metadata_context_provider=metadata_context_provider,
             recording_started_hook=recording_started_hook,
             recording_stopping_hook=stop_episode,
+            finalizer=self.finalizer,
+            metadata_extensions=metadata_extensions,
         )
 
     def _confirm_gravity_compensation(self, reason: str) -> str:

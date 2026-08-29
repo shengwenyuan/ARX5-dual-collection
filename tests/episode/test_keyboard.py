@@ -22,6 +22,7 @@ class KeyboardTriggerTest(unittest.TestCase):
 
     def test_timeout_wrong_key_and_trigger_key(self) -> None:
         with KeyboardTrigger(self.stream) as trigger:
+            trigger.arm()
             self.assertIsNone(trigger.wait(0.01))
             os.write(self.master_fd, b"x")
             self.assertIsNone(trigger.wait(0.1))
@@ -30,6 +31,7 @@ class KeyboardTriggerTest(unittest.TestCase):
 
     def test_a_is_abort_case_insensitively(self) -> None:
         with KeyboardTrigger(self.stream) as trigger:
+            trigger.arm()
             os.write(self.master_fd, b"a")
             self.assertIs(trigger.wait(0.1).event, TriggerEvent.ABORT)
             os.write(self.master_fd, b"A")
@@ -46,6 +48,17 @@ class KeyboardTriggerTest(unittest.TestCase):
     def test_wait_requires_context(self) -> None:
         with self.assertRaises(RuntimeError):
             KeyboardTrigger(self.stream).wait(0.01)
+
+    def test_arm_discards_input_received_while_disarmed(self) -> None:
+        with KeyboardTrigger(self.stream) as trigger:
+            os.write(self.master_fd, b" ")
+            trigger.arm()
+            self.assertIsNone(trigger.wait(0.01))
+            os.write(self.master_fd, b" ")
+            self.assertIs(trigger.wait(0.1).event, TriggerEvent.ACTIVATE)
+            trigger.disarm()
+            with self.assertRaisesRegex(RuntimeError, "disarmed"):
+                trigger.wait(0.01)
 
 
 if __name__ == "__main__":

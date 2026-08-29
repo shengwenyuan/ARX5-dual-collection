@@ -124,7 +124,8 @@ class PedalTriggerTest(unittest.TestCase):
         )
 
     def select(self, read, write, errors, timeout):
-        return tuple(self.readable), (), ()
+        readable, self.readable = tuple(self.readable), []
+        return readable, (), ()
 
     def read(self, file_descriptor: int, size: int) -> bytes:
         report = self.reports[file_descriptor]
@@ -139,6 +140,7 @@ class PedalTriggerTest(unittest.TestCase):
 
     def test_fixed_reports_map_to_activate_and_abort(self) -> None:
         with self.trigger:
+            self.trigger.arm()
             self.readable = [21]
             self.reports[21] = PRESS_REPORT
             signal = self.trigger.wait(0.1)
@@ -151,23 +153,28 @@ class PedalTriggerTest(unittest.TestCase):
 
     def test_abort_wins_when_both_are_ready(self) -> None:
         with self.trigger:
+            self.trigger.arm()
             self.readable = [21, 23]
             self.reports = {21: PRESS_REPORT, 23: PRESS_REPORT}
             self.assertIs(self.trigger.wait(0.1).event, TriggerEvent.ABORT)
 
     def test_ignores_other_reports_and_debounces(self) -> None:
         with self.trigger:
+            self.trigger.arm()
             self.readable = [21]
             self.reports[21] = bytes(64)
             self.assertIsNone(self.trigger.wait(0.1))
 
             self.reports[21] = PRESS_REPORT
+            self.readable = [21]
             self.assertIs(self.trigger.wait(0.1).event, TriggerEvent.ACTIVATE)
             self.now = 1.1
+            self.readable = [21]
             self.assertIsNone(self.trigger.wait(0.1))
 
     def test_disconnect_is_a_runtime_error(self) -> None:
         with self.trigger:
+            self.trigger.arm()
             self.readable = [23]
             self.reports[23] = OSError(errno.ENODEV, "gone")
             with self.assertRaisesRegex(RuntimeError, "disconnected or unreadable"):
@@ -175,10 +182,26 @@ class PedalTriggerTest(unittest.TestCase):
 
     def test_empty_read_is_a_disconnect(self) -> None:
         with self.trigger:
+            self.trigger.arm()
             self.readable = [23]
             self.reports[23] = b""
             with self.assertRaisesRegex(RuntimeError, "pedal disconnected"):
                 self.trigger.wait(0.1)
+
+    def test_arm_discards_reports_received_while_disarmed(self) -> None:
+        with self.trigger:
+            self.readable = [21]
+            self.reports[21] = PRESS_REPORT
+            self.trigger.arm()
+            self.assertIsNone(self.trigger.wait(0.01))
+            self.readable = [21]
+            self.assertIs(
+                self.trigger.wait(0.1).event,
+                TriggerEvent.ACTIVATE,
+            )
+            self.trigger.disarm()
+            with self.assertRaisesRegex(RuntimeError, "disarmed"):
+                self.trigger.wait(0.01)
 
 
 if __name__ == "__main__":

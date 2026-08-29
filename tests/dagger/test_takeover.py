@@ -88,6 +88,12 @@ class Trigger:
     def __init__(self, *events: DaggerTriggerEvent) -> None:
         self.events = list(events)
 
+    def arm(self) -> None:
+        pass
+
+    def disarm(self) -> None:
+        pass
+
     def wait(self, timeout_s: float):
         del timeout_s
         if not self.events:

@@ -15,6 +15,13 @@ class FakeTrigger:
     ) -> None:
         self.events = iter(events)
         self.clock_ns = clock_ns
+        self.lifecycle: list[str] = []
+
+    def arm(self) -> None:
+        self.lifecycle.append("arm")
+
+    def disarm(self) -> None:
+        self.lifecycle.append("disarm")
 
     def wait(self, timeout_s: float) -> TriggerSignal | None:
         event = next(self.events, False)

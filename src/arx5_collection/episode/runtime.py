@@ -17,7 +17,13 @@ from .models import (
     RecordingStopping,
     StreamMetrics,
 )
-from .ports import RecordTrigger, RecordingBackend, StreamMonitor, TriggerEvent
+from .ports import (
+    EpisodeArtifactFinalizer,
+    RecordTrigger,
+    RecordingBackend,
+    StreamMonitor,
+    TriggerEvent,
+)
 from .store import EpisodeStore
 
 
@@ -38,6 +44,8 @@ class EpisodeRuntime:
         metadata_context_provider: Callable[[], MetadataContext] | None = None,
         recording_started_hook: Callable[[RecordingStarted], None] | None = None,
         recording_stopping_hook: Callable[[RecordingStopping], None] | None = None,
+        finalizer: EpisodeArtifactFinalizer | None = None,
+        metadata_extensions: dict[str, object] | None = None,
         poll_interval_s: float = 0.1,
     ) -> None:
         self.store = store
@@ -59,6 +67,8 @@ class EpisodeRuntime:
         self.metadata_context_provider = metadata_context_provider
         self.recording_started_hook = recording_started_hook
         self.recording_stopping_hook = recording_stopping_hook
+        self.finalizer = finalizer
+        self.metadata_extensions = dict(metadata_extensions or {})
         self.poll_interval_s = poll_interval_s
         self.state = EpisodeState.READY
 
@@ -73,100 +83,122 @@ class EpisodeRuntime:
         started_at = self.wall_clock()
         started_monotonic_ns = round(self.monotonic_clock() * 1e9)
 
+        self.backend.start(pending.mcap_path, request.streams)
         try:
-            self.backend.start(pending.mcap_path, request.streams)
+            self.monitor.start(request.streams)
+        except BaseException:
+            self.backend.stop()
+            raise
+
+        self.state = EpisodeState.RECORDING
+        if self.state_sink is not None:
+            self.state_sink(self.state)
+        if self.recording_started_hook is not None:
             try:
-                self.monitor.start(request.streams)
+                self.recording_started_hook(
+                    RecordingStarted(pending.episode_id, started_monotonic_ns)
+                )
             except BaseException:
-                self.backend.stop()
+                self._stop_components()
                 raise
+        outcome, errors, stopping_monotonic_ns, session_blocked = self._wait_for_end()
+        ended_at = self.wall_clock()
+        duration_s = max(
+            0.0,
+            (stopping_monotonic_ns - started_monotonic_ns) / 1e9,
+        )
+        self.state = EpisodeState.FINALIZING
+        if self.state_sink is not None:
+            self.state_sink(self.state)
 
-            self.state = EpisodeState.RECORDING
-            if self.state_sink is not None:
-                self.state_sink(self.state)
-            if self.recording_started_hook is not None:
-                try:
-                    self.recording_started_hook(
-                        RecordingStarted(pending.episode_id, started_monotonic_ns)
-                    )
-                except BaseException:
-                    self._stop_components()
-                    raise
-            outcome, errors, stopping_monotonic_ns, session_blocked = (
-                self._wait_for_end()
-            )
-            ended_at = self.wall_clock()
-            duration_s = max(
-                0.0,
-                (stopping_monotonic_ns - started_monotonic_ns) / 1e9,
-            )
-            self.state = EpisodeState.FINALIZING
-            if self.state_sink is not None:
-                self.state_sink(self.state)
-
-            hook_error: BaseException | None = None
-            if self.recording_stopping_hook is not None:
-                try:
-                    self.recording_stopping_hook(
-                        RecordingStopping(outcome, stopping_monotonic_ns)
-                    )
-                except BaseException as error:
-                    hook_error = error
+        hook_error: BaseException | None = None
+        if self.recording_stopping_hook is not None:
             try:
-                stream_metrics = self._stop_components()
-            except BaseException as stop_error:
-                if hook_error is not None:
-                    raise hook_error from stop_error
-                raise
+                self.recording_stopping_hook(
+                    RecordingStopping(outcome, stopping_monotonic_ns)
+                )
+            except BaseException as error:
+                hook_error = error
+        try:
+            stream_metrics = self._stop_components()
+        except BaseException as stop_error:
             if hook_error is not None:
-                raise hook_error
-            pending_result = EpisodeResult(
-                episode_id=pending.episode_id,
-                outcome=outcome,
-                started_at=started_at,
-                ended_at=ended_at,
-                duration_s=duration_s,
-                committed=False,
-                mcap_path=pending.mcap_path,
-                metadata_path=pending.metadata_path,
-                stream_metrics=stream_metrics,
-                errors=errors,
-                session_blocked=session_blocked,
+                raise hook_error from stop_error
+            raise
+        if hook_error is not None:
+            raise hook_error
+        finalization_extensions = (
+            self.finalizer.finalize(
+                pending.mcap_path,
+                request.streams,
+                stream_metrics,
             )
-            metadata = build_metadata(
-                request,
-                pending_result,
-                load_station(request.station_config),
-                self.software_version,
-                metadata_context=(
-                    self.metadata_context_provider()
-                    if self.metadata_context_provider is not None
-                    else None
-                ),
+            if self.finalizer is not None
+            else {}
+        )
+        extension_overlap = (
+            self.metadata_extensions.keys() & finalization_extensions.keys()
+        )
+        if extension_overlap:
+            raise RuntimeError(
+                "duplicate metadata extensions: "
+                + ", ".join(sorted(extension_overlap))
             )
-            write_metadata(pending.metadata_path, metadata)
-            stored = self.store.commit(
-                pending,
-                outcome=outcome,
-            )
-            return replace(
-                pending_result,
-                committed=True,
-                mcap_path=stored.mcap_path,
-                metadata_path=stored.metadata_path,
-            )
-        finally:
-            self.state = EpisodeState.READY
+        pending_result = EpisodeResult(
+            episode_id=pending.episode_id,
+            outcome=outcome,
+            started_at=started_at,
+            ended_at=ended_at,
+            duration_s=duration_s,
+            committed=False,
+            mcap_path=pending.mcap_path,
+            metadata_path=pending.metadata_path,
+            stream_metrics=stream_metrics,
+            errors=errors,
+            session_blocked=session_blocked,
+        )
+        metadata = build_metadata(
+            request,
+            pending_result,
+            load_station(request.station_config),
+            self.software_version,
+            extensions={
+                **self.metadata_extensions,
+                **finalization_extensions,
+            },
+            metadata_context=(
+                self.metadata_context_provider()
+                if self.metadata_context_provider is not None
+                else None
+            ),
+        )
+        write_metadata(pending.metadata_path, metadata)
+        stored = self.store.commit(
+            pending,
+            outcome=outcome,
+        )
+        self.state = EpisodeState.READY
+        return replace(
+            pending_result,
+            committed=True,
+            mcap_path=stored.mcap_path,
+            metadata_path=stored.metadata_path,
+        )
 
     def _wait_for_start(self) -> None:
-        while True:
-            signal = self.trigger.wait(self.poll_interval_s)
-            if signal is not None and signal.event is TriggerEvent.ACTIVATE:
-                return
+        self.trigger.arm()
+        try:
+            while True:
+                signal = self.trigger.wait(self.poll_interval_s)
+                if signal is not None and signal.event is TriggerEvent.ACTIVATE:
+                    return
+        finally:
+            self.trigger.disarm()
 
     def _wait_for_end(
         self,
     ) -> tuple[EpisodeOutcome, tuple[str, ...], int, bool]:
+        self.trigger.arm()
         try:
             while True:
                 if self.runtime_check is not None:
@@ -208,6 +240,8 @@ class EpisodeRuntime:
             )
         except Exception as error:
             return EpisodeOutcome.FAIL, (str(error),), self._monotonic_ns(), True
+        finally:
+            self.trigger.disarm()
 
     def _monotonic_ns(self) -> int:
         return round(self.monotonic_clock() * 1e9)
