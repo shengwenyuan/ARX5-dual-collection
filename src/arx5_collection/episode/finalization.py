@@ -15,6 +15,7 @@ from .models import StreamMetrics, StreamSpec
 GIB = 1024**3
 MCAP_CLI = Path("/usr/local/bin/mcap")
 MCAP_CLI_VERSION = "0.3.0"
+_CROSS_TOPIC_ORDER_WARNING = " is less than the latest log time "
 
 CommandRunner = Callable[[Sequence[str]], subprocess.CompletedProcess[str]]
 McapAuditor = Callable[
@@ -120,8 +121,12 @@ class McapFinalizer:
         )
         doctor_s = self.clock() - doctor_started
         for line in diagnosis.stderr.splitlines():
-            if line.strip():
-                self.warning_sink(f"mcap doctor: {line.strip()}")
+            warning = line.strip()
+            if warning and not (
+                warning.startswith("Warning: Message.log_time ")
+                and _CROSS_TOPIC_ORDER_WARNING in warning
+            ):
+                self.warning_sink(f"mcap doctor: {warning}")
 
         actual_metrics = self.auditor(temporary_path, streams)
         self._require_equivalent_metrics(expected_metrics, actual_metrics)

@@ -36,7 +36,8 @@ class FakeMcapCli:
             argv,
             0,
             "",
-            "Warning: cross-topic log time decreases\n",
+            "Warning: Message.log_time 10 on \"/left\" is less than the latest "
+            "log time 11\nWarning: unexpected doctor warning\n",
         )
 
 
@@ -68,7 +69,7 @@ def test_compresses_validates_and_atomically_replaces(tmp_path: Path) -> None:
     assert not (tmp_path / ".episode.mcap.zstd.tmp").exists()
     assert [call[1] for call in cli.calls] == ["compress", "doctor"]
     assert cli.calls[0][-4:] == ("--compression", "zstd", "--order", "preserve")
-    assert warnings == ["mcap doctor: Warning: cross-topic log time decreases"]
+    assert warnings == ["mcap doctor: Warning: unexpected doctor warning"]
     metadata = extension["mcap_compression"]
     assert metadata["algorithm"] == "zstd"
     assert metadata["status"] == "compressed"
