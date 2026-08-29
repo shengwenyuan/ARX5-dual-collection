@@ -37,6 +37,30 @@ def collect() -> int:
     )
 
 
+def dagger(mode: str) -> int:
+    required("ARX5_OUTPUT_ROOT")
+    required("ARX5_TASK_DESCRIPTION")
+    environment = {**os.environ, "ARX5_DAGGER_MODE": mode}
+    return subprocess.call(
+        [
+            "docker",
+            "compose",
+            "--env-file",
+            str(STATION_DIR / "dagger.env"),
+            "-f",
+            str(ROOT / "docker/compose.dagger.yaml"),
+            "up",
+            "--no-build",
+            "--abort-on-container-exit",
+            "--exit-code-from",
+            "collector",
+            "collector",
+        ],
+        cwd=ROOT,
+        env=environment,
+    )
+
+
 def upload(full_check: str) -> int:
     source = required("ARX5_OUTPUT_ROOT")
     task = required("ARX5_TASK_DESCRIPTION")
@@ -80,6 +104,10 @@ def main() -> int:
     parser = argparse.ArgumentParser(prog="arx5")
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("collect", help="start a production collection Session")
+    dagger_parser = commands.add_parser("dagger", help="start a DAgger Session")
+    dagger_parser.add_argument(
+        "--mode", choices=("takeover", "shadow"), default="takeover"
+    )
     upload_parser = commands.add_parser(
         "upload", help="validate and upload the Session"
     )
@@ -88,7 +116,11 @@ def main() -> int:
     )
     args = parser.parse_args()
     try:
-        return collect() if args.command == "collect" else upload(args.full_check)
+        if args.command == "collect":
+            return collect()
+        if args.command == "dagger":
+            return dagger(args.mode)
+        return upload(args.full_check)
     except ValueError as error:
         parser.error(str(error))
 
