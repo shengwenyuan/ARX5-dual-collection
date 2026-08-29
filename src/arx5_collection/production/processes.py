@@ -17,14 +17,22 @@ class CameraSnapshotConfig:
     max_camera_span_ms: float
     max_arm_age_ms: float
     max_snapshot_age_ms: float
+    width: int
+    height: int
+    arena_path: Path
+    socket_path: Path
 
     def __post_init__(self) -> None:
         if min(
             self.max_camera_span_ms,
             self.max_arm_age_ms,
             self.max_snapshot_age_ms,
+            self.width,
+            self.height,
         ) <= 0:
-            raise ValueError("camera snapshot limits must be positive")
+            raise ValueError("camera snapshot limits and dimensions must be positive")
+        if not self.arena_path.is_absolute() or not self.socket_path.is_absolute():
+            raise ValueError("snapshot arena and socket paths must be absolute")
 
 
 @dataclass(frozen=True, slots=True)
@@ -265,7 +273,7 @@ class RosCommandSet:
                 "-p",
                 "fps:=30",
                 "-p",
-                "enable_snapshot_service:=" + ("true" if snapshot else "false"),
+                "enable_snapshot_ipc:=" + ("true" if snapshot else "false"),
             )
         )
         if snapshot is not None:
@@ -277,6 +285,14 @@ class RosCommandSet:
                     f"max_arm_age_ms:={snapshot.max_arm_age_ms}",
                     "-p",
                     f"max_snapshot_age_ms:={snapshot.max_snapshot_age_ms}",
+                    "-p",
+                    f"snapshot_width:={snapshot.width}",
+                    "-p",
+                    f"snapshot_height:={snapshot.height}",
+                    "-p",
+                    f"snapshot_arena_path:='{snapshot.arena_path}'",
+                    "-p",
+                    f"snapshot_socket_path:='{snapshot.socket_path}'",
                 )
             )
         return self._process("d405-source", tuple(arguments))

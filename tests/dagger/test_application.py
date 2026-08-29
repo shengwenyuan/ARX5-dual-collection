@@ -49,6 +49,17 @@ class DaggerApplicationBuilderTest(unittest.TestCase):
         session = DaggerSessionBuilder().build(spec, settings)
 
         self.assertEqual(session.fail_directory, "dagger_fail")
+        assert session.camera_snapshot is not None
+        self.assertEqual(session.camera_snapshot.width, 640)
+        self.assertEqual(session.camera_snapshot.height, 360)
+        self.assertEqual(
+            session.camera_snapshot.arena_path,
+            Path("/dev/shm/arx5-vla-snapshot-31"),
+        )
+        self.assertEqual(
+            session.camera_snapshot.socket_path,
+            Path("/tmp/arx5-vla-snapshot-31.sock"),
+        )
 
     def test_builds_shadow_from_profile_without_starting_resources(self) -> None:
         fake_session_builder = FakeSessionBuilder()

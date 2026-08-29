@@ -10,6 +10,7 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -18,7 +19,9 @@
 
 #include "arx5_collection_interfaces/msg/arm_state.hpp"
 #include "arx5_collection_interfaces/msg/stream_status.hpp"
-#include "arx5_collection_interfaces/srv/get_vla_snapshot.hpp"
+#include "arx5_d405_source_cpp/rgb_image_resizer.hpp"
+#include "arx5_d405_source_cpp/snapshot_shared_memory_writer.hpp"
+#include "arx5_d405_source_cpp/snapshot_socket_server.hpp"
 #include "arx5_vla_snapshot/snapshot_buffer.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/image.hpp"
@@ -32,7 +35,6 @@ using namespace std::chrono_literals;
 using Image = sensor_msgs::msg::Image;
 using ArmState = arx5_collection_interfaces::msg::ArmState;
 using StreamStatus = arx5_collection_interfaces::msg::StreamStatus;
-using GetVlaSnapshot = arx5_collection_interfaces::srv::GetVlaSnapshot;
 
 constexpr int kRequiredWidth = 848;
 constexpr int kRequiredHeight = 480;
@@ -347,7 +349,7 @@ public:
     width_(declare_parameter<int>("width", kRequiredWidth)),
     height_(declare_parameter<int>("height", kRequiredHeight)),
     fps_(declare_parameter<int>("fps", kRequiredFps)),
-    snapshot_enabled_(declare_parameter<bool>("enable_snapshot_service", false)),
+    snapshot_enabled_(declare_parameter<bool>("enable_snapshot_ipc", false)),
     buffer_(positive_size_parameter("camera_history_size", 4),
       positive_size_parameter("arm_history_size", 128)),
     constraints_{
@@ -378,7 +380,21 @@ public:
 
     status_timer_ = create_wall_timer(1s, [this]() {publish_status();});
     if (snapshot_enabled_) {
-      configure_snapshot_endpoint();
+      const auto snapshot_width = positive_size_parameter("snapshot_width", 0);
+      const auto snapshot_height = positive_size_parameter("snapshot_height", 0);
+      if (snapshot_width > static_cast<std::size_t>(width_) ||
+        snapshot_height > static_cast<std::size_t>(height_))
+      {
+        throw std::invalid_argument("snapshot dimensions cannot exceed D405 dimensions");
+      }
+      snapshot_resizer_.emplace(
+        static_cast<std::uint32_t>(snapshot_width),
+        static_cast<std::uint32_t>(snapshot_height));
+      snapshot_writer_.emplace(
+        required_string("snapshot_arena_path"),
+        static_cast<std::uint32_t>(snapshot_width),
+        static_cast<std::uint32_t>(snapshot_height));
+      configure_snapshot_endpoint(required_string("snapshot_socket_path"));
     }
   }
 
@@ -393,17 +409,23 @@ public:
       for (auto & worker : workers_) {
         worker->start();
       }
+      if (snapshot_server_) {
+        snapshot_server_->start();
+      }
     } catch (...) {
       stop();
       throw;
     }
     RCLCPP_INFO(
-      get_logger(), "three D405 pipelines ready; snapshot_service=%s",
+      get_logger(), "three D405 pipelines ready; snapshot_ipc=%s",
       snapshot_enabled_ ? "enabled" : "disabled");
   }
 
   void stop() noexcept
   {
+    if (snapshot_server_) {
+      snapshot_server_->stop();
+    }
     for (auto iterator = workers_.rbegin(); iterator != workers_.rend(); ++iterator) {
       (*iterator)->stop();
     }
@@ -411,6 +433,11 @@ public:
 
 private:
   std::string required_serial(const std::string & name)
+  {
+    return required_string(name);
+  }
+
+  std::string required_string(const std::string & name)
   {
     const auto value = declare_parameter<std::string>(name, "");
     if (value.empty()) {
@@ -501,7 +528,7 @@ private:
       topic, rclcpp::SensorDataQoS().keep_last(1), std::move(callback), options);
   }
 
-  void configure_snapshot_endpoint()
+  void configure_snapshot_endpoint(const std::string & socket_path)
   {
     left_arm_subscription_ = arm_subscription<ArmState>(
       "/embodiments/left_arm/state",
@@ -509,42 +536,37 @@ private:
     right_arm_subscription_ = arm_subscription<ArmState>(
       "/embodiments/right_arm/state",
       [this](ArmState::ConstSharedPtr message) {buffer_.add_right_arm(std::move(message));});
-    service_group_ = create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
-    callback_groups_.push_back(service_group_);
-    snapshot_service_ = create_service<GetVlaSnapshot>(
-      "/dagger/get_snapshot",
-      std::bind(
-        &MultiD405Source::handle_snapshot, this,
-        std::placeholders::_1, std::placeholders::_2),
-      rclcpp::ServicesQoS(), service_group_);
+    snapshot_server_ = std::make_unique<SnapshotSocketServer>(
+      socket_path, [this]() {
+        try {
+          return capture_snapshot();
+        } catch (const std::exception & error) {
+          RCLCPP_FATAL(get_logger(), "snapshot IPC failed: %s", error.what());
+          rclcpp::shutdown();
+          throw;
+        }
+      });
   }
 
-  void handle_snapshot(
-    const std::shared_ptr<GetVlaSnapshot::Request>,
-    std::shared_ptr<GetVlaSnapshot::Response> response)
+  SnapshotSocketReply capture_snapshot()
   {
     const auto result = buffer_.select(get_clock()->now().nanoseconds(), constraints_);
     if (!result.snapshot) {
-      response->ready = false;
-      response->failure_code = arx5_vla_snapshot::failure_code_name(result.failure.code);
-      response->observed_ns = result.failure.observed_ns;
-      response->limit_ns = result.failure.limit_ns;
-      response->detail = result.failure.detail;
-      return;
+      return {
+        static_cast<std::uint32_t>(result.failure.code), 0, 0,
+        result.failure.observed_ns, result.failure.limit_ns};
     }
     const auto & snapshot = *result.snapshot;
-    response->ready = true;
-    response->observed_ns = -1;
-    response->limit_ns = -1;
-    response->observation_cutoff.sec = static_cast<std::int32_t>(
-      snapshot.cutoff_ns / 1'000'000'000LL);
-    response->observation_cutoff.nanosec = static_cast<std::uint32_t>(
-      snapshot.cutoff_ns % 1'000'000'000LL);
-    response->camera_left = *snapshot.camera_left;
-    response->camera_overview = *snapshot.camera_overview;
-    response->camera_right = *snapshot.camera_right;
-    response->left_arm = *snapshot.left_arm;
-    response->right_arm = *snapshot.right_arm;
+    if (!snapshot_resizer_ || !snapshot_writer_) {
+      throw std::logic_error("snapshot data plane is not configured");
+    }
+    auto camera_left = snapshot_resizer_->resize(*snapshot.camera_left);
+    auto camera_overview = snapshot_resizer_->resize(*snapshot.camera_overview);
+    auto camera_right = snapshot_resizer_->resize(*snapshot.camera_right);
+    const auto descriptor = snapshot_writer_->commit(
+      camera_left, camera_overview, camera_right,
+      *snapshot.left_arm, *snapshot.right_arm, snapshot.cutoff_ns);
+    return {0, descriptor.slot, descriptor.generation, -1, -1};
   }
 
   int width_;
@@ -553,15 +575,16 @@ private:
   bool snapshot_enabled_;
   arx5_vla_snapshot::SnapshotBuffer buffer_;
   arx5_vla_snapshot::SnapshotConstraints constraints_;
+  std::optional<RgbImageResizer> snapshot_resizer_;
+  std::optional<arx5_d405_source_cpp::SnapshotSharedMemoryWriter> snapshot_writer_;
+  std::unique_ptr<SnapshotSocketServer> snapshot_server_;
   rclcpp::Publisher<StreamStatus>::SharedPtr status_publisher_;
   std::vector<std::unique_ptr<CameraEndpoint>> endpoints_;
   std::vector<std::unique_ptr<CameraWorker>> workers_;
   rclcpp::TimerBase::SharedPtr status_timer_;
   std::vector<rclcpp::CallbackGroup::SharedPtr> callback_groups_;
-  rclcpp::CallbackGroup::SharedPtr service_group_;
   rclcpp::Subscription<ArmState>::SharedPtr left_arm_subscription_;
   rclcpp::Subscription<ArmState>::SharedPtr right_arm_subscription_;
-  rclcpp::Service<GetVlaSnapshot>::SharedPtr snapshot_service_;
 };
 
 }  // namespace

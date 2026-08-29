@@ -3,7 +3,6 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from enum import Enum
-from typing import Protocol
 
 from arx5_collection.gripper import GripperCalibration
 
@@ -129,16 +128,9 @@ class Pi05Observation:
             raise ValueError("observation cutoff must not be negative")
 
 
-class ImagePreprocessor(Protocol):
-    def prepare(self, frame: RgbFrame) -> RgbFrame: ...
-
-
 class Pi05ObservationEncoder:
-    def __init__(
-        self, grippers: GripperCalibration, image_preprocessor: ImagePreprocessor
-    ) -> None:
+    def __init__(self, grippers: GripperCalibration) -> None:
         self.grippers = grippers
-        self.image_preprocessor = image_preprocessor
 
     def encode(self, step: VlaObservationStep) -> Pi05Observation:
         state = (
@@ -149,8 +141,8 @@ class Pi05ObservationEncoder:
         )
         return Pi05Observation(
             state=state,
-            camera_high=self.image_preprocessor.prepare(step.camera_overview),
-            camera_left_wrist=self.image_preprocessor.prepare(step.camera_left),
-            camera_right_wrist=self.image_preprocessor.prepare(step.camera_right),
+            camera_high=step.camera_overview,
+            camera_left_wrist=step.camera_left,
+            camera_right_wrist=step.camera_right,
             cutoff_ns=step.cutoff_ns,
         )

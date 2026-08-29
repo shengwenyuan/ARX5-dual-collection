@@ -71,7 +71,7 @@ multi_d405_source
 ## 2026-08-19 普通模式回归
 
 - W3 Episode `20260819T102326317556Z-ab397268` 正常 success，39.01 秒、11.9 GiB，退出后无相机、CAN、slcand、ROS 子进程或 Container 残留。
-- 普通模式只启动一个 `multi_d405_source`，日志确认 `snapshot_service=disabled`。
+- 普通模式只启动一个 `multi_d405_source`，日志确认 `snapshot_ipc=disabled`。
 - 双臂约 1000 Hz；三路 RGB-D 约 30 Hz。left/right 完全配对，overview 在 Recorder 边界多 1 帧 Color；right 出现一次 66.67 ms 孤立 gap。
 - 离线复算三相机 40 ms 配组通过率 100%，最大跨度 28.53 ms；双臂因果年龄最大约 1.14 ms。
 - 单 Episode 普通模式回归判定 PASS。提升为正式 production image 前，仍需在同一 Session 完成一条 45–60 秒和一条 15–30 秒连续 Episode，确认相机不在 Episode 间重启。

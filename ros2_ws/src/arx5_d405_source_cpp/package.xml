@@ -9,8 +9,10 @@
   <buildtool_depend>ament_cmake</buildtool_depend>
   <depend>arx5_collection_interfaces</depend>
   <depend>arx5_vla_snapshot</depend>
+  <depend>opencv</depend>
   <depend>rclcpp</depend>
   <depend>sensor_msgs</depend>
+  <test_depend>ament_cmake_gtest</test_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

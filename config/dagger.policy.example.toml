@@ -38,7 +38,7 @@ max_normalized_gripper = 1.0
 max_camera_span_ms = 40.0
 max_arm_age_ms = 2.0
 max_snapshot_age_ms = 100.0
-service_timeout_ms = 250.0
+request_timeout_ms = 250.0
 
 [gripper]
 contract = "arx5-gripper-v1"

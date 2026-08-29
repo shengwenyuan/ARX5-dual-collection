@@ -1,7 +1,7 @@
 # DAgger 实施记录
 
 - Status: `D0 accepted; D1b v2 Take-over and unified Timeline accepted`
-- Updated: 2026-08-20
+- Updated: 2026-08-29
 - Branch: `main`
 
 ## 当前迭代
@@ -11,8 +11,8 @@
 ```text
 librealsense 三 Pipeline -> 六路 ROS Topic / MCAP
   -> 进程内 Color Matcher + ROS ArmState
-  -> /dagger/get_snapshot
-  -> Python RosVlaSnapshotClient
+  -> Unix socket request + 双缓冲共享内存
+  -> Python LocalVlaSnapshotClient
   -> AsyncPi05PolicyClient
   -> PI-style Policy Server
   -> Session JSONL diagnostics
@@ -24,6 +24,7 @@ librealsense 三 Pipeline -> 六路 ROS Topic / MCAP
 - 逐次 `policy_inference`、`policy_action` 及 observation source stamp 的 MCAP 记录。
 - Shadow 对 command、Gateway、control authority 或 Episode outcome 的影响。
 - 把模型协议、Policy、Recorder 或控制逻辑塞入相机 Source。
+- 通过DDS Service传输Snapshot请求、响应或图像payload。
 
 本轮保留：
 
@@ -233,3 +234,20 @@ D1a 的本地纯逻辑与 Application 组装测试已通过。W3 无硬件集成
 - v3 参考 Client 直接提交 `640x480` RGB，而当前 Collector 的 π0.5 encoder 输出 `640x360`；迁移前必须按 v3 训练预处理冻结图像契约，不能仅因 Server 内部还能 resize 就视为等价。
 - v3 不是替换 checkpoint 路径即可运行。现有 v2 Gateway、顺序执行器和 Policy envelope 必须升级为连续 action queue、重叠异步推理、delay 估计、带 control epoch/action sequence 的关联校验与原子 tail replacement。
 - 相机 Source、Observation、MCAP、Authority Timeline、Take-over 状态机、Vendor latch 和 14D action contract 继续复用；RTC 诊断留在 Session JSONL，不增加普通推理 MCAP Topic。
+
+## 2026-08-28 Snapshot 本地IPC收口
+
+- 三路Canonical RGB-D继续以`848×480@30`可靠发布并完整录制；Snapshot只对同一真实因果组三路RGB做`INTER_AREA 640×360`缩放。
+- 大图DDS Service会在完整Recorder负载下出现成簇长尾；即使图像payload移入共享内存，小型DDS response仍复现5/450和5/1000超时。
+- 逐请求诊断确认超时请求的C++ callback均已进入并约3 ms完成，残余故障严格位于DDS response到Python future之间。
+- 最终删除`GetVlaSnapshot` Service。`LocalVlaSnapshotClient`通过Unix socket发送单字节请求、接收32-byte结果，再从generation保护的双缓冲arena读取三图、来源时间戳和原始双臂状态。
+- W3完整八路Recorder无动作验收：450/450@2.5 Hz、1000/1000@5 Hz、2000/2000@5 Hz；最长400.24秒，p99 4.15 ms、max 7.34 ms。
+- 测试未加载Policy、未创建Action Publisher、未执行GO_HOME；临时Harness、概率日志和DDS消融参数均未进入主线。
+
+## 2026-08-29 Shadow 与 Take-over 真机验收
+
+- Shadow 连续完成一长两短共三条 success Episode，累计661次真实推理全部成功；Snapshot 长 Episode p99为4.52 ms、最大6.85 ms，未出现timeout、buffer未就绪或误终止。
+- Take-over 首条 Episode 持续318.49秒，完成5次人工介入和5次模型恢复；417次推理提交中415次被当前epoch接受，未接受的2次随epoch切换或故障作废。控制队列最低4步，无underrun；命令间隔p99为42.71 ms、最大46.84 ms。
+- 首条 Episode 最终仅因模型给出右夹爪归一化值`-0.002147`、违反冻结边界`[0,1]`而进入`FAULT_HOLD`，正确落入`dagger_fail/`并让Session返回READY。该故障与Snapshot、Policy通信无关。
+- 同一Session第二条 Episode 持续68.11秒并success；96/96次推理接受，控制队列最低7步，无通信或调度故障。该条以人工控制区间结束，metadata边界闭合。
+- 本轮确认本地IPC已覆盖真实Shadow和Take-over。夹爪边界容差及终端日志降噪作为独立后续修改，不回混Snapshot transport提交。

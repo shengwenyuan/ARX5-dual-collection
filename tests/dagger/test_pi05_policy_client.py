@@ -76,6 +76,13 @@ class AsyncPi05PolicyClientTest(unittest.TestCase):
 
         self.assertEqual(ticket.inference_id, "request-1")
         self.assertEqual(ticket.execution, EXECUTION)
+        self.assertIsNotNone(ticket.timing)
+        assert ticket.timing is not None
+        self.assertGreaterEqual(ticket.timing.snapshot_ms, 0.0)
+        self.assertGreaterEqual(ticket.timing.encode_ms, 0.0)
+        self.assertGreaterEqual(ticket.timing.policy_round_trip_ms, 0.0)
+        self.assertEqual(ticket.timing.server_inference_ms, 0.00001)
+        self.assertGreaterEqual(ticket.timing.total_ms, 0.0)
         self.assertEqual(self.transport.requests[0].episode_id, "episode-1")
 
     def test_old_epoch_response_is_discarded(self) -> None:

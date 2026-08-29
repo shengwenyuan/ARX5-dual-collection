@@ -17,7 +17,7 @@ from arx5_collection.collection_metadata import (
 from arx5_collection.episode.models import RecordingStarted, RecordingStopping
 from arx5_collection.episode.ports import TriggerEvent, TriggerSignal
 
-from .models import DaggerTriggerEvent, ShadowFailureCode
+from .models import DaggerTriggerEvent, InferenceTiming, ShadowFailureCode
 from .observation import ObservationUnavailableError
 from .ports import AsyncPolicyClient, DaggerTrigger
 
@@ -47,6 +47,11 @@ class ShadowAttempt:
     detail: str = ""
     observed_ns: int | None = None
     limit_ns: int | None = None
+    snapshot_ms: float | None = None
+    encode_ms: float | None = None
+    policy_round_trip_ms: float | None = None
+    server_inference_ms: float | None = None
+    client_total_ms: float | None = None
 
 
 class JsonlShadowLog:
@@ -167,7 +172,7 @@ class ShadowInferenceLoop:
                 self._stop.wait(0.02)
             completed_at_ns = self.wall_clock_ns()
             try:
-                future.result()
+                ticket = future.result()
             except BaseException as error:
                 code = _failure_code(error)
                 self._record_failure(
@@ -197,6 +202,7 @@ class ShadowInferenceLoop:
                     inference_id,
                     started_at_ns,
                     completed_at_ns,
+                    ticket.timing,
                 )
             remaining_s = self.period_s - (self.monotonic_clock() - started_s)
             self._stop.wait(max(0.0, remaining_s))
@@ -219,6 +225,7 @@ class ShadowInferenceLoop:
         inference_id: str,
         started_at_ns: int,
         completed_at_ns: int,
+        timing: InferenceTiming | None,
     ) -> None:
         with self._lock:
             recovered = self._degraded
@@ -235,6 +242,15 @@ class ShadowInferenceLoop:
                 status="recovered" if recovered else "success",
                 started_at_ns=started_at_ns,
                 completed_at_ns=completed_at_ns,
+                snapshot_ms=None if timing is None else timing.snapshot_ms,
+                encode_ms=None if timing is None else timing.encode_ms,
+                policy_round_trip_ms=(
+                    None if timing is None else timing.policy_round_trip_ms
+                ),
+                server_inference_ms=(
+                    None if timing is None else timing.server_inference_ms
+                ),
+                client_total_ms=None if timing is None else timing.total_ms,
             )
         )
         if recovered:

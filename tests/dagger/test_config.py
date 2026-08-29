@@ -33,7 +33,7 @@ inference_timeout_s = 12.5
 max_camera_span_ms = 40.0
 max_arm_age_ms = 2.0
 max_snapshot_age_ms = 100.0
-service_timeout_ms = 250.0
+request_timeout_ms = 250.0
 
 [gripper]
 contract = "arx5-gripper-v1"
@@ -61,7 +61,7 @@ class DaggerConfigTest(unittest.TestCase):
         self.assertEqual(collector.observation.max_camera_span_ns, 40_000_000)
         self.assertEqual(collector.observation.max_arm_age_ns, 2_000_000)
         self.assertEqual(collector.observation.max_snapshot_age_ns, 100_000_000)
-        self.assertEqual(collector.snapshot_service_timeout_s, 0.25)
+        self.assertEqual(collector.snapshot_timeout_s, 0.25)
         self.assertEqual(collector.gripper_contract, "arx5-gripper-v1")
         self.assertEqual(collector.grippers.open_value, -3.4)
         self.assertEqual(collector.grippers.closed_value, 0.0)
@@ -126,6 +126,9 @@ class DaggerConfigTest(unittest.TestCase):
         self.assertEqual(collector.checkpoint_profile.input.height, 360)
         self.assertEqual(collector.checkpoint_profile.input.model_width, 224)
         self.assertEqual(collector.checkpoint_profile.input.model_height, 224)
+        self.assertEqual(collector.snapshot_timeout_s, 0.2)
+        self.assertEqual(collector.control.policy_wait_timeout_s, 0.35)
+        self.assertEqual(collector.control.rtc_deadline_margin_s, 0.05)
         assert collector.rtc_rollout is not None
         self.assertEqual(collector.rtc_rollout.prefetch_after_steps, 10)
         self.assertEqual(collector.rtc_rollout.initial_delay_steps, 3)
@@ -136,6 +139,29 @@ class DaggerConfigTest(unittest.TestCase):
             ),
             19,
         )
+
+    def test_rtc_snapshot_timeout_must_precede_request_deadline(self) -> None:
+        root = Path(__file__).resolve().parents[2]
+        payload = (root / "config" / "dagger.pi05-stacking-v3-rtc.toml").read_text()
+        self.path.write_text(
+            payload.replace("request_timeout_ms = 200.0", "request_timeout_ms = 350.0")
+        )
+
+        with self.assertRaisesRegex(ValueError, "snapshot timeout"):
+            DaggerCollectorSettings.load(self.path)
+
+    def test_rtc_request_deadline_reserves_configured_margin(self) -> None:
+        root = Path(__file__).resolve().parents[2]
+        payload = (root / "config" / "dagger.pi05-stacking-v3-rtc.toml").read_text()
+        self.path.write_text(
+            payload.replace(
+                "policy_wait_timeout_s = 0.35",
+                "policy_wait_timeout_s = 0.36",
+            )
+        )
+
+        with self.assertRaisesRegex(ValueError, "margin exceed"):
+            DaggerCollectorSettings.load(self.path)
 
 
 if __name__ == "__main__":

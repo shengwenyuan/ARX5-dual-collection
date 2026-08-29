@@ -20,6 +20,8 @@ RUN apt-get update \
         libssl-dev \
         libudev-dev \
         libusb-1.0-0-dev \
+        libopencv-core-dev \
+        libopencv-imgproc-dev \
         ninja-build \
         patch \
         pkg-config \
@@ -98,6 +100,8 @@ RUN apt-get update \
         can-utils \
         iproute2 \
         libusb-1.0-0 \
+        libopencv-core406t64 \
+        libopencv-imgproc406t64 \
         python3 \
         python3-pip \
         ros-${ROS_DISTRO}-rosbag2 \
@@ -164,8 +168,7 @@ RUN apt-get update \
         "openpi-${OPENPI_COMMIT}/packages/openpi-client" \
     && python3 -m pip wheel \
         --wheel-dir /tmp/dagger-wheels \
-        /tmp/openpi-client \
-        opencv-python-headless==4.11.0.86
+        /tmp/openpi-client
 
 FROM runtime-base AS dagger-collector
 
@@ -176,7 +179,6 @@ RUN python3 -m pip install \
         --no-index \
         --find-links /tmp/dagger-wheels \
         openpi-client \
-        opencv-python-headless==4.11.0.86 \
     && rm -rf /tmp/dagger-wheels
 
 ENTRYPOINT ["/ros_entrypoint.sh"]

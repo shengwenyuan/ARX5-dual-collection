@@ -179,12 +179,33 @@ DEFAULT_PI05_EXECUTION_PROFILE = PolicyExecutionProfile(
 
 
 @dataclass(frozen=True, slots=True)
+class InferenceTiming:
+    snapshot_ms: float
+    encode_ms: float
+    policy_round_trip_ms: float
+    server_inference_ms: float
+    total_ms: float
+
+    def __post_init__(self) -> None:
+        values = (
+            self.snapshot_ms,
+            self.encode_ms,
+            self.policy_round_trip_ms,
+            self.server_inference_ms,
+            self.total_ms,
+        )
+        if any(not math.isfinite(value) or value < 0 for value in values):
+            raise ValueError("inference timings must be non-negative and finite")
+
+
+@dataclass(frozen=True, slots=True)
 class InferenceTicket:
     inference_id: str
     control_epoch: int
     checkpoint_sha256: str
     action_chunk: tuple[tuple[float, ...], ...]
     execution: PolicyExecutionProfile = DEFAULT_PI05_EXECUTION_PROFILE
+    timing: InferenceTiming | None = None
 
     def __post_init__(self) -> None:
         if not self.inference_id:

@@ -17,12 +17,16 @@ from arx5_collection.production.orchestrator import GIB, ProductionSession
 from arx5_collection.production.processes import CameraSnapshotConfig
 from arx5_collection.reset import ResetState
 from arx5_collection.ros2_adapters.recording import RosbagRecordingBackend
+from arx5_collection.snapshot_shared_memory import (
+    snapshot_arena_path,
+    snapshot_socket_path,
+)
 
 from .config import DaggerCollectorSettings
+from .local_snapshot import LocalVlaSnapshotClient
 from .observation import Pi05ObservationEncoder
 from .openpi_transport import OpenPiDaggerTransport
 from .policy_client import AsyncPi05PolicyClient
-from .ros_snapshot import OpenCvRgbResizer, RosVlaSnapshotClient
 from .shadow import (
     JsonlShadowLog,
     ShadowEpisodeHooks,
@@ -82,6 +86,10 @@ class DaggerSessionBuilder:
                 max_camera_span_ms=settings.observation.max_camera_span_ns / 1e6,
                 max_arm_age_ms=settings.observation.max_arm_age_ns / 1e6,
                 max_snapshot_age_ms=settings.observation.max_snapshot_age_ns / 1e6,
+                width=settings.checkpoint_profile.input.width,
+                height=settings.checkpoint_profile.input.height,
+                arena_path=snapshot_arena_path(station.ros_domain_id),
+                socket_path=snapshot_socket_path(station.ros_domain_id),
             ),
             backend=(
                 RosbagRecordingBackend(
@@ -143,6 +151,9 @@ class ShadowApplication:
 
     def run(self) -> int:
         log_dir = self.spec.log_dir
+        snapshot = self.session.camera_snapshot
+        if snapshot is None:
+            raise RuntimeError("DAgger Session requires a Snapshot data plane")
         status_sink = lambda message: print(
             message, file=self.stderr, flush=True
         )
@@ -152,8 +163,12 @@ class ShadowApplication:
             self.settings.checkpoint_sha256,
             self.settings.inference_timeout_s,
             self.settings.checkpoint_profile,
-        ) as transport, RosVlaSnapshotClient(
-            timeout_s=self.settings.snapshot_service_timeout_s
+        ) as transport, LocalVlaSnapshotClient(
+            timeout_s=self.settings.snapshot_timeout_s,
+            socket_path=snapshot.socket_path,
+            arena_path=snapshot.arena_path,
+            width=self.settings.checkpoint_profile.input.width,
+            height=self.settings.checkpoint_profile.input.height,
         ) as observations, JsonlShadowLog(
             log_dir / "dagger-shadow.jsonl"
         ) as shadow_log, self.session:
@@ -162,13 +177,7 @@ class ShadowApplication:
                 prompt=self.settings.prompt,
                 checkpoint_sha256=self.settings.checkpoint_sha256,
                 observations=observations,
-                encoder=Pi05ObservationEncoder(
-                    self.settings.grippers,
-                    OpenCvRgbResizer(
-                        width=self.settings.checkpoint_profile.input.width,
-                        height=self.settings.checkpoint_profile.input.height,
-                    ),
-                ),
+                encoder=Pi05ObservationEncoder(self.settings.grippers),
                 transport=transport,
                 execution=self.settings.execution,
             )
@@ -307,6 +316,9 @@ class TakeoverApplication:
         )
 
         log_dir = self.spec.log_dir
+        snapshot = self.session.camera_snapshot
+        if snapshot is None:
+            raise RuntimeError("DAgger Session requires a Snapshot data plane")
         status_sink = lambda message: print(
             message, file=self.stderr, flush=True
         )
@@ -328,21 +340,19 @@ class TakeoverApplication:
             self.settings.checkpoint_sha256,
             self.settings.inference_timeout_s,
             self.settings.checkpoint_profile,
-        ) as transport, RosVlaSnapshotClient(
-            timeout_s=self.settings.snapshot_service_timeout_s
+        ) as transport, LocalVlaSnapshotClient(
+            timeout_s=self.settings.snapshot_timeout_s,
+            socket_path=snapshot.socket_path,
+            arena_path=snapshot.arena_path,
+            width=self.settings.checkpoint_profile.input.width,
+            height=self.settings.checkpoint_profile.input.height,
         ) as observations, RosAuthorityEventPublisher() as events:
             policy = AsyncPi05PolicyClient(
                 session_id=self.spec.session_id,
                 prompt=self.settings.prompt,
                 checkpoint_sha256=self.settings.checkpoint_sha256,
                 observations=observations,
-                encoder=Pi05ObservationEncoder(
-                    self.settings.grippers,
-                    OpenCvRgbResizer(
-                        width=self.settings.checkpoint_profile.input.width,
-                        height=self.settings.checkpoint_profile.input.height,
-                    ),
-                ),
+                encoder=Pi05ObservationEncoder(self.settings.grippers),
                 transport=transport,
                 execution=self.settings.execution,
             )

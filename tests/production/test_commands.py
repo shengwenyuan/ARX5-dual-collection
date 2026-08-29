@@ -31,7 +31,15 @@ class RosCommandSetTest(unittest.TestCase):
                     CameraConfig("right", "camera-right-serial"),
                     CameraConfig("overview", "camera-overview-serial"),
                 ),
-                CameraSnapshotConfig(40.0, 2.0, 100.0),
+                CameraSnapshotConfig(
+                    40.0,
+                    2.0,
+                    100.0,
+                    640,
+                    360,
+                    Path("/dev/shm/arx5-vla-snapshot-31"),
+                    Path("/tmp/arx5-vla-snapshot-31.sock"),
+                ),
             )
         self.assertEqual(
             command.spec.argv[:4],
@@ -41,10 +49,20 @@ class RosCommandSetTest(unittest.TestCase):
         self.assertIn("serial_left:='camera-left-serial'", command.spec.argv)
         self.assertIn("serial_overview:='camera-overview-serial'", command.spec.argv)
         self.assertIn("serial_right:='camera-right-serial'", command.spec.argv)
-        self.assertIn("enable_snapshot_service:=true", command.spec.argv)
+        self.assertIn("enable_snapshot_ipc:=true", command.spec.argv)
         self.assertIn("width:=848", command.spec.argv)
         self.assertIn("height:=480", command.spec.argv)
         self.assertIn("max_camera_span_ms:=40.0", command.spec.argv)
+        self.assertIn("snapshot_width:=640", command.spec.argv)
+        self.assertIn("snapshot_height:=360", command.spec.argv)
+        self.assertIn(
+            "snapshot_arena_path:='/dev/shm/arx5-vla-snapshot-31'",
+            command.spec.argv,
+        )
+        self.assertIn(
+            "snapshot_socket_path:='/tmp/arx5-vla-snapshot-31.sock'",
+            command.spec.argv,
+        )
         self.assertNotIn("bash", command.spec.argv)
 
     def test_arx_uses_frozen_official_v2_launch(self) -> None:

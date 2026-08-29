@@ -32,12 +32,14 @@ class DaggerControlSettings:
     state_timeout_s: float
     policy_wait_timeout_s: float
     command_watchdog_s: float
+    rtc_deadline_margin_s: float
 
     def __post_init__(self) -> None:
         if min(
             self.state_timeout_s,
             self.policy_wait_timeout_s,
             self.command_watchdog_s,
+            self.rtc_deadline_margin_s,
         ) <= 0:
             raise ValueError("DAgger control timeouts must be positive")
 
@@ -52,7 +54,7 @@ class DaggerCollectorSettings:
     gripper_contract: str
     grippers: GripperCalibration
     observation: ObservationConstraints
-    snapshot_service_timeout_s: float
+    snapshot_timeout_s: float
     execution: PolicyExecutionProfile
     checkpoint_profile: Pi05CheckpointProfile
     rtc_rollout: RtcRolloutProfile | None
@@ -95,8 +97,8 @@ class DaggerCollectorSettings:
                     observation.get("max_snapshot_age_ms", 100.0)
                 ),
             ),
-            snapshot_service_timeout_s=(
-                float(observation.get("service_timeout_ms", 250.0)) / 1000.0
+            snapshot_timeout_s=(
+                float(observation.get("request_timeout_ms", 250.0)) / 1000.0
             ),
             execution=checkpoint_profile.execution,
             checkpoint_profile=checkpoint_profile,
@@ -126,6 +128,10 @@ class DaggerCollectorSettings:
                 command_watchdog_s=float(
                     gateway.get("command_watchdog_s", 0.12)
                 ),
+                rtc_deadline_margin_s=float(
+                    gateway.get("rtc_deadline_margin_ms", 50.0)
+                )
+                / 1000.0,
             ),
         )
         if not settings.server_host or not settings.prompt:
@@ -134,13 +140,32 @@ class DaggerCollectorSettings:
             raise ValueError("policy server port is invalid")
         if settings.inference_timeout_s <= 0:
             raise ValueError("inference_timeout_s must be positive")
-        if settings.snapshot_service_timeout_s <= 0:
-            raise ValueError("snapshot service timeout must be positive")
+        if settings.snapshot_timeout_s <= 0:
+            raise ValueError("snapshot request timeout must be positive")
         if not _SHA256.fullmatch(settings.checkpoint_sha256):
             raise ValueError("checkpoint_sha256 must contain 64 hexadecimal characters")
         if settings.checkpoint_profile.gripper_contract != settings.gripper_contract:
             raise ValueError("checkpoint and runtime gripper contracts do not match")
+        _validate_rtc_deadline(settings)
         return settings
+
+
+def _validate_rtc_deadline(settings: DaggerCollectorSettings) -> None:
+    checkpoint = settings.checkpoint_profile
+    if checkpoint.policy_type != "training_time_rtc":
+        return
+    hard_deadline_s = (
+        checkpoint.max_delay_steps / checkpoint.execution.control_rate_hz
+    )
+    request_deadline_s = settings.control.policy_wait_timeout_s
+    snapshot_deadline_s = settings.snapshot_timeout_s
+    if snapshot_deadline_s >= request_deadline_s:
+        raise ValueError("snapshot timeout must be below the RTC request timeout")
+    if (
+        request_deadline_s + settings.control.rtc_deadline_margin_s
+        > hard_deadline_s + 1e-9
+    ):
+        raise ValueError("RTC request timeout and margin exceed the action deadline")
 
 
 def load_policy_execution_profile(

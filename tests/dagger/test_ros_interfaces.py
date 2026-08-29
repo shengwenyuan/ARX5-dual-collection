@@ -25,19 +25,13 @@ class DaggerRosInterfaceContractTest(unittest.TestCase):
         self.assertNotIn("observation", message.lower())
         self.assertNotIn("inference", message.lower())
 
-    def test_cmake_has_generic_snapshot_service_but_no_policy_events(self) -> None:
+    def test_ros_contract_has_no_snapshot_or_policy_payloads(self) -> None:
         cmake = (INTERFACES / "CMakeLists.txt").read_text()
         self.assertIn('"msg/AuthorityEvent.msg"', cmake)
-        self.assertIn('"srv/GetVlaSnapshot.srv"', cmake)
+        self.assertNotIn("GetVlaSnapshot", cmake)
         self.assertNotIn("GetPi05Observation", cmake)
         self.assertNotIn("PolicyInference", cmake)
         self.assertNotIn("PolicyAction", cmake)
-
-        service = (INTERFACES / "srv" / "GetVlaSnapshot.srv").read_text()
-        self.assertIn("sensor_msgs/Image camera_left", service)
-        self.assertIn("arx5_collection_interfaces/ArmState left_arm", service)
-        self.assertNotIn("pi05", service.lower())
-        self.assertNotIn("inference", service.lower())
 
 
 if __name__ == "__main__":

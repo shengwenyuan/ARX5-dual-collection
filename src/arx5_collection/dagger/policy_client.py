@@ -4,10 +4,11 @@ import re
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from threading import Lock
+from time import monotonic_ns
 from typing import Protocol
 from uuid import uuid4
 
-from .models import InferenceTicket, PolicyExecutionProfile
+from .models import InferenceTicket, InferenceTiming, PolicyExecutionProfile
 from .observation import Pi05Observation, Pi05ObservationEncoder, VlaObservationStep
 
 
@@ -162,8 +163,12 @@ class AsyncPi05PolicyClient:
         inference_id: str,
         rtc: RtcPolicyContext | None,
     ) -> InferenceTicket:
+        started_ns = monotonic_ns()
         self._require_active_epoch(control_epoch)
-        observation = self.encoder.encode(self.observations.capture())
+        step = self.observations.capture()
+        snapshot_done_ns = monotonic_ns()
+        observation = self.encoder.encode(step)
+        encode_done_ns = monotonic_ns()
         request = Pi05PolicyRequest(
             session_id=self.session_id,
             episode_id=episode_id,
@@ -175,6 +180,7 @@ class AsyncPi05PolicyClient:
             rtc=rtc,
         )
         response = self.transport.infer(request)
+        policy_done_ns = monotonic_ns()
         self._validate_response(response, episode_id, control_epoch, inference_id)
         self._require_active_epoch(control_epoch)
         return InferenceTicket(
@@ -183,6 +189,16 @@ class AsyncPi05PolicyClient:
             checkpoint_sha256=response.checkpoint_sha256,
             action_chunk=response.action_chunk,
             execution=self.execution,
+            timing=InferenceTiming(
+                snapshot_ms=(snapshot_done_ns - started_ns) / 1_000_000,
+                encode_ms=(encode_done_ns - snapshot_done_ns) / 1_000_000,
+                policy_round_trip_ms=(policy_done_ns - encode_done_ns) / 1_000_000,
+                server_inference_ms=(
+                    response.completed_at_ns - response.started_at_ns
+                )
+                / 1_000_000,
+                total_ms=(policy_done_ns - started_ns) / 1_000_000,
+            ),
         )
 
     def _require_active_epoch(self, control_epoch: int) -> None:
