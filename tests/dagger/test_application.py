@@ -4,12 +4,14 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from arx5_collection.capture import CaptureProfile, RGB_ONLY_STREAMS
 from arx5_collection.dagger.application import (
     DaggerApplicationBuilder,
     DaggerRunSpec,
     DaggerSessionBuilder,
 )
 from arx5_collection.dagger.config import DaggerCollectorSettings
+from arx5_collection.episode.cli import load_request
 
 
 ROOT = Path(__file__).parents[2]
@@ -20,10 +22,12 @@ class FakeSessionBuilder:
         self.settings = None
         self.session = object()
         self.additional_recording_topics = ()
+        self.request = None
 
-    def build(self, spec, settings, additional_recording_topics=()):
+    def build(self, spec, settings, request, additional_recording_topics=()):
         del spec
         self.settings = settings
+        self.request = request
         self.additional_recording_topics = additional_recording_topics
         return self.session
 
@@ -46,7 +50,13 @@ class DaggerApplicationBuilderTest(unittest.TestCase):
             session_id="session-1",
         )
 
-        session = DaggerSessionBuilder().build(spec, settings)
+        request = load_request(
+            spec.task_config,
+            spec.output_root,
+            spec.station_config,
+            task_description=spec.task_description,
+        )
+        session = DaggerSessionBuilder().build(spec, settings, request)
 
         self.assertEqual(session.fail_directory, "dagger_fail")
         assert session.camera_snapshot is not None
@@ -61,6 +71,39 @@ class DaggerApplicationBuilderTest(unittest.TestCase):
             Path("/tmp/arx5-vla-snapshot-31.sock"),
         )
         self.assertEqual(session.monitor.display_period_s, 10.0)
+
+    def test_rgb_only_profile_passes_five_stream_request(self) -> None:
+        fake_session_builder = FakeSessionBuilder()
+        spec = DaggerRunSpec(
+            station_config=ROOT / "config" / "station.example.json",
+            task_config=ROOT / "config" / "task.rgb-only.json",
+            task_description="folding the cloth",
+            policy_config=ROOT / "config" / "dagger.policy.example.toml",
+            output_root=Path("episodes"),
+            episodes=1,
+            min_free_gib=1,
+            readiness_timeout_s=30.0,
+            software_version="test",
+            session_id="session-1",
+        )
+
+        application = DaggerApplicationBuilder(
+            session_builder=fake_session_builder  # type: ignore[arg-type]
+        ).build_shadow(spec)
+
+        self.assertIs(application.capture_profile, CaptureProfile.RGB_ONLY)
+        assert fake_session_builder.request is not None
+        self.assertEqual(
+            tuple(stream.id for stream in fake_session_builder.request.streams),
+            tuple(RGB_ONLY_STREAMS),
+        )
+        settings = DaggerCollectorSettings.load(spec.policy_config)
+        session = DaggerSessionBuilder().build(
+            spec,
+            settings,
+            fake_session_builder.request,
+        )
+        self.assertEqual(session.required_stream_ids, tuple(RGB_ONLY_STREAMS))
 
     def test_builds_shadow_from_profile_without_starting_resources(self) -> None:
         fake_session_builder = FakeSessionBuilder()

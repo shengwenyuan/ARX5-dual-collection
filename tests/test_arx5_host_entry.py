@@ -43,6 +43,37 @@ def test_collect_rgb_only_is_scoped_to_compose_process() -> None:
     assert "ARX5_TASK_CONFIG" not in os.environ
 
 
+def test_dagger_rgb_only_is_scoped_to_compose_process() -> None:
+    with patch.dict(
+        os.environ,
+        {
+            "ARX5_OUTPUT_ROOT": "/reports/2026-08-27/fold_cloth",
+            "ARX5_TASK_DESCRIPTION": "folding the cloth",
+        },
+        clear=True,
+    ), patch("subprocess.call", return_value=0) as call:
+        assert ENTRY["dagger"]("takeover", rgb_only=True) == 0
+
+    assert call.call_args.kwargs["env"]["ARX5_TASK_CONFIG"] == str(
+        ROOT / "config/task.rgb-only.json"
+    )
+    assert "ARX5_TASK_CONFIG" not in os.environ
+
+
+def test_dagger_uses_station_task_config_by_default() -> None:
+    with patch.dict(
+        os.environ,
+        {
+            "ARX5_OUTPUT_ROOT": "/reports/2026-08-27/fold_cloth",
+            "ARX5_TASK_DESCRIPTION": "folding the cloth",
+        },
+        clear=True,
+    ), patch("subprocess.call", return_value=0) as call:
+        assert ENTRY["dagger"]("takeover") == 0
+
+    assert "ARX5_TASK_CONFIG" not in call.call_args.kwargs["env"]
+
+
 def test_upload_passes_only_resolved_inputs_to_core(tmp_path: Path) -> None:
     source = "/reports/2026-08-27/fold_cloth"
     with patch.dict(

@@ -42,10 +42,14 @@ def collect(rgb_only: bool = False) -> int:
     )
 
 
-def dagger(mode: str) -> int:
+def dagger(mode: str, rgb_only: bool = False) -> int:
     required("ARX5_OUTPUT_ROOT")
     required("ARX5_TASK_DESCRIPTION")
     environment = {**os.environ, "ARX5_DAGGER_MODE": mode}
+    if rgb_only:
+        environment["ARX5_TASK_CONFIG"] = str(
+            ROOT / "config/task.rgb-only.json"
+        )
     return subprocess.call(
         [
             "docker",
@@ -120,6 +124,11 @@ def main() -> int:
     dagger_parser.add_argument(
         "--mode", choices=("takeover", "shadow"), default="takeover"
     )
+    dagger_parser.add_argument(
+        "--rgb-only",
+        action="store_true",
+        help="temporarily omit aligned depth from the recorded MCAP",
+    )
     upload_parser = commands.add_parser(
         "upload", help="validate and upload the Session"
     )
@@ -131,7 +140,7 @@ def main() -> int:
         if args.command == "collect":
             return collect(args.rgb_only)
         if args.command == "dagger":
-            return dagger(args.mode)
+            return dagger(args.mode, args.rgb_only)
         return upload(args.full_check)
     except ValueError as error:
         parser.error(str(error))

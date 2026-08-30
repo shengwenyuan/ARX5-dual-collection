@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TextIO
 
-from arx5_collection.capture import CaptureProfile
+from arx5_collection.capture import CaptureProfile, metadata_extensions
 from arx5_collection.episode.cli import load_request, run_episode_loop
 from arx5_collection.episode.models import EpisodeRequest
 from arx5_collection.production.checks import CheckResult
@@ -76,6 +76,7 @@ class DaggerSessionBuilder:
         self,
         spec: DaggerRunSpec,
         settings: DaggerCollectorSettings,
+        request: EpisodeRequest,
         additional_recording_topics: tuple[str, ...] = (),
     ) -> ProductionSession:
         station = load_configured_station(spec.station_config)
@@ -113,6 +114,7 @@ class DaggerSessionBuilder:
             ),
             fail_directory="dagger_fail",
             compression_enabled=spec.compression_enabled,
+            required_stream_ids=tuple(stream.id for stream in request.streams),
         )
 
     def _render_check(self, result: CheckResult) -> None:
@@ -146,6 +148,7 @@ class ShadowApplication:
         spec: DaggerRunSpec,
         settings: DaggerCollectorSettings,
         request: EpisodeRequest,
+        capture_profile: CaptureProfile,
         session: ProductionSession,
         stdout: TextIO = sys.stdout,
         stderr: TextIO = sys.stderr,
@@ -153,6 +156,7 @@ class ShadowApplication:
         self.spec = spec
         self.settings = settings
         self.request = request
+        self.capture_profile = capture_profile
         self.session = session
         self.stdout = stdout
         self.stderr = stderr
@@ -209,6 +213,9 @@ class ShadowApplication:
                         metadata_context_provider=hooks.metadata_context,
                         recording_started_hook=hooks.recording_started,
                         recording_stopping_hook=hooks.recording_stopping,
+                        metadata_extensions=metadata_extensions(
+                            self.capture_profile
+                        ),
                     )
                     return run_episode_loop(
                         runtime,
@@ -230,6 +237,7 @@ class TakeoverDryRunApplication:
         spec: DaggerRunSpec,
         settings: DaggerCollectorSettings,
         request: EpisodeRequest,
+        capture_profile: CaptureProfile,
         session: ProductionSession,
         stdout: TextIO = sys.stdout,
         stderr: TextIO = sys.stderr,
@@ -237,6 +245,7 @@ class TakeoverDryRunApplication:
         self.spec = spec
         self.settings = settings
         self.request = request
+        self.capture_profile = capture_profile
         self.session = session
         self.stdout = stdout
         self.stderr = stderr
@@ -284,6 +293,9 @@ class TakeoverDryRunApplication:
                         metadata_context_provider=controller.metadata_context,
                         recording_started_hook=controller.start_episode,
                         recording_stopping_hook=controller.stop_episode,
+                        metadata_extensions=metadata_extensions(
+                            self.capture_profile
+                        ),
                     )
                     return run_episode_loop(
                         runtime,
@@ -302,6 +314,7 @@ class TakeoverApplication:
         spec: DaggerRunSpec,
         settings: DaggerCollectorSettings,
         request: EpisodeRequest,
+        capture_profile: CaptureProfile,
         session: ProductionSession,
         stdout: TextIO = sys.stdout,
         stderr: TextIO = sys.stderr,
@@ -309,6 +322,7 @@ class TakeoverApplication:
         self.spec = spec
         self.settings = settings
         self.request = request
+        self.capture_profile = capture_profile
         self.session = session
         self.stdout = stdout
         self.stderr = stderr
@@ -392,6 +406,9 @@ class TakeoverApplication:
                             metadata_context_provider=controller.metadata_context,
                             recording_started_hook=controller.start_episode,
                             recording_stopping_hook=controller.stop_episode,
+                            metadata_extensions=metadata_extensions(
+                                self.capture_profile
+                            ),
                         )
                         return run_episode_loop(
                             runtime,
@@ -432,12 +449,13 @@ class DaggerApplicationBuilder:
         self.session_builder = session_builder or DaggerSessionBuilder(stdout, stderr)
 
     def build_shadow(self, spec: DaggerRunSpec) -> ShadowApplication:
-        settings, request = self._load(spec)
-        session = self.session_builder.build(spec, settings)
+        settings, request, capture_profile = self._load(spec)
+        session = self.session_builder.build(spec, settings, request)
         return ShadowApplication(
             spec,
             settings,
             request,
+            capture_profile,
             session,
             stdout=self.stdout,
             stderr=self.stderr,
@@ -447,32 +465,36 @@ class DaggerApplicationBuilder:
         self,
         spec: DaggerRunSpec,
     ) -> TakeoverDryRunApplication:
-        settings, request = self._load(spec)
+        settings, request, capture_profile = self._load(spec)
         session = self.session_builder.build(
             spec,
             settings,
+            request,
             additional_recording_topics=DAGGER_RECORDING_TOPICS,
         )
         return TakeoverDryRunApplication(
             spec,
             settings,
             request,
+            capture_profile,
             session,
             stdout=self.stdout,
             stderr=self.stderr,
         )
 
     def build_takeover(self, spec: DaggerRunSpec) -> TakeoverApplication:
-        settings, request = self._load(spec)
+        settings, request, capture_profile = self._load(spec)
         session = self.session_builder.build(
             spec,
             settings,
+            request,
             additional_recording_topics=DAGGER_RECORDING_TOPICS,
         )
         return TakeoverApplication(
             spec,
             settings,
             request,
+            capture_profile,
             session,
             stdout=self.stdout,
             stderr=self.stderr,
@@ -481,9 +503,8 @@ class DaggerApplicationBuilder:
     @staticmethod
     def _load(
         spec: DaggerRunSpec,
-    ) -> tuple[DaggerCollectorSettings, EpisodeRequest]:
-        if validate_task_streams(spec.task_config) is not CaptureProfile.RGBD:
-            raise ValueError("DAgger requires the fixed RGB-D stream contract")
+    ) -> tuple[DaggerCollectorSettings, EpisodeRequest, CaptureProfile]:
+        capture_profile = validate_task_streams(spec.task_config)
         settings = DaggerCollectorSettings.load(spec.policy_config)
         request = load_request(
             spec.task_config,
@@ -491,4 +512,4 @@ class DaggerApplicationBuilder:
             spec.station_config,
             task_description=spec.task_description,
         )
-        return settings, request
+        return settings, request, capture_profile
