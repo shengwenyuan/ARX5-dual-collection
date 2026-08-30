@@ -186,17 +186,19 @@ class RtcSchedulerTest(unittest.TestCase):
 
         self.issue(scheduler, clock, 2)
         context = policy.calls[1][3]
-        self.assertEqual(context.action_prefix[0][13], 0.0)
+        self.assertEqual(context.action_prefix[0][13], -0.002147)
 
-    def test_hard_prefix_uses_offset_gripper_action_that_was_executed(self) -> None:
-        scheduler, policy, _, _, clock, _ = self.make_scheduler(0.1)
+    def test_hard_prefix_precedes_gripper_command_offset(self) -> None:
+        scheduler, policy, sink, _, clock, _ = self.make_scheduler(0.1)
         self.bootstrap(scheduler, policy)
 
         self.issue(scheduler, clock, 2)
 
         context = policy.calls[1][3]
-        self.assertAlmostEqual(context.action_prefix[0][6], 0.1)
-        self.assertAlmostEqual(context.action_prefix[0][13], 0.1)
+        self.assertEqual(context.action_prefix[0][6], 0.0)
+        self.assertEqual(context.action_prefix[0][13], 0.0)
+        self.assertAlmostEqual(sink.commands[0].left[-1], -3.06)
+        self.assertAlmostEqual(sink.commands[0].right[-1], -3.06)
 
     def test_accepts_delay_two_and_atomically_replaces_safe_tail(self) -> None:
         scheduler, policy, _, _, clock, diagnostics = self.make_scheduler()

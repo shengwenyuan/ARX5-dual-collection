@@ -13,11 +13,11 @@
 - RTC：10 flow steps，10-step 最大延迟，hard prefix，rolling-max delay
 - 控制频率：30 Hz
 - 输入：三路 RGB，`640x360 -> 224x224 resize_with_pad`
-- 夹爪：沿用 `arx5-gripper-v1`，模型输出的左右归一化夹爪值均增加 `0.1` 后再执行既有范围检查、饱和与反归一化
+- 夹爪：沿用 `arx5-gripper-v1`，左右归一化夹爪值增加 `0.1` 后，在 `[0, 1.11]` 内执行，与独立 inference 的额外闭合预紧语义对齐
 
 ## 实现边界
 
-新增独立 TOML profile，并为既有夹爪动作契约增加一个缺省为 `0.0` 的 `normalized_action_offset`。偏移后的实际动作必须进入 RTC hard-prefix 历史，避免模型条件前缀与真实执行动作不一致。保留当前 DAgger 安全阈值和故障处理，不复用 W3 的 shell 入口，也不新增模型专用分支。
+新增独立 TOML profile，并为既有夹爪动作契约增加一个缺省为 `0.0` 的 `normalized_action_offset`。RTC hard-prefix 保留模型原始动作；仅在发布命令前增加夹爪偏移，并在 profile 的 `[0, 1.11]` 边界内沿标定直线外推，与独立 inference 保持一致。数据归一化仍严格保持 `[0,1]`。保留当前 DAgger 安全阈值和故障处理，不复用 W3 的 shell 入口，也不新增模型专用分支。
 
 ## 验收
 

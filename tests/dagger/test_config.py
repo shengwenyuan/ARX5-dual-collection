@@ -151,6 +151,7 @@ class DaggerConfigTest(unittest.TestCase):
 
         self.assertEqual(settings.execution.control_rate_hz, 30.0)
         self.assertEqual(settings.gripper_action_offset, 0.1)
+        self.assertEqual(settings.control.safety.max_normalized_gripper, 1.11)
         self.assertEqual(
             settings.checkpoint_sha256,
             "5c2248749f3eaa21f7a6cf2652c3d1306771aa572f1814e51b12c9e58cda38fb",

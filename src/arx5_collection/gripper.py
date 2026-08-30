@@ -52,6 +52,11 @@ class GripperCalibration:
     def denormalize(self, value: float) -> float:
         if not math.isfinite(value) or not 0.0 <= value <= 1.0:
             raise ValueError("normalized gripper value must be within [0, 1]")
+        return self.extrapolate(value)
+
+    def extrapolate(self, value: float) -> float:
+        if not math.isfinite(value):
+            raise ValueError("normalized gripper value must be finite")
         return self.open_value + value * (self.closed_value - self.open_value)
 
 

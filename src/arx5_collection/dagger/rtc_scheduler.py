@@ -59,7 +59,7 @@ class JsonlRtcLog:
 
 @dataclass(frozen=True, slots=True)
 class QueuedRtcAction:
-    raw: tuple[float, ...]
+    model_action: tuple[float, ...]
     command: DualArmJointCommand
 
 
@@ -282,7 +282,9 @@ class RtcActionScheduler:
                 estimate = self.delay.estimate
                 if len(self._queue) < estimate:
                     raise RuntimeError("RTC queue cannot supply the configured action prefix")
-                prefix = tuple(item.raw for item in tuple(self._queue)[:estimate])
+                prefix = tuple(
+                    item.model_action for item in tuple(self._queue)[:estimate]
+                )
                 self._submit_locked(
                     bootstrap=False,
                     context=RtcPolicyContext(estimate, prefix),
@@ -364,16 +366,14 @@ class RtcActionScheduler:
         if len(actions) != self.safe_window_steps:
             raise RuntimeError("RTC response cannot provide the required safe window")
         saturations: list[GripperSaturation] = []
-        executed_actions: list[tuple[float, ...]] = []
         commands = self.contract.validate_actions(
             actions,
             self.state_source.read(),
             saturation_sink=saturations.append,
-            executed_action_sink=executed_actions.append,
         )
         replacement = deque(
-            QueuedRtcAction(raw, command)
-            for raw, command in zip(executed_actions, commands)
+            QueuedRtcAction(model_action, command)
+            for model_action, command in zip(actions, commands)
         )
         with self._lock:
             if (

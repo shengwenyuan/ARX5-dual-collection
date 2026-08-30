@@ -161,10 +161,8 @@ class Pi05JointActionContract:
         actions: tuple[tuple[float, ...], ...],
         state: DualArmJointState,
         saturation_sink: Callable[[GripperSaturation], None] | None = None,
-        executed_action_sink: Callable[[tuple[float, ...]], None] | None = None,
     ) -> tuple[DualArmJointCommand, ...]:
         commands: list[DualArmJointCommand] = []
-        executed_actions: list[tuple[float, ...]] = []
         previous_left = state.left
         previous_right = state.right
         for index, action in enumerate(actions):
@@ -188,12 +186,8 @@ class Pi05JointActionContract:
                     right=(*right, self._denormalize_right(right_gripper)),
                 )
             )
-            executed_actions.append((*left, left_gripper, *right, right_gripper))
             previous_left = left
             previous_right = right
-        if executed_action_sink is not None:
-            for action in executed_actions:
-                executed_action_sink(action)
         return tuple(commands)
 
     def _validate_arm(
@@ -250,10 +244,10 @@ class Pi05JointActionContract:
         return bounded
 
     def _denormalize_left(self, value: float) -> float:
-        return self.grippers.denormalize(value)
+        return self.grippers.extrapolate(value)
 
     def _denormalize_right(self, value: float) -> float:
-        return self.grippers.denormalize(value)
+        return self.grippers.extrapolate(value)
 
 
 class PolicyActionGateway:
