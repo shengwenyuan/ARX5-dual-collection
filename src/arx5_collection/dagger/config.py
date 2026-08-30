@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from pathlib import Path
 import re
 import tomllib
@@ -52,6 +53,7 @@ class DaggerCollectorSettings:
     checkpoint_sha256: str
     prompt: str
     gripper_contract: str
+    gripper_action_offset: float
     grippers: GripperCalibration
     observation: ObservationConstraints
     snapshot_timeout_s: float
@@ -68,10 +70,18 @@ class DaggerCollectorSettings:
         policy = _table(payload, "policy")
         collector = _table(payload, "collector")
         gripper = _table(payload, "gripper")
-        _exact_keys(gripper, {"contract"}, "gripper")
+        _allowed_keys(
+            gripper,
+            required={"contract"},
+            optional={"normalized_action_offset"},
+            label="gripper",
+        )
         gripper_contract = str(gripper["contract"])
+        gripper_action_offset = float(gripper.get("normalized_action_offset", 0.0))
         if gripper_contract != ARX5_GRIPPER_CONTRACT_ID:
             raise ValueError("unsupported ARX5 gripper contract")
+        if not math.isfinite(gripper_action_offset):
+            raise ValueError("gripper normalized_action_offset must be finite")
         observation = _optional_table(payload, "observation")
         robot = _optional_table(payload, "robot")
         safety = _optional_table(payload, "safety")
@@ -85,6 +95,7 @@ class DaggerCollectorSettings:
             checkpoint_sha256=str(policy["checkpoint_sha256"]).lower(),
             prompt=str(policy["prompt"]),
             gripper_contract=gripper_contract,
+            gripper_action_offset=gripper_action_offset,
             grippers=ARX5_GRIPPER_CALIBRATION,
             observation=ObservationConstraints(
                 max_camera_span_ns=_milliseconds_ns(
@@ -306,9 +317,17 @@ def _optional_table(payload: dict[str, object], name: str) -> dict[str, object]:
     return value
 
 
-def _exact_keys(value: dict[str, object], expected: set[str], label: str) -> None:
-    if set(value) != expected:
-        raise ValueError(f"DAgger policy config [{label}] keys must be exactly {sorted(expected)}")
+def _allowed_keys(
+    value: dict[str, object],
+    required: set[str],
+    optional: set[str],
+    label: str,
+) -> None:
+    if not required <= set(value) or set(value) - required - optional:
+        raise ValueError(
+            f"DAgger policy config [{label}] keys must be exactly "
+            f"{sorted(required)} plus optional {sorted(optional)}"
+        )
 
 
 def _milliseconds_ns(value: object) -> int:

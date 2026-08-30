@@ -364,17 +364,15 @@ class RtcActionScheduler:
         if len(actions) != self.safe_window_steps:
             raise RuntimeError("RTC response cannot provide the required safe window")
         saturations: list[GripperSaturation] = []
+        executed_actions: list[tuple[float, ...]] = []
         commands = self.contract.validate_actions(
             actions,
             self.state_source.read(),
             saturation_sink=saturations.append,
+            executed_action_sink=executed_actions.append,
         )
-        executed_actions = [list(action) for action in actions]
-        for saturation in saturations:
-            column = 6 if saturation.side == "left" else 13
-            executed_actions[saturation.action_index][column] = saturation.output_value
         replacement = deque(
-            QueuedRtcAction(tuple(raw), command)
+            QueuedRtcAction(raw, command)
             for raw, command in zip(executed_actions, commands)
         )
         with self._lock:

@@ -116,13 +116,14 @@ class ExecutorStep(str, Enum):
 
 
 class Pi05JointActionContract:
-    """Validate robot-space absolute actions without modifying them."""
+    """Validate absolute joint actions and map the configured gripper contract."""
 
     def __init__(
         self,
         checkpoint_sha256: str,
         grippers: GripperCalibration,
         safety: JointActionSafety,
+        gripper_action_offset: float = 0.0,
     ) -> None:
         self.checkpoint_sha256 = checkpoint_sha256.lower()
         if len(self.checkpoint_sha256) != 64 or any(
@@ -131,6 +132,9 @@ class Pi05JointActionContract:
             raise ValueError("checkpoint_sha256 must contain 64 hexadecimal characters")
         self.grippers = grippers
         self.safety = safety
+        if not math.isfinite(gripper_action_offset):
+            raise ValueError("gripper_action_offset must be finite")
+        self.gripper_action_offset = gripper_action_offset
 
     def validate(
         self,
@@ -157,8 +161,10 @@ class Pi05JointActionContract:
         actions: tuple[tuple[float, ...], ...],
         state: DualArmJointState,
         saturation_sink: Callable[[GripperSaturation], None] | None = None,
+        executed_action_sink: Callable[[tuple[float, ...]], None] | None = None,
     ) -> tuple[DualArmJointCommand, ...]:
         commands: list[DualArmJointCommand] = []
+        executed_actions: list[tuple[float, ...]] = []
         previous_left = state.left
         previous_right = state.right
         for index, action in enumerate(actions):
@@ -182,8 +188,12 @@ class Pi05JointActionContract:
                     right=(*right, self._denormalize_right(right_gripper)),
                 )
             )
+            executed_actions.append((*left, left_gripper, *right, right_gripper))
             previous_left = left
             previous_right = right
+        if executed_action_sink is not None:
+            for action in executed_actions:
+                executed_action_sink(action)
         return tuple(commands)
 
     def _validate_arm(
@@ -230,6 +240,7 @@ class Pi05JointActionContract:
                 f"accepted policy range [{self.safety.min_policy_gripper:.6f}, "
                 f"{self.safety.max_policy_gripper:.6f}]"
             )
+        value += self.gripper_action_offset
         bounded = min(
             self.safety.max_normalized_gripper,
             max(self.safety.min_normalized_gripper, value),

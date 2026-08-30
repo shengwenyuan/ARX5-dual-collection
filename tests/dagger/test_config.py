@@ -63,6 +63,7 @@ class DaggerConfigTest(unittest.TestCase):
         self.assertEqual(collector.observation.max_snapshot_age_ns, 100_000_000)
         self.assertEqual(collector.snapshot_timeout_s, 0.25)
         self.assertEqual(collector.gripper_contract, "arx5-gripper-v1")
+        self.assertEqual(collector.gripper_action_offset, 0.0)
         self.assertEqual(collector.grippers.open_value, -3.4)
         self.assertEqual(collector.grippers.closed_value, 0.0)
         self.assertEqual(collector.execution.action_chunk_size, 50)
@@ -140,6 +141,19 @@ class DaggerConfigTest(unittest.TestCase):
                 collector.checkpoint_profile
             ),
             19,
+        )
+
+    def test_fold_cloth_20260828_profile_keeps_tested_gripper_offset(self) -> None:
+        root = Path(__file__).resolve().parents[2]
+        settings = DaggerCollectorSettings.load(
+            root / "config" / "dagger.pi05-fold-cloth-20260828-train-rtc.toml"
+        )
+
+        self.assertEqual(settings.execution.control_rate_hz, 30.0)
+        self.assertEqual(settings.gripper_action_offset, 0.1)
+        self.assertEqual(
+            settings.checkpoint_sha256,
+            "5c2248749f3eaa21f7a6cf2652c3d1306771aa572f1814e51b12c9e58cda38fb",
         )
 
     def test_rtc_snapshot_timeout_must_precede_request_deadline(self) -> None:

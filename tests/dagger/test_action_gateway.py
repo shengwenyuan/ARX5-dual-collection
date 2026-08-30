@@ -165,6 +165,26 @@ class Pi05JointActionContractTest(unittest.TestCase):
         self.assertEqual(saturations[2].input_value, -0.002147)
         self.assertEqual(saturations[2].output_value, 0.0)
 
+    def test_applies_configured_gripper_offset_to_command_and_rtc_action(self) -> None:
+        contract = Pi05JointActionContract(
+            SHA,
+            ARX5_GRIPPER_CALIBRATION,
+            JointActionSafety(0.25, 1.5, 0.0, 1.0),
+            gripper_action_offset=0.1,
+        )
+        executed = []
+
+        commands = contract.validate_actions(
+            (action(left_gripper=0.0, right_gripper=0.5),),
+            self.state,
+            executed_action_sink=executed.append,
+        )
+
+        self.assertAlmostEqual(commands[0].left[-1], -3.06)
+        self.assertAlmostEqual(commands[0].right[-1], -1.36)
+        self.assertAlmostEqual(executed[0][6], 0.1)
+        self.assertAlmostEqual(executed[0][13], 0.6)
+
     def test_rejects_step_gripper_epoch_and_checkpoint(self) -> None:
         invalid = (
             ticket(actions=[action(), action(0.3), action(), action()]),

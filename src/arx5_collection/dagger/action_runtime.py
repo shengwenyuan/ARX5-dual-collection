@@ -57,6 +57,7 @@ def open_takeover_action_runtime(
         settings.checkpoint_sha256,
         settings.grippers,
         settings.control.safety,
+        gripper_action_offset=settings.gripper_action_offset,
     )
     if settings.checkpoint_profile.policy_type == "training_time_rtc":
         if settings.rtc_rollout is None:

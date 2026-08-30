@@ -118,7 +118,7 @@ class Mode(NoopPolicyModeController):
 
 
 class RtcSchedulerTest(unittest.TestCase):
-    def make_scheduler(self):
+    def make_scheduler(self, gripper_action_offset=0.0):
         policy = Policy()
         sink = Sink()
         mode = Mode()
@@ -132,6 +132,7 @@ class RtcSchedulerTest(unittest.TestCase):
                 SHA,
                 ARX5_GRIPPER_CALIBRATION,
                 JointActionSafety(0.25, 1.5, 0.0, 1.0),
+                gripper_action_offset=gripper_action_offset,
             ),
             mode,
             CHECKPOINT,
@@ -186,6 +187,16 @@ class RtcSchedulerTest(unittest.TestCase):
         self.issue(scheduler, clock, 2)
         context = policy.calls[1][3]
         self.assertEqual(context.action_prefix[0][13], 0.0)
+
+    def test_hard_prefix_uses_offset_gripper_action_that_was_executed(self) -> None:
+        scheduler, policy, _, _, clock, _ = self.make_scheduler(0.1)
+        self.bootstrap(scheduler, policy)
+
+        self.issue(scheduler, clock, 2)
+
+        context = policy.calls[1][3]
+        self.assertAlmostEqual(context.action_prefix[0][6], 0.1)
+        self.assertAlmostEqual(context.action_prefix[0][13], 0.1)
 
     def test_accepts_delay_two_and_atomically_replaces_safe_tail(self) -> None:
         scheduler, policy, _, _, clock, diagnostics = self.make_scheduler()
