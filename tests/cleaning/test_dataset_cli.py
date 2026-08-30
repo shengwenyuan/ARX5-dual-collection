@@ -54,6 +54,7 @@ class DatasetCliTest(unittest.TestCase):
             ],
             ["validate-pi05", "--dataset-root", "/data", "--repo-id", "local/data"],
             ["stream-to-lerobot", "--config", "/config.toml"],
+            ["compose-lerobot", "--config", "/composition.toml"],
         )
 
         parser = build_parser()

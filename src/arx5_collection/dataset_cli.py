@@ -14,6 +14,9 @@ from arx5_collection.dagger_dataset.pipeline import classify_dagger_episode
 from arx5_collection.dagger_dataset.selection import select_equal_eef_dagger_dataset
 from arx5_collection.gripper import ARX5_GRIPPER_CALIBRATION
 from arx5_collection.gripper import GripperCalibration
+from arx5_collection.lerobot_recomposition.alignment import CompositionAlignmentCancelled
+from arx5_collection.lerobot_recomposition.application import CompositionRequest
+from arx5_collection.lerobot_recomposition.application import execute_composition
 from arx5_collection.pi05_dataset.discovery import discover_episode_dirs
 from arx5_collection.pi05_dataset.eef_selection import EqualEefPolicy
 from arx5_collection.pi05_dataset.exporter import export_lerobot
@@ -254,6 +257,31 @@ def _handle_stream_to_lerobot(args: argparse.Namespace) -> int:
     return 0
 
 
+def _handle_compose_lerobot(args: argparse.Namespace) -> int:
+    try:
+        result = execute_composition(CompositionRequest(args.config), sys.stdin, sys.stdout)
+    except CompositionAlignmentCancelled as error:
+        print(f"cancelled: {error}", file=sys.stderr)
+        return 2
+    print(
+        json.dumps(
+            {
+                "output": str(result.output_path),
+                "repo_id": result.repo_id,
+                "backend": result.backend,
+                "episodes": result.episode_count,
+                "frames": result.frame_count,
+                "videos": result.video_count,
+                "tasks": list(result.tasks),
+                "plan_fingerprint": result.plan_fingerprint,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
+    return 0
+
+
 def _add_selection_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--input-root", type=Path, action="append", required=True)
     parser.add_argument("--audit-root", type=Path, required=True)
@@ -378,6 +406,13 @@ def build_parser() -> argparse.ArgumentParser:
     run_identity.add_argument("--resume", metavar="RUN_ID")
     stream_parser.add_argument("--retry-failed", action="store_true")
     stream_parser.set_defaults(handler=_handle_stream_to_lerobot)
+
+    compose_parser = subparsers.add_parser(
+        "compose-lerobot",
+        help="select and recompose immutable LeRobot snapshots without reading MCAP",
+    )
+    compose_parser.add_argument("--config", type=Path, required=True)
+    compose_parser.set_defaults(handler=_handle_compose_lerobot)
     return parser
 
 

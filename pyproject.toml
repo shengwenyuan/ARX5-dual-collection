@@ -18,6 +18,9 @@ dataset = [
   "Pillow>=11,<12",
   "lerobot @ git+https://github.com/huggingface/lerobot.git@0cf864870cf29f4738d3ade893e6fd13fbd7cdb5",
 ]
+dataset-v3 = [
+  "lerobot[dataset] @ git+https://github.com/huggingface/lerobot.git@7e241bd630a3719a56157a497ce5d08f244784f1",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]

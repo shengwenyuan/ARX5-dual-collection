@@ -24,6 +24,9 @@
     "source_ended_bag_timestamp_ns": {"type": ["integer", "null"], "minimum": 0},
     "sample_weight": {"type": "number", "exclusiveMinimum": 0},
     "mixture_source": {"type": "string", "minLength": 1},
+    "composition_source": {"type": "string", "minLength": 1},
+    "source_repo_id": {"type": "string", "minLength": 3, "pattern": "^[^/]+/[^/]+$"},
+    "source_lerobot_episode_index": {"type": "integer", "minimum": 0},
     "lerobot_episode_index": {"type": "integer", "minimum": 0}
   }
 }
