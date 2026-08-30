@@ -147,13 +147,9 @@ Schema 必须可扩展，新增字段不得改变已有字段语义。
 
 MCAP 落盘后的清洗与训练集转换属于当前需求，但与采集主线保持单向解耦：采集侧以原子提交 `episode.mcap + metadata.json` 为终点，后处理只读已提交 Episode，不连接设备、不进入 Session/Recorder/Monitor 生命周期，也不反向修改原始数据或采集语义。
 
-首条正式链路以 Physical Intelligence 官方 openpi 为权威方向，将通用质量审计和真实帧组索引进一步转换为 π0.5 风格 LeRobot 数据集，并以 openpi 能加载、生成 norm stats 和完成 batch smoke test 作为训练就绪标准。正式计划见 `docs/data-cleaning/pi05-mcap-to-lerobot.md`。
+首条正式链路将通用质量审计和真实帧组索引进一步转换为稳定的 LeRobot 数据集。collection 只验收数据结构、时序、图像和 state/action 契约；OpenPI adapter、norm stats、训练与推理验收由独立的 `pi05_jax_safeinfer` 仓库负责。正式数据计划见 `docs/data-cleaning/pi05-mcap-to-lerobot.md`。
 
-首个完整实例 `stacking_five_paper_cups_pi05_v1` 已由 49 条 success 源 Episode 构造为 50 个 LeRobot episode，并通过固定版本 openpi loader 验证；该实例作为后续模型专用清洗链路的参考实现。
-
-π0.5 八卡云端环境固定使用 `/workspace` 放代码、当前使用 `/mnt/cfs/data/swy/pi05` 放模型与大数据，部署与训练前门槛见 `docs/deployment/pi05-cloud-training.md`。
-
-w3 的单卡 JAX 推理环境使用隔离根 `/home/lenovo/swy/pi05-runtime`，复用相同 openpi commit、π0.5-base 与 SFT 权重，不依赖 `/mnt`，且与采集和数据转换工作树解耦；部署边界与分阶段验收见 `docs/deployment/pi05-w3-jax-inference.md`。
+首个完整实例 `stacking_five_paper_cups_pi05_v1` 已由 49 条 success 源 Episode 构造为 50 个 LeRobot episode；该实例作为后续数据转换链路的参考实现。交付完成后，模型仓库只消费不可变 LeRobot snapshot 和 conversion report，不反向依赖 collection 源码。
 
 架构上冻结“模型无关清洗层 + 模型专用 dataset pipeline”：前者输出可复用的 `quality.json + frame_index.jsonl`，后者独立负责各模型的训练资格、采样频率、action、归一化和导出。未来其他清洗或训练链路应复用同一上游契约，新增独立 adapter/pipeline，不复制采集逻辑，也不把模型依赖带入采集运行路径。
 

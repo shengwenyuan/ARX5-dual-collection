@@ -308,34 +308,12 @@ arx5-dataset validate-pi05 --dataset-id ... --openpi-root ...
 
 清洗与转换可以与采集代码位于同一 Python distribution，但模块依赖保持单向，并作为独立离线进程部署；不放入采集 Session，不连接设备、不启动 CAN/相机或 ROS Source。
 
-## openpi 侧适配
+## 模型仓库交接
 
-固定 openpi worktree 保持 detached、无业务补丁；ARX5 适配保留在本项目：
-
-```text
-src/arx5_collection/pi05_dataset/openpi_adapter.py
-scripts/cloud/compute_pi05_norm_stats.py
-scripts/cloud/train_pi05_arx5.py
-```
-
-适配要求：
-
-- repack 三路图像、14 维 state、14 维 action 和 task prompt。
-- 输入图像映射到 `base_0_rgb/left_wrist_0_rgb/right_wrist_0_rgb`。
-- joints 使用 `DeltaActions(make_bool_mask(6, -1, 6, -1))`，gripper 保持绝对值。
-- `Pi0Config(pi05=True, action_dim=32, action_horizon=50)`。
-- 一个配置使用 fresh norm stats；另一个配置显式使用 `pi05_base/assets/arx`，仅在兼容报告通过后启用。
-- 初始化权重固定为 `gs://openpi-assets/checkpoints/pi05_base/params`。
-
-训练交接命令：
-
-```bash
-source /workspace/ARX5-dual-collection/scripts/cloud/pi05_env.sh
-python scripts/cloud/compute_pi05_norm_stats.py --repo-id <lerobot_repo_id>
-python scripts/cloud/train_pi05_arx5.py --repo-id <lerobot_repo_id> --exp-name <name>
-```
-
-入口动态构造同一 TrainConfig 并直接复用官方 norm stats/data loader/train 函数，不修改 openpi 全局 config registry。训练本身不属于本计划验收范围；计划只保证数据和配置能够到达上述入口。
+collection 的交付边界是不可变 LeRobot snapshot、selection 产物和
+`reports/conversion.json`。OpenPI 字段 repack、fresh norm stats、训练配置、
+checkpoint 与推理验收统一由 `pi05_jax_safeinfer` 管理；该仓库不得依赖
+collection 源码，也不得回写 MCAP 或派生数据。
 
 ## 实施顺序
 
@@ -465,7 +443,7 @@ python scripts/cloud/train_pi05_arx5.py --repo-id <lerobot_repo_id> --exp-name <
 - LeRobot/openpi：最终 37,355-frame 数据重开成功；结构验证为 50 Hz、三路 RGB、14 维 joint state/action、唯一 task；openpi 输出三路 `224x224x3`、32 维 padded state 和 `50x32` action。
 - 交付位置：`2026-08-16/lerobot/local/stacking_five_paper_cups_pi05_v1`；数据和转换报告均为 `lenovo:lenovo` 所有权。
 - norm stats：100-frame smoke 已证明工具链可用；最终数据的 fresh stats 留到 RPBZZZ6 训练环境计算，避免生成与正式训练环境不一致的统计。
-- 云端层：8×RPBZZZ6 已完成 JAX 8 卡 collective、`pi05_base` 参数加载、单卡完整 train step 和 8-way FSDP train step；固定 openpi lock 上只覆盖 NVIDIA NCCL 2.26.5 补丁版本。完整记录见 `docs/deployment/pi05-cloud-training.md`。
+- 模型侧历史验收与云端训练记录已迁往 `pi05_jax_safeinfer`，不再作为本仓库的数据交付门槛。
 - 待完成：将最终 LeRobot 数据同步/挂载到 RPBZZZ6，计算全量 fresh norm stats，并用真实 LeRobot batch 执行单步 loss smoke；这不属于本次 MCAP→LeRobot 交付门槛。
 
 ### w3 部署入口
@@ -481,6 +459,4 @@ docker run --rm \
   arx5-dataset clean --input-root /data --output-root /out/audit
 ```
 
-后续依次调用 `select-pi05`、`to-lerobot`、`validate-pi05`、`validate-openpi` 和 `compute-openpi-norm-stats`；正式参数与结果均保存在 `selection.json`、`reports/conversion.json` 和 fresh `norm_stats.json`。
-
-`docker/Dockerfile.openpi-validation` 只用于 w3 的 CPU 数据验收，将官方 CUDA JAX 替换为同版本 CPU JAX；该镜像不是 RPBZZZ6 训练镜像。
+后续依次调用 `select-pi05`、`to-lerobot` 和 `validate-pi05`；正式参数与结果保存在 `selection.json` 和 `reports/conversion.json`。随后把不可变 LeRobot snapshot 交给 `pi05_jax_safeinfer` 做 OpenPI 验证、norm stats 和训练。

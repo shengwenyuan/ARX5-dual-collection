@@ -103,13 +103,9 @@
 | 片段筛选 | 短运动和尾部裁剪 | enabled | 运动段至少 54 帧；每段末尾裁 34 帧 | `select_nonidle_segments` | OpenPI DROID 时间尺度适配 |
 | 片段索引 | 来源与训练资格记录 | enabled | 输出 `sample_index.jsonl`、`segments.jsonl`、`selection.json` | `pi05_dataset.artifact_codec.write_selection_artifacts` | 项目可追溯契约 |
 | RGB 读取 | RGB8 + 历史 YUYV | enabled | 新 RGB8 原样读取；历史 YUYV 以 BT.601 limited-range 解码；导出 `640x360` RGB | `pi05_dataset.images.decode_color_message`、`extract_selected_rgb` | 项目相机适配 |
-| LeRobot | 三相机 video dataset | verified | `cam_high`、左右 wrist、14 维 state/action、task、50 Hz | `pi05_dataset.openpi_contract`、`exporter.export_lerobot` | OpenPI/LeRobot 字段契约 |
+| LeRobot | 三相机 video dataset | verified | `cam_high`、左右 wrist、14 维 state/action、task、50 Hz | `pi05_dataset.lerobot_contract`、`exporter.export_lerobot` | LeRobot 交付契约 |
 | LeRobot | segment 到 episode | verified | 每个连续有效 segment 单独调用一次 `save_episode()` | `pi05_dataset.exporter.export_lerobot` | 保持时间连续性 |
-| OpenPI adapter | 数据字段 repack | verified | 三路图像、state、actions、task prompt 映射到 OpenPI | `pi05_dataset.openpi_adapter.make_arx5_data_config` | OpenPI 官方 DataConfig |
-| OpenPI transform | π0.5 shape 和 action chunk | verified | 图像 `224x224x3`；state padding 到 32；action chunk `50x32` | `pi05_dataset.validate.validate_openpi` | OpenPI 官方 transform |
-| OpenPI action | joint delta + absolute gripper | verified | 12 个 joint 使用 delta；两夹爪保持 absolute | `LeRobotAlohaDataConfig` | OpenPI Aloha 配方 |
-| Normalization | fresh norm stats | verified | 使用正式数据和 OpenPI transform 计算 q01/q99/std | `scripts/cloud/compute_pi05_norm_stats.py` | OpenPI 官方统计流程 |
-| 训练交接 | pi05_base joint-only SFT | verified | 32 维模型 action、50-step horizon、8-way FSDP | `pi05_dataset.openpi_adapter.make_arx5_train_config` | OpenPI π0.5 配置 |
+| 模型交接 | immutable snapshot | enabled | 只交付 LeRobot dataset 与 conversion report | `validate-pi05` | `pi05_jax_safeinfer` 消费 |
 
 ## 契约与模块边界
 
@@ -117,7 +113,7 @@
 |---|---|---|
 | 数据 Artifact 契约 | JSON/JSONL 字段、`MessageRef` codec、TypedDict、schema version | `arx5_collection.artifacts`、`pi05_dataset.artifact_codec`、`schemas/` |
 | Selection pipeline | success/质量筛选、采样、状态构造、idle 和 segment | `pi05_dataset.selection`、`selection_pipeline` |
-| OpenPI 模型契约 | 相机 key、joint 顺序、14→32 维、名义 fps、action horizon、固定依赖版本 | `pi05_dataset.openpi_contract`、`openpi_adapter` |
+| LeRobot 数据契约 | 相机 key、joint 顺序、名义 fps、action horizon、固定 LeRobot 版本 | `pi05_dataset.lerobot_contract` |
 
 `manifest.py` 仅保留兼容导出，不再包含 pipeline 或 codec 实现。CLI 子命令通过 `set_defaults(handler=...)` 显式分发，`main()` 不包含业务分支。
 
@@ -125,7 +121,7 @@
 
 目录型产物统一使用 `atomic.staged_directory`：在目标同级临时目录完成写入，再以一次 `os.replace` 发布；目标已存在时拒绝覆盖，异常时清理 staging。该保证是同一文件系统、单写者前提下的“原子可见”，不承诺 `fsync` 掉电持久性或多写者协调。
 
-cleaning、selection、LeRobot dataset 和 norm stats 的目录发布语义已经一致。LeRobot dataset 与其外置 `reports/conversion.json` 是两个目标，不能构成单次文件系统事务；dataset 目录是主产物，conversion report 仍是发布后的伴随报告。
+cleaning、selection 和 LeRobot dataset 的目录发布语义已经一致。LeRobot dataset 与其外置 `reports/conversion.json` 是两个目标，不能构成单次文件系统事务；dataset 目录是主产物，conversion report 仍是发布后的伴随报告。
 
 ## 当前固定参数
 

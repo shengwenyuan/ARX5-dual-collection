@@ -61,7 +61,8 @@ clean
   → classify-dagger
   → select-pi05-eef-dagger
   → to-lerobot（独立 correction 数据集）
-  → validate-pi05 / validate-openpi
+  → validate-pi05
+  → hand off immutable snapshot to pi05_jax_safeinfer
   → mix-selections（验证通过后）
   → to-lerobot（单一混合训练集）
 ```
