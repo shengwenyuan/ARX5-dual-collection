@@ -150,6 +150,41 @@ def test_coarse_gate_rejects_tiny_and_missing_stream(tmp_path: Path) -> None:
     assert any("camera_overview_aligned_depth" in issue.reason for issue in issues)
 
 
+def test_production_policy_uses_300_mib_mcap_floor() -> None:
+    current = UploadPolicy.load(
+        Path(__file__).parents[1] / "config" / "bos-upload-validation.v1.toml"
+    )
+
+    assert current.min_mcap_bytes == 300 * 1024 * 1024
+
+
+def test_coarse_gate_includes_300_mib_boundary(tmp_path: Path) -> None:
+    current = policy(min_mcap_bytes=300 * 1024 * 1024)
+    episode = write_episode(tmp_path, "episode")
+
+    below = Episode(
+        episode.source_root,
+        episode.directory,
+        episode.relative_dir,
+        current.min_mcap_bytes - 1,
+        episode.metadata_size,
+        episode.metadata,
+    )
+    boundary = Episode(
+        episode.source_root,
+        episode.directory,
+        episode.relative_dir,
+        current.min_mcap_bytes,
+        episode.metadata_size,
+        episode.metadata,
+    )
+
+    assert any("MCAP 小于" in issue.reason for issue in coarse_issues(below, current))
+    assert not any(
+        "MCAP 小于" in issue.reason for issue in coarse_issues(boundary, current)
+    )
+
+
 def test_coarse_gate_accepts_explicit_rgb_only_contract(tmp_path: Path) -> None:
     episode = write_episode(tmp_path, "episode")
     episode.metadata.clear()
