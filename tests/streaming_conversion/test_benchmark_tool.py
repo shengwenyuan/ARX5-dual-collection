@@ -9,7 +9,7 @@ import tempfile
 import unittest
 
 
-SCRIPT = Path("scripts/cloud/benchmark_streaming_prefetch.py").resolve()
+SCRIPT = Path("scripts/dataset/benchmark_streaming_prefetch.py").resolve()
 
 
 class BenchmarkToolTest(unittest.TestCase):

@@ -53,13 +53,6 @@ class DatasetCliTest(unittest.TestCase):
                 "--repo-id", "local/data",
             ],
             ["validate-pi05", "--dataset-root", "/data", "--repo-id", "local/data"],
-            ["validate-openpi", "--dataset-home", "/data", "--repo-id", "local/data"],
-            [
-                "compute-openpi-norm-stats",
-                "--dataset-home", "/data",
-                "--repo-id", "local/data",
-                "--output-dir", "/stats",
-            ],
             ["stream-to-lerobot", "--config", "/config.toml"],
         )
 

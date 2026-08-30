@@ -17,13 +17,13 @@ from arx5_collection.artifacts import write_jsonl
 from arx5_collection.atomic import staged_directory
 from arx5_collection.pi05_dataset.discovery import episode_lookup
 from arx5_collection.pi05_dataset.images import extract_selected_rgb
-from arx5_collection.pi05_dataset.openpi_contract import CAMERA_KEYS
-from arx5_collection.pi05_dataset.openpi_contract import DATASET_FPS
-from arx5_collection.pi05_dataset.openpi_contract import IMAGE_SIZE
-from arx5_collection.pi05_dataset.openpi_contract import LEROBOT_COMMIT
-from arx5_collection.pi05_dataset.openpi_contract import MOTOR_NAMES
-from arx5_collection.pi05_dataset.openpi_contract import OPENPI_COMMIT
-from arx5_collection.pi05_dataset.openpi_contract import lerobot_features
+from arx5_collection.pi05_dataset.lerobot_contract import CAMERA_KEYS
+from arx5_collection.pi05_dataset.lerobot_contract import DATASET_FPS
+from arx5_collection.pi05_dataset.lerobot_contract import IMAGE_SIZE
+from arx5_collection.pi05_dataset.lerobot_contract import LEROBOT_COMMIT
+from arx5_collection.pi05_dataset.lerobot_contract import MOTOR_NAMES
+from arx5_collection.pi05_dataset.lerobot_contract import OPENPI_COMMIT
+from arx5_collection.pi05_dataset.lerobot_contract import lerobot_features
 from arx5_collection.pi05_dataset.video import VideoEncodingConfig
 from arx5_collection.pi05_dataset.video import configured_lerobot_encoder
 

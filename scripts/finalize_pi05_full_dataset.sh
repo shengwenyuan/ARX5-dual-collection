@@ -58,16 +58,5 @@ mkdir -p "${staged_home}/local"
 mv "${staged_dataset}" "${staged_home}/local/${dataset_name}"
 cp "${work_root}/reports/conversion.json" "${staged_home}/conversion.${dataset_name}.json"
 
-docker run --rm \
-  -v "${code_root}:/workspace:ro" \
-  -v "${staged_home}:/datasets:ro" \
-  -v /home/lenovo/swy/openpi-validation-cache:/openpi-cache \
-  -e OPENPI_DATA_HOME=/openpi-cache \
-  -w /workspace \
-  arx5-dual-collection:openpi-validation \
-  sh -c 'PYTHONPATH=/workspace/src:$PYTHONPATH arx5-dataset validate-openpi "$@"' sh \
-  --dataset-home /datasets \
-  --repo-id "${repo_id}"
-
 mv "${staged_home}" "${final_home}"
 echo "final dataset ready: ${final_dataset}"

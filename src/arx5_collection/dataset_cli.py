@@ -21,9 +21,7 @@ from arx5_collection.pi05_dataset.mixing import mix_selections
 from arx5_collection.pi05_dataset.selection_pipeline import select_dataset
 from arx5_collection.pi05_dataset.selection_pipeline import DatasetSelection
 from arx5_collection.pi05_dataset.selection_pipeline import select_equal_eef_dataset
-from arx5_collection.pi05_dataset.validate import compute_openpi_norm_stats
 from arx5_collection.pi05_dataset.validate import validate_lerobot
-from arx5_collection.pi05_dataset.validate import validate_openpi
 from arx5_collection.streaming_conversion.alignment import AlignmentCancelled
 from arx5_collection.streaming_conversion.application import StreamingRunRequest
 from arx5_collection.streaming_conversion.application import execute_streaming_conversion
@@ -223,23 +221,6 @@ def _handle_validate_pi05(args: argparse.Namespace) -> int:
     return 0
 
 
-def _handle_validate_openpi(args: argparse.Namespace) -> int:
-    report = validate_openpi(args.dataset_home, args.repo_id)
-    print(json.dumps(report, indent=2, sort_keys=True))
-    return 0
-
-
-def _handle_norm_stats(args: argparse.Namespace) -> int:
-    report = compute_openpi_norm_stats(
-        args.dataset_home,
-        args.repo_id,
-        args.output_dir,
-        max_frames=args.max_frames,
-    )
-    print(json.dumps(report, indent=2, sort_keys=True))
-    return 0
-
-
 def _handle_stream_to_lerobot(args: argparse.Namespace) -> int:
     request = StreamingRunRequest(
         config_path=args.config,
@@ -385,24 +366,6 @@ def build_parser() -> argparse.ArgumentParser:
     validate_parser.add_argument("--repo-id", required=True)
     validate_parser.add_argument("--expected-task")
     validate_parser.set_defaults(handler=_handle_validate_pi05)
-
-    openpi_parser = subparsers.add_parser(
-        "validate-openpi",
-        help="run the pinned openpi π0.5 transforms on a local dataset sample",
-    )
-    openpi_parser.add_argument("--dataset-home", type=Path, required=True)
-    openpi_parser.add_argument("--repo-id", required=True)
-    openpi_parser.set_defaults(handler=_handle_validate_openpi)
-
-    norm_parser = subparsers.add_parser(
-        "compute-openpi-norm-stats",
-        help="compute fresh state/action statistics with pinned openpi transforms",
-    )
-    norm_parser.add_argument("--dataset-home", type=Path, required=True)
-    norm_parser.add_argument("--repo-id", required=True)
-    norm_parser.add_argument("--output-dir", type=Path, required=True)
-    norm_parser.add_argument("--max-frames", type=int)
-    norm_parser.set_defaults(handler=_handle_norm_stats)
 
     stream_parser = subparsers.add_parser(
         "stream-to-lerobot",

@@ -11,7 +11,6 @@ class VideoEncodingConfigTest(unittest.TestCase):
         for path in (
             "src/arx5_collection/pi05_dataset/exporter.py",
             "src/arx5_collection/pi05_dataset/validate.py",
-            "scripts/w3/smoke_pi05_policy.py",
         ):
             self.assertIn('video_backend="pyav"', Path(path).read_text())
 

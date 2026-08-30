@@ -9,8 +9,8 @@ from arx5_collection.cleaning.models import EpisodeScan
 from arx5_collection.cleaning.models import FrameGroup
 from arx5_collection.pi05_dataset.actions import GripperCalibration
 from arx5_collection.pi05_dataset.actions import make_state
-from arx5_collection.pi05_dataset.openpi_contract import ACTION_HORIZON
-from arx5_collection.pi05_dataset.openpi_contract import DATASET_FPS
+from arx5_collection.pi05_dataset.lerobot_contract import ACTION_HORIZON
+from arx5_collection.pi05_dataset.lerobot_contract import DATASET_FPS
 from arx5_collection.pi05_dataset.selection import Pi05Sample
 
 
