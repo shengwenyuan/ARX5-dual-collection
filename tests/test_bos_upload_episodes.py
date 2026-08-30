@@ -5,6 +5,8 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+import threading
+import time
 
 import pytest
 
@@ -13,11 +15,15 @@ TOOLS = Path(__file__).resolve().parents[1] / "tools"
 sys.path.insert(0, str(TOOLS))
 
 from bos_upload_episodes import ABORT_DIRECTORY  # noqa: E402
+from bos_upload_episodes import BceProgressProbe  # noqa: E402
 from bos_upload_episodes import BosClient  # noqa: E402
 from bos_upload_episodes import Episode  # noqa: E402
+from bos_upload_episodes import EpisodeUploadWork  # noqa: E402
 from bos_upload_episodes import SyncCommand  # noqa: E402
 from bos_upload_episodes import UploadPolicy  # noqa: E402
+from bos_upload_episodes import UploadProgressWatchdog  # noqa: E402
 from bos_upload_episodes import _collect  # noqa: E402
+from bos_upload_episodes import _run_upload_round  # noqa: E402
 from bos_upload_episodes import choose_samples  # noqa: E402
 from bos_upload_episodes import coarse_issues  # noqa: E402
 from bos_upload_episodes import parse_bos_listing  # noqa: E402
@@ -40,7 +46,9 @@ def policy(min_mcap_bytes: int = 1) -> UploadPolicy:
         depth_encoding="16UC1",
         width=848,
         height=480,
-        stall_seconds=180,
+        processes=2,
+        concurrency_per_process=8,
+        progress_stall_seconds=900,
         retry_delays_seconds=(10, 30, 60, 300, 900),
     )
 
@@ -107,6 +115,53 @@ def test_parse_standard_commands(tmp_path: Path) -> None:
     assert upload_argv(command, False) == [
         "bcecmd", "bos", "sync", f"{tmp_path}/", "bos:/bucket/task/",
         "--concurrency", "16", "--exclude", "abort/*", "--yes",
+    ]
+
+
+def test_episode_upload_work_isolates_prefix_and_replaces_concurrency(
+    tmp_path: Path,
+) -> None:
+    episode = write_episode(tmp_path, "episode")
+    parent = SyncCommand(
+        tmp_path,
+        "bos:/bucket/task/",
+        (
+            "--concurrency",
+            "16",
+            "--sync-type",
+            "dest-not-exist",
+            "--follow-symlink",
+        ),
+    )
+
+    command = EpisodeUploadWork(parent, episode).command(8)
+
+    assert command.source == episode.directory
+    assert command.destination == "bos:/bucket/task/episode/"
+    assert command.options == (
+        "--concurrency",
+        "8",
+        "--sync-type",
+        "dest-not-exist",
+        "--follow-symlink",
+    )
+
+
+def test_parse_allows_explicit_follow_symlink_for_expert_input(
+    tmp_path: Path,
+) -> None:
+    command = parse_commands(
+        [
+            f"bcecmd bos sync {tmp_path}/ bos:/bucket/task/ "
+            "--follow-symlink --concurrency 2"
+        ]
+    )[0]
+
+    assert upload_argv(command, True)[5:9] == [
+        "--follow-symlink",
+        "--concurrency",
+        "2",
+        "--sync-type",
     ]
 
 
@@ -222,6 +277,90 @@ def test_parse_bos_listing_extracts_object_sizes() -> None:
     }
 
 
+def test_bce_progress_probe_accumulates_only_positive_deltas(tmp_path: Path) -> None:
+    task_dir = tmp_path / "task_progress"
+    multipart_dir = tmp_path / "multiupload_infos" / "ak"
+    task_dir.mkdir()
+    multipart_dir.mkdir(parents=True)
+    task = task_dir / "SYNC-1-1"
+    multipart = multipart_dir / "upload"
+    task.write_text(json.dumps({"syncSuccBytes": 10}))
+    multipart.write_text(
+        json.dumps(
+            {
+                "fileSize": 100,
+                "partSize": 10,
+                "completePartList": [{}],
+            }
+        )
+    )
+    probe = BceProgressProbe(tmp_path)
+
+    assert probe.sample() == 0
+    task.write_text(json.dumps({"syncSuccBytes": 30}))
+    multipart.write_text(
+        json.dumps(
+            {
+                "fileSize": 100,
+                "partSize": 10,
+                "completePartList": [{}, {}, {}],
+            }
+        )
+    )
+    assert probe.sample() == 40
+    multipart.unlink()
+    assert probe.sample() == 40
+
+
+class ConcurrentRunner:
+    def __init__(self) -> None:
+        self.active = 0
+        self.max_active = 0
+        self.argv: list[list[str]] = []
+        self.lock = threading.Lock()
+
+    def stream(self, argv, stall_seconds, log, progress) -> int:
+        with self.lock:
+            self.active += 1
+            self.max_active = max(self.max_active, self.active)
+            self.argv.append(list(argv))
+        time.sleep(0.02)
+        with self.lock:
+            self.active -= 1
+        return 0
+
+
+def test_upload_round_runs_bounded_episode_processes(tmp_path: Path) -> None:
+    episodes = tuple(
+        write_episode(tmp_path, f"episode-{index}") for index in range(3)
+    )
+    parent = SyncCommand(
+        tmp_path,
+        "bos:/bucket/task/",
+        ("--concurrency", "16", "--sync-type", "dest-not-exist"),
+    )
+    runner = ConcurrentRunner()
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir()
+
+    results = _run_upload_round(
+        tuple(EpisodeUploadWork(parent, episode) for episode in episodes),
+        policy(),
+        runner,
+        True,
+        log_dir,
+        0,
+        StaticProgress(),
+    )
+
+    assert set(results.values()) == {0}
+    assert runner.max_active == 2
+    assert len(runner.argv) == 3
+    assert all(
+        argv[argv.index("--concurrency") + 1] == "8" for argv in runner.argv
+    )
+
+
 class FakeBos(BosClient):
     def __init__(self, objects: dict[str, int], values: dict[str, dict[str, object]]) -> None:
         self.objects = objects
@@ -281,9 +420,41 @@ class FakeRunner:
             return subprocess.CompletedProcess(argv, 0, "")
         raise AssertionError(argv)
 
-    def stream(self, argv: list[str], stall_seconds: int, log: io.TextIOBase) -> int:
+    def stream(
+        self,
+        argv: list[str],
+        stall_seconds: int,
+        log: io.TextIOBase,
+        progress,
+    ) -> int:
         self.uploaded = True
         return 0
+
+
+class StaticProgress:
+    def sample(self) -> int:
+        return 0
+
+
+def test_progress_watchdog_resets_only_for_completed_bytes() -> None:
+    class MutableProgress:
+        value = 0
+
+        def sample(self) -> int:
+            return self.value
+
+    progress = MutableProgress()
+    now = [0.0]
+    watchdog = UploadProgressWatchdog(progress, 10, lambda: now[0])
+
+    now[0] = 9.0
+    assert not watchdog.stalled()
+    progress.value = 1
+    assert not watchdog.stalled()
+    now[0] = 18.0
+    assert not watchdog.stalled()
+    now[0] = 19.0
+    assert watchdog.stalled()
 
 
 @pytest.mark.parametrize(("full_check", "expected_checks"), ((True, 1), (False, 0)))
@@ -298,16 +469,18 @@ def test_execute_runs_preflight_upload_and_postcheck(
     runner = FakeRunner(command, episode)
     current = policy()
     current = UploadPolicy(
-        current.min_mcap_bytes,
-        current.sample_fraction,
-        current.max_samples,
-        current.conversion_profile,
-        current.rgb_encoding,
-        current.depth_encoding,
-        current.width,
-        current.height,
-        current.stall_seconds,
-        (),
+        min_mcap_bytes=current.min_mcap_bytes,
+        sample_fraction=current.sample_fraction,
+        max_samples=current.max_samples,
+        conversion_profile=current.conversion_profile,
+        rgb_encoding=current.rgb_encoding,
+        depth_encoding=current.depth_encoding,
+        width=current.width,
+        height=current.height,
+        processes=current.processes,
+        concurrency_per_process=current.concurrency_per_process,
+        progress_stall_seconds=current.progress_stall_seconds,
+        retry_delays_seconds=(),
     )
     output = io.StringIO()
     checked: list[Episode] = []
@@ -319,8 +492,99 @@ def test_execute_runs_preflight_upload_and_postcheck(
         full_check=full_check,
         runner=runner,
         deep_validate=checked.append,
+        progress_factory=StaticProgress,
     )
     assert runner.uploaded
     assert len(checked) == expected_checks
     assert "UPLOAD COMPLETE" in output.getvalue()
     assert f"full_check={str(full_check).lower()}" in output.getvalue()
+
+
+class RetryRunner:
+    def __init__(self, command: SyncCommand, episodes: tuple[Episode, ...]) -> None:
+        self.command = command
+        self.episodes = {episode.episode_id: episode for episode in episodes}
+        self.attempts = {episode.episode_id: 0 for episode in episodes}
+        self.uploaded: set[str] = set()
+        self.lock = threading.Lock()
+
+    def run(self, argv: list[str]) -> subprocess.CompletedProcess[str]:
+        if argv[-1] == "--help":
+            return subprocess.CompletedProcess(argv, 0, "dest-not-exist")
+        if argv[2] == "ls":
+            objects = []
+            for episode_id in sorted(self.uploaded):
+                episode = self.episodes[episode_id]
+                for name, size in (
+                    ("episode.mcap", episode.mcap_size),
+                    ("metadata.json", episode.metadata_size),
+                ):
+                    objects.append(
+                        {
+                            "key": remote_path(
+                                self.command,
+                                episode,
+                                name,
+                            ).removeprefix("bos:/bucket/"),
+                            "size": size,
+                        }
+                    )
+            return subprocess.CompletedProcess(
+                argv,
+                0,
+                json.dumps({"objects": objects}),
+            )
+        if argv[2] == "cp":
+            episode_id = argv[3].rstrip("/").split("/")[-2]
+            Path(argv[4]).write_text(json.dumps(self.episodes[episode_id].metadata))
+            return subprocess.CompletedProcess(argv, 0, "")
+        raise AssertionError(argv)
+
+    def stream(self, argv, stall_seconds, log, progress) -> int:
+        episode_id = argv[4].rstrip("/").split("/")[-1]
+        with self.lock:
+            self.attempts[episode_id] += 1
+            attempt = self.attempts[episode_id]
+            if episode_id != "episode-a" or attempt > 1:
+                self.uploaded.add(episode_id)
+                return 0
+        return 1
+
+
+def test_execute_retries_only_unverified_episode(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    episodes = (
+        write_episode(tmp_path, "episode-a"),
+        write_episode(tmp_path, "episode-b"),
+    )
+    command = SyncCommand(tmp_path, "bos:/bucket/task/", ("--concurrency", "16"))
+    runner = RetryRunner(command, episodes)
+    current = policy()
+    current = UploadPolicy(
+        min_mcap_bytes=current.min_mcap_bytes,
+        sample_fraction=current.sample_fraction,
+        max_samples=current.max_samples,
+        conversion_profile=current.conversion_profile,
+        rgb_encoding=current.rgb_encoding,
+        depth_encoding=current.depth_encoding,
+        width=current.width,
+        height=current.height,
+        processes=2,
+        concurrency_per_process=8,
+        progress_stall_seconds=current.progress_stall_seconds,
+        retry_delays_seconds=(0,),
+    )
+    monkeypatch.setattr(sys, "stdin", io.StringIO("\n"))
+    monkeypatch.setattr(sys, "stdout", io.StringIO())
+
+    execute(
+        (command,),
+        current,
+        full_check=False,
+        runner=runner,
+        progress_factory=StaticProgress,
+    )
+
+    assert runner.attempts == {"episode-a": 2, "episode-b": 1}

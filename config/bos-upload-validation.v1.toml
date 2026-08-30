@@ -15,5 +15,7 @@ width = 848
 height = 480
 
 [upload]
-stall_seconds = 180
+processes = 2
+concurrency_per_process = 8
+progress_stall_seconds = 900
 retry_delays_seconds = [10, 30, 60, 300, 900]

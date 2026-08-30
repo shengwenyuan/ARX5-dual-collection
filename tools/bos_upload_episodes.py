@@ -2,12 +2,13 @@
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import as_completed
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 import json
 import math
 import os
 from pathlib import Path
-import selectors
 import shlex
 import shutil
 import subprocess
@@ -18,6 +19,11 @@ import tomllib
 from dataclasses import dataclass
 from typing import Callable, Iterable, Sequence, TextIO
 
+from arx5_collection.bos_upload_runtime import BceProgressProbe
+from arx5_collection.bos_upload_runtime import ProcessRunner
+from arx5_collection.bos_upload_runtime import ProgressProbe
+from arx5_collection.bos_upload_runtime import RETRY_EXIT_CODE
+from arx5_collection.bos_upload_runtime import UploadProgressWatchdog
 from arx5_collection.capture import CaptureProfile
 from arx5_collection.capture import profile_from_metadata
 from arx5_collection.capture import stream_contract
@@ -28,7 +34,7 @@ MCAP_NAME = "episode.mcap"
 METADATA_NAME = "metadata.json"
 ABORT_DIRECTORY = "abort"
 VALUE_OPTIONS = {"--concurrency", "--sync-type", "--traffic-limit"}
-RETRY_EXIT_CODE = 75
+FLAG_OPTIONS = {"--follow-symlink"}
 DEFAULT_BOS_ROOT = "bos:/datainfra-demo"
 DEFAULT_STATION_CONFIG = Path("/var/lib/arx5-collection/station.json")
 
@@ -43,8 +49,19 @@ class UploadPolicy:
     depth_encoding: str
     width: int
     height: int
-    stall_seconds: int
+    processes: int
+    concurrency_per_process: int
+    progress_stall_seconds: int
     retry_delays_seconds: tuple[int, ...]
+
+    def __post_init__(self) -> None:
+        if min(
+            self.min_mcap_bytes,
+            self.processes,
+            self.concurrency_per_process,
+            self.progress_stall_seconds,
+        ) <= 0:
+            raise ValueError("upload limits must be positive")
 
     @classmethod
     def load(cls, path: Path) -> UploadPolicy:
@@ -59,7 +76,13 @@ class UploadPolicy:
             depth_encoding=str(value["deep"]["depth_encoding"]),
             width=int(value["deep"]["width"]),
             height=int(value["deep"]["height"]),
-            stall_seconds=int(value["upload"]["stall_seconds"]),
+            processes=int(value["upload"]["processes"]),
+            concurrency_per_process=int(
+                value["upload"]["concurrency_per_process"]
+            ),
+            progress_stall_seconds=int(
+                value["upload"]["progress_stall_seconds"]
+            ),
             retry_delays_seconds=tuple(
                 int(item) for item in value["upload"]["retry_delays_seconds"]
             ),
@@ -91,6 +114,24 @@ class Episode:
 class GateIssue:
     episode: Episode
     reason: str
+
+
+@dataclass(frozen=True, slots=True)
+class EpisodeUploadWork:
+    parent: SyncCommand
+    episode: Episode
+
+    def command(self, concurrency: int) -> SyncCommand:
+        options = _replace_option(
+            self.parent.options,
+            "--concurrency",
+            str(concurrency),
+        )
+        destination = (
+            f"{self.parent.destination.rstrip('/')}"
+            f"/{self.episode.relative_dir.as_posix()}/"
+        )
+        return SyncCommand(self.episode.directory, destination, options)
 
 
 def parse_commands(lines: Iterable[str]) -> tuple[SyncCommand, ...]:
@@ -154,11 +195,40 @@ def _validate_options(options: Sequence[str]) -> None:
     index = 0
     while index < len(options):
         option = options[index]
+        if option in FLAG_OPTIONS:
+            index += 1
+            continue
         if option not in VALUE_OPTIONS or index + 1 == len(options):
             raise ValueError(f"不支持的 bcecmd 参数：{option}")
         if option == "--sync-type" and options[index + 1] == "force-overwrite":
             raise ValueError("禁止 force-overwrite")
         index += 2
+
+
+def _replace_option(
+    options: Sequence[str],
+    name: str,
+    value: str,
+) -> tuple[str, ...]:
+    updated = []
+    replaced = False
+    index = 0
+    while index < len(options):
+        option = options[index]
+        if option in FLAG_OPTIONS:
+            updated.append(option)
+            index += 1
+            continue
+        option, current = options[index : index + 2]
+        index += 2
+        if option == name:
+            updated.extend((name, value))
+            replaced = True
+        else:
+            updated.extend((option, current))
+    if not replaced:
+        updated.extend((name, value))
+    return tuple(updated)
 
 
 def discover_episodes(source_root: Path) -> tuple[Episode, ...]:
@@ -318,7 +388,6 @@ class DeepGate:
             profile_from_metadata(metadata),
         )
         task = str(metadata["task"]["description"])
-        calibration = recipe.calibration_for(str(metadata["station"]["id"]))
         with tempfile.TemporaryDirectory(prefix="arx5-bos-deep-") as temporary_text:
             temporary = Path(temporary_text)
             audit = temporary / "audit"
@@ -327,12 +396,12 @@ class DeepGate:
                 classify_dagger_episode(episode.directory, audit)
                 selection = select_equal_eef_dagger_dataset(
                     [episode.directory], audit, temporary, task,
-                    calibration.left, calibration.right, recipe.selection,
+                    recipe.gripper, recipe.gripper, recipe.selection,
                 )
             else:
                 selection = select_equal_eef_dataset(
                     [episode.directory], audit, temporary, task,
-                    calibration.left, calibration.right, recipe.selection,
+                    recipe.gripper, recipe.gripper, recipe.selection,
                 )
             if not selection.episodes:
                 raise ValueError("无法生成有效训练 Segment")
@@ -392,38 +461,6 @@ class DeepGate:
             raise ValueError(f"图像 Topic 缺失：{sorted(set(expected) - observed)}")
 
 
-class ProcessRunner:
-    def run(self, argv: Sequence[str]) -> subprocess.CompletedProcess[str]:
-        return subprocess.run(argv, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-
-    def stream(self, argv: Sequence[str], stall_seconds: int, log: TextIO) -> int:
-        process = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-        assert process.stdout is not None
-        selector = selectors.DefaultSelector()
-        selector.register(process.stdout, selectors.EVENT_READ)
-        last_output = time.monotonic()
-        while process.poll() is None:
-            events = selector.select(timeout=1)
-            if events:
-                chunk = os.read(process.stdout.fileno(), 8192)
-                if chunk:
-                    text = chunk.decode(errors="replace")
-                    sys.stdout.write(text)
-                    sys.stdout.flush()
-                    log.write(text)
-                    log.flush()
-                    last_output = time.monotonic()
-            elif time.monotonic() - last_output >= stall_seconds:
-                process.terminate()
-                process.wait()
-                return RETRY_EXIT_CODE
-        remainder = process.stdout.read().decode(errors="replace")
-        if remainder:
-            sys.stdout.write(remainder)
-            log.write(remainder)
-        return process.returncode
-
-
 def parse_bos_listing(output: str, prefix: str) -> dict[str, int]:
     value = json.loads(output)
     bucket = prefix.removeprefix("bos:/").split("/", 1)[0]
@@ -467,16 +504,33 @@ def verify_bos(
     policy: UploadPolicy,
     client: BosClient,
 ) -> None:
+    failures = bos_verification_failures(command, episodes, policy, client)
+    if failures:
+        relative_dir, reason = next(iter(failures.items()))
+        if reason.startswith("粗筛失败："):
+            raise ValueError(f"BOS 粗筛失败：{relative_dir}：{reason.removeprefix('粗筛失败：')}")
+        raise ValueError(f"BOS 验证失败：{relative_dir}：{reason}")
+
+
+def bos_verification_failures(
+    command: SyncCommand,
+    episodes: Sequence[Episode],
+    policy: UploadPolicy,
+    client: BosClient,
+) -> dict[Path, str]:
     objects = client.list(command.destination)
+    failures: dict[Path, str] = {}
     with tempfile.TemporaryDirectory(prefix="arx5-bos-metadata-") as temporary_text:
         temporary = Path(temporary_text)
         for index, episode in enumerate(episodes):
             mcap_path = remote_path(command, episode, MCAP_NAME)
             metadata_path = remote_path(command, episode, METADATA_NAME)
             if objects.get(mcap_path) != episode.mcap_size:
-                raise ValueError(f"BOS MCAP 缺失或大小不符：{episode.relative_dir}")
+                failures[episode.relative_dir] = "MCAP 缺失或大小不符"
+                continue
             if objects.get(metadata_path) != episode.metadata_size:
-                raise ValueError(f"BOS metadata 缺失或大小不符：{episode.relative_dir}")
+                failures[episode.relative_dir] = "metadata 缺失或大小不符"
+                continue
             remote = Episode(
                 source_root=Path("/bos"),
                 directory=episode.directory,
@@ -487,7 +541,8 @@ def verify_bos(
             )
             issues = coarse_issues(remote, policy)
             if issues:
-                raise ValueError(f"BOS 粗筛失败：{episode.relative_dir}：{issues[0].reason}")
+                failures[episode.relative_dir] = f"粗筛失败：{issues[0].reason}"
+    return failures
 
 
 def upload_argv(
@@ -498,6 +553,10 @@ def upload_argv(
     has_sync_type = False
     index = 0
     while index < len(command.options):
+        if command.options[index] in FLAG_OPTIONS:
+            options.append(command.options[index])
+            index += 1
+            continue
         option, value = command.options[index : index + 2]
         index += 2
         if option == "--sync-type":
@@ -577,6 +636,153 @@ def validate_episode_tasks(
             )
 
 
+def _upload_one(
+    work: EpisodeUploadWork,
+    policy: UploadPolicy,
+    runner: ProcessRunner,
+    supports_dest_not_exist: bool,
+    log_dir: Path,
+    round_index: int,
+    progress: ProgressProbe,
+) -> int:
+    command = work.command(policy.concurrency_per_process)
+    argv = upload_argv(command, supports_dest_not_exist)
+    log_path = log_dir / f"{work.episode.episode_id}.attempt-{round_index + 1}.log"
+    with log_path.open("w") as log:
+        return runner.stream(
+            argv,
+            policy.progress_stall_seconds,
+            log,
+            progress,
+        )
+
+
+def _run_upload_round(
+    works: Sequence[EpisodeUploadWork],
+    policy: UploadPolicy,
+    runner: ProcessRunner,
+    supports_dest_not_exist: bool,
+    log_dir: Path,
+    round_index: int,
+    progress: ProgressProbe,
+) -> dict[tuple[SyncCommand, Path], int]:
+    results: dict[tuple[SyncCommand, Path], int] = {}
+    executor = ThreadPoolExecutor(max_workers=policy.processes)
+    try:
+        futures = {
+            executor.submit(
+                _upload_one,
+                work,
+                policy,
+                runner,
+                supports_dest_not_exist,
+                log_dir,
+                round_index,
+                progress,
+            ): work
+            for work in works
+        }
+        for future in as_completed(futures):
+            work = futures[future]
+            key = (work.parent, work.episode.relative_dir)
+            try:
+                results[key] = future.result()
+            except Exception as error:
+                print(f"UPLOAD ERROR episode={work.episode.episode_id}: {error}")
+                results[key] = RETRY_EXIT_CODE
+    except KeyboardInterrupt:
+        for future in futures:
+            future.cancel()
+        terminate_all = getattr(runner, "terminate_all", None)
+        if terminate_all is not None:
+            terminate_all()
+        raise
+    finally:
+        executor.shutdown(wait=True, cancel_futures=True)
+    return results
+
+
+def _verification_failures(
+    grouped: dict[SyncCommand, tuple[Episode, ...]],
+    policy: UploadPolicy,
+    client: BosClient,
+) -> dict[tuple[SyncCommand, Path], str]:
+    failures: dict[tuple[SyncCommand, Path], str] = {}
+    for command, episodes in grouped.items():
+        try:
+            current = bos_verification_failures(command, episodes, policy, client)
+        except Exception as error:
+            current = {episode.relative_dir: str(error) for episode in episodes}
+        failures.update(
+            ((command, relative_dir), reason)
+            for relative_dir, reason in current.items()
+        )
+    return failures
+
+
+def _upload_episodes(
+    grouped: dict[SyncCommand, tuple[Episode, ...]],
+    policy: UploadPolicy,
+    runner: ProcessRunner,
+    client: BosClient,
+    supports_dest_not_exist: bool,
+    log_dir: Path,
+    progress_factory: Callable[[], ProgressProbe],
+) -> None:
+    works = tuple(
+        EpisodeUploadWork(command, episode)
+        for command, episodes in grouped.items()
+        for episode in episodes
+    )
+    pending = works
+    for round_index in range(len(policy.retry_delays_seconds) + 1):
+        print(
+            f"UPLOAD ROUND {round_index + 1} pending={len(pending)} "
+            f"processes={policy.processes} "
+            f"concurrency_per_process={policy.concurrency_per_process}"
+        )
+        progress = progress_factory()
+        process_results = _run_upload_round(
+            pending,
+            policy,
+            runner,
+            supports_dest_not_exist,
+            log_dir,
+            round_index,
+            progress,
+        )
+        verification = _verification_failures(grouped, policy, client)
+        next_pending = []
+        reasons = {}
+        for work in works:
+            key = (work.parent, work.episode.relative_dir)
+            process_code = process_results.get(key)
+            reason = verification.get(key)
+            if reason is None:
+                continue
+            next_pending.append(work)
+            reasons[key] = (
+                reason
+                if process_code in (None, 0)
+                else f"bcecmd exit={process_code}; {reason}"
+            )
+        if not next_pending:
+            return
+        if round_index == len(policy.retry_delays_seconds):
+            work = next_pending[0]
+            key = (work.parent, work.episode.relative_dir)
+            raise RuntimeError(
+                f"上传失败：{work.episode.directory}：{reasons[key]}"
+            )
+        delay = policy.retry_delays_seconds[round_index]
+        print(
+            f"重试 {round_index + 1}/{len(policy.retry_delays_seconds)}，"
+            f"{delay}s 后继续，pending={len(next_pending)}"
+        )
+        time.sleep(delay)
+        pending = tuple(next_pending)
+
+
 def execute(
     commands: Sequence[SyncCommand],
     policy: UploadPolicy,
@@ -585,6 +791,7 @@ def execute(
     runner: ProcessRunner | None = None,
     deep_validate: Callable[[Episode], None] | None = None,
     task_description: str | None = None,
+    progress_factory: Callable[[], ProgressProbe] | None = None,
 ) -> None:
     runner = runner or ProcessRunner()
     client = BosClient(runner)
@@ -625,28 +832,21 @@ def execute(
     _confirm("按 ENTER 开始上传；其他输入取消：", sys.stdin, sys.stdout)
     help_result = runner.run(["bcecmd", "bos", "sync", "--help"])
     supports_dest_not_exist = "dest-not-exist" in help_result.stdout
-    log_path = Path(tempfile.gettempdir()) / f"arx5-bos-upload-{int(time.time())}.log"
-    with log_path.open("w") as log:
-        for command in commands:
-            argv = upload_argv(command, supports_dest_not_exist)
-            started = time.monotonic()
-            for attempt in range(len(policy.retry_delays_seconds) + 1):
-                code = runner.stream(argv, policy.stall_seconds, log)
-                try:
-                    if code:
-                        raise RuntimeError(f"bcecmd exit={code}")
-                    verify_bos(command, grouped[command], policy, client)
-                    break
-                except Exception as error:
-                    if attempt == len(policy.retry_delays_seconds):
-                        raise RuntimeError(f"上传停滞：{command.source}：{error}") from error
-                    delay = policy.retry_delays_seconds[attempt]
-                    print(f"重试 {attempt + 1}/5，{delay}s 后继续：{error}")
-                    time.sleep(delay)
-            elapsed = time.monotonic() - started
-            uploaded = sum(item.mcap_size or 0 for item in grouped[command])
-            print(f"PASS {command.source} -> {command.destination} avg_Bps={uploaded / elapsed:.1f}")
-    print(f"UPLOAD COMPLETE log={log_path}")
+    log_dir = Path(tempfile.mkdtemp(prefix="arx5-bos-upload-"))
+    started = time.monotonic()
+    _upload_episodes(
+        grouped,
+        policy,
+        runner,
+        client,
+        supports_dest_not_exist,
+        log_dir,
+        progress_factory or BceProgressProbe,
+    )
+    elapsed = time.monotonic() - started
+    uploaded = sum(item.mcap_size or 0 for item in all_episodes)
+    print(f"PASS avg_Bps={uploaded / elapsed:.1f}")
+    print(f"UPLOAD COMPLETE logs={log_dir}")
 
 
 def _command_lines(path: Path | None) -> list[str]:
