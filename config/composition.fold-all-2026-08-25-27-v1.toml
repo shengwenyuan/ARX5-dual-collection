@@ -1,0 +1,16 @@
+schema_version = 1
+
+[output]
+backend = "lerobot-v2.1"
+repo_id = "local/fold_all_2026-08-25_2026-08-26_2026-08-27"
+path = "/mnt/pfs/swy/dataset/1011/arx5/fold_cloth/lerobot/local/fold_all_2026-08-25_2026-08-26_2026-08-27"
+
+[[sources]]
+name = "fold_2526_base"
+path = "/mnt/pfs/swy/dataset/1011/arx5/fold_cloth/lerobot/local/fold_cloth_2026-08-25_2026-08-26"
+select_all = true
+
+[[sources]]
+name = "fold_27"
+path = "/mnt/pfs/swy/dataset/1011/arx5/fold_cloth/lerobot/local/fold_cloth_2026-08-27"
+select_all = true

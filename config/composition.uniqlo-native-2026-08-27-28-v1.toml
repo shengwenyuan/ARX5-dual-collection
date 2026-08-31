@@ -1,0 +1,16 @@
+schema_version = 1
+
+[output]
+backend = "lerobot-v2.1"
+repo_id = "local/uniqlo_native_2026-08-27_2026-08-28"
+path = "/mnt/pfs/swy/dataset/1011/arx5/uniqlo/lerobot/local/uniqlo_native_2026-08-27_2026-08-28"
+
+[[sources]]
+name = "uniqlo_pants_then_bag"
+path = "/mnt/pfs/swy/dataset/1011/arx5/uniqlo/lerobot/local/uniqlo_fold_pants_then_bag_2026-08-27_2026-08-28"
+select_all = true
+
+[[sources]]
+name = "uniqlo_cloth_pants_then_bag"
+path = "/mnt/pfs/swy/dataset/1011/arx5/uniqlo/lerobot/local/uniqlo_fold_cloth_pants_then_bag_2026-08-28"
+select_all = true

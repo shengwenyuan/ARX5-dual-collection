@@ -1,0 +1,11 @@
+schema_version = 1
+
+[output]
+backend = "lerobot-v2.1"
+repo_id = "local/fold_cloth_2026-08-26_full-v1"
+path = "/mnt/pfs/swy/dataset/1011/arx5/fold_cloth/lerobot/local/fold_cloth_2026-08-26_full-v1"
+
+[[sources]]
+name = "fold_2526_base"
+path = "/mnt/pfs/swy/dataset/1011/arx5/fold_cloth/lerobot/local/fold_cloth_2026-08-25_2026-08-26"
+selection_manifest = "/mnt/pfs/swy/dataset/1011/arx5/composition/manifests/fold_cloth_2026-08-26_from-2526-v1.jsonl"
