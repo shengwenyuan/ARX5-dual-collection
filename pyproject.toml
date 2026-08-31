@@ -10,6 +10,7 @@ requires-python = ">=3.10"
 [project.scripts]
 arx5-collect = "arx5_collection.production.cli:main"
 arx5-dataset = "arx5_collection.dataset_cli:main"
+arx5-viewer = "arx5_collection.viewer:main"
 
 [project.optional-dependencies]
 test = ["jsonschema>=4.26,<5", "pytest>=8,<9"]
@@ -21,6 +22,10 @@ dataset = [
 dataset-v3 = [
   "lerobot[dataset] @ git+https://github.com/huggingface/lerobot.git@7e241bd630a3719a56157a497ce5d08f244784f1",
 ]
+viewer = ["pyarrow>=17,<22"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+arx5_collection = ["viewer_static/*"]

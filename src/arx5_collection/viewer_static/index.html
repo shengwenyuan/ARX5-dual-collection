@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ARX5 Dataset Viewer</title>
+  <link rel="stylesheet" href="/static/styles.css?v=4">
+</head>
+<body>
+  <header>
+    <a class="brand" href="#/">
+      <span class="mark">A5</span>
+      <span><strong>ARX5</strong><small>Dataset Viewer</small></span>
+    </a>
+    <form id="dataset-form">
+      <label for="dataset-path">Dataset directory</label>
+      <div><input id="dataset-path" name="path" autocomplete="off"><button>Open</button></div>
+    </form>
+  </header>
+  <main id="app"><div class="loading">Reading dataset index…</div></main>
+  <template id="episode-template">
+    <button class="episode-card">
+      <span class="thumb-wrap"><img loading="lazy"><span class="duration"></span></span>
+      <span class="card-body"><strong></strong><small class="task"></small><span class="meta"></span></span>
+    </button>
+  </template>
+  <script src="/static/app.js?v=4"></script>
+</body>
+</html>
