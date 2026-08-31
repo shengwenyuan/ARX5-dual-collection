@@ -23,6 +23,7 @@ from arx5_collection.lerobot_recomposition.v21 import _rewrite_parquet
 from arx5_collection.lerobot_recomposition.v3_worker import run as run_v3_worker
 from arx5_collection.lerobot_recomposition.v3_worker import _ordered_whole_shard_groups
 from arx5_collection.lerobot_recomposition.v3 import build_v3
+from arx5_collection.lerobot_recomposition.task_compat import LEGACY_EIGHT_STREAM_DESCRIPTION
 
 
 class CompositionTest(unittest.TestCase):
@@ -107,6 +108,47 @@ class CompositionTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "identity drift"):
             build_plan(load_config(config))
         self.assertFalse(output.exists())
+
+    def test_one_snapshot_may_preserve_multiple_episode_task_descriptions(self) -> None:
+        source = self._snapshot("multi-task", ("segment-a", "segment-b"), "task A")
+        _write_jsonl(
+            source / "meta/tasks.jsonl",
+            [
+                {"task_index": 0, "task": "task A"},
+                {"task_index": 1, "task": "task B"},
+            ],
+        )
+        episodes = _read_jsonl(source / "meta/episodes.jsonl")
+        episodes[1]["tasks"] = ["task B"]
+        _write_jsonl(source / "meta/episodes.jsonl", episodes)
+        info = _read(source / "meta/info.json")
+        info["total_tasks"] = 2
+        _write(source / "meta/info.json", info)
+        config = self.root / "composition.toml"
+        config.write_text(_toml(self.root / "output", [("multi", source, "select_all = true")]))
+
+        plan = build_plan(load_config(config))
+
+        self.assertEqual(plan.tasks, ("task A", "task B"))
+        self.assertEqual([item.episode.tasks for item in plan.selected], [("task A",), ("task B",)])
+
+    def test_historical_generic_bos_task_is_temporarily_mapped_to_fold_cloth(self) -> None:
+        source = self._snapshot(
+            "legacy-fold",
+            ("segment-a",),
+            LEGACY_EIGHT_STREAM_DESCRIPTION,
+        )
+        config = self.root / "composition.toml"
+        config.write_text(_toml(self.root / "output", [("legacy", source, "select_all = true")]))
+
+        plan = build_plan(load_config(config))
+
+        self.assertEqual(plan.tasks, ("folding the cloth",))
+        self.assertEqual(plan.selected[0].source.tasks, {0: "folding the cloth"})
+        self.assertEqual(
+            plan.contract["temporary_task_aliases"],
+            {LEGACY_EIGHT_STREAM_DESCRIPTION: "folding the cloth"},
+        )
 
     def test_materialization_failure_preserves_diagnostic_staging_without_commit_marker(self) -> None:
         source = self._snapshot("source-a", ("segment-a0",), "task")

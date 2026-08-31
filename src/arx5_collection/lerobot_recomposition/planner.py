@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +14,8 @@ from .models import EpisodeDescriptor
 from .models import SelectedEpisode
 from .models import SnapshotDescriptor
 from .v21 import read_v21_snapshot
+from .task_compat import normalize_historical_task
+from .task_compat import TEMPORARY_TASK_ALIASES
 
 
 _INFO_CONTRACT_KEYS = (
@@ -24,7 +27,10 @@ _INFO_CONTRACT_KEYS = (
 
 
 def build_plan(config: CompositionConfig) -> CompositionPlan:
-    descriptors = tuple(_read_source(config, source.name, source.path) for source in config.sources)
+    raw_descriptors = tuple(
+        _read_source(config, source.name, source.path) for source in config.sources
+    )
+    descriptors = tuple(_normalize_tasks(descriptor) for descriptor in raw_descriptors)
     selected = []
     for source_config, descriptor in zip(config.sources, descriptors, strict=True):
         episodes = descriptor.episodes if source_config.select_all else _select_manifest(
@@ -35,6 +41,9 @@ def build_plan(config: CompositionConfig) -> CompositionPlan:
         raise ValueError("composition selects no Episodes")
     selected_tuple = tuple(selected)
     contract = _compatible_contract(selected_tuple)
+    applied_aliases = _applied_task_aliases(raw_descriptors)
+    if applied_aliases:
+        contract["temporary_task_aliases"] = applied_aliases
     _validate_unique_segments(selected_tuple)
     _validate_task_scope(selected_tuple)
     _validate_v3_shard_selection(selected_tuple)
@@ -44,6 +53,32 @@ def build_plan(config: CompositionConfig) -> CompositionPlan:
     videos = len(selected_tuple) * len(video_keys)
     fingerprint = _plan_fingerprint(config, selected_tuple, contract)
     return CompositionPlan(config, selected_tuple, tasks, frames, videos, contract, fingerprint)
+
+
+def _normalize_tasks(descriptor: SnapshotDescriptor) -> SnapshotDescriptor:
+    tasks = {
+        index: normalize_historical_task(task)
+        for index, task in descriptor.tasks.items()
+    }
+    episodes = tuple(
+        replace(
+            episode,
+            tasks=tuple(normalize_historical_task(task) for task in episode.tasks),
+        )
+        for episode in descriptor.episodes
+    )
+    return replace(descriptor, tasks=tasks, episodes=episodes)
+
+
+def _applied_task_aliases(
+    descriptors: tuple[SnapshotDescriptor, ...],
+) -> dict[str, str]:
+    observed = {task for descriptor in descriptors for task in descriptor.tasks.values()}
+    return {
+        source: target
+        for source, target in TEMPORARY_TASK_ALIASES.items()
+        if source in observed
+    }
 
 
 def _read_source(config: CompositionConfig, name: str, root: Path) -> SnapshotDescriptor:
