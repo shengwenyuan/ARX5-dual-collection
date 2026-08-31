@@ -62,7 +62,7 @@ def execute_streaming_conversion(
 ) -> StreamingApplicationResult:
     _validate_request(request)
     config = StreamingConversionConfig.load(request.config_path)
-    recipe = load_conversion_recipe(request.config_path, config)
+    recipe = load_conversion_recipe(config)
 
     if request.resume_run_id is not None:
         manifest = RunManifest.open(
@@ -180,12 +180,11 @@ def _validate_request(request: StreamingRunRequest) -> None:
 
 
 def load_conversion_recipe(
-    config_path: Path,
     config: StreamingConversionConfig,
 ) -> Pi05ConversionRecipe:
     profile = Path(config.recipe.profile)
     if not profile.is_absolute():
-        profile = config_path.resolve().parent / profile
+        profile = profile.resolve()
     recipe = Pi05ConversionRecipe.load(profile)
     if recipe.name != config.recipe.name:
         raise ValueError(

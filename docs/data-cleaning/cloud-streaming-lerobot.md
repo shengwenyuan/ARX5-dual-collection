@@ -385,7 +385,7 @@ repo_id = "<owner>/<dataset_name>"
 
 [recipe]
 name = "pi05-equal-eef-v3"
-profile = "<existing-recipe-config>"
+profile = "config/conversion.pi05-equal-eef-v3.toml"
 task_source = "metadata.task.description"
 ```
 
@@ -397,7 +397,7 @@ schema v3 的 low/high 只控制 conversion 前方的 ready buffer；`temporary_
 
 训练 task 逐条原样读取 Episode 的 `metadata.task.description`。目录名和 streaming profile 均不得推断、归一化、翻译或替换任务语义。
 
-未提供 `--output` 时，默认输出为 `<lerobot_root>/<owner>/<dataset_name>_<YYYY-MM-DD>`，有效 repo ID 同步冻结为 `<owner>/<dataset_name>_<YYYY-MM-DD>`，可由 `HF_LEROBOT_HOME=<lerobot_root>` 的训练入口直接定位。`--output` 必须是绝对路径；覆盖时使用其 basename 作为有效 dataset 名。默认路径或覆盖路径已存在时直接拒绝，不自动覆盖、合并或添加随机后缀。recipe `profile` 的相对路径以 streaming config 所在目录为基准解析。
+未提供 `--output` 时，默认输出为 `<lerobot_root>/<owner>/<dataset_name>_<YYYY-MM-DD>`，有效 repo ID 同步冻结为 `<owner>/<dataset_name>_<YYYY-MM-DD>`，可由 `HF_LEROBOT_HOME=<lerobot_root>` 的训练入口直接定位。`--output` 必须是绝对路径；覆盖时使用其 basename 作为有效 dataset 名。默认路径或覆盖路径已存在时直接拒绝，不自动覆盖、合并或添加随机后缀。recipe `profile` 的相对路径以执行命令时的主仓库根目录为基准解析，因此命令必须从对应仓库根目录运行。
 
 ## 代码边界
 
@@ -606,7 +606,7 @@ src/arx5_collection/dataset_cli.py
 - CLI handler 只负责 argparse、标准输入输出和取消退出码；应用编排位于独立 `streaming_conversion/application.py`。
 - 本地使用依赖注入测试 ENTER 前无副作用、new run、resume、显式 retry 和参数冲突；云端使用两条小批 Episode 完成命令级端到端，仍只读 BOS。
 - 默认输出与训练路径统一为 `<lerobot_root>/<owner>/<dataset_name>_<date>`，有效 repo ID 同名写入 run schema `2`。绝对 output override 使用其 basename，避免目录名与 LeRobot repo ID 分离。
-- 提供 `config/streaming.fold-cloth.example.toml`；用户只需复制后编辑白名单、block 与 workers。recipe 相对路径以该 config 文件目录解析。
+- 提供 `config/streaming.fold-cloth.example.toml`；用户只需复制后编辑白名单、block 与 workers。recipe 相对路径以执行命令时的主仓库根目录解析。
 - 本地：`59` 个 streaming/CLI 测试及全项目 `365 passed / 2 skipped`；覆盖 ENTER 前无副作用、自动日期 repo、显式 output/run-id、resume 不重新 discovery、failed 显式 retry、冻结配置漂移、路径逃逸和 CLI 参数互斥。
 - 云端：`pi05-cpu` 上 `59` 个定向测试通过。真实 CLI 展示并确认 `2 Episodes / 9,247,178,168 MCAP bytes / 2 workers` 后才创建 run；立即输出冻结 run/output/repo ID。
 - 命令级结果为 `1 committed + 1 quality exclusion -> 1 LeRobot episode / 2,223 frames`；最终 repo ID 为 `local/unit8_cli_smoke_2026-08-26`，validation 报告引用最终路径，run schema `2` 与 source/session lineage 正确，staging/Fragments 均已释放。
