@@ -96,4 +96,20 @@ def test_upload_passes_only_resolved_inputs_to_core(tmp_path: Path) -> None:
         "--full-check",
         "false",
     ]
+    assert "--dagger" not in argv
     assert "arx5-dual-collection:dataset" in argv
+
+
+def test_upload_passes_dagger_route_flag(tmp_path: Path) -> None:
+    with patch.dict(
+        os.environ,
+        {
+            "ARX5_OUTPUT_ROOT": "/reports/2026-08-27/fold_cloth",
+            "ARX5_TASK_DESCRIPTION": "folding the cloth",
+        },
+    ), patch.object(Path, "home", return_value=tmp_path), patch(
+        "subprocess.call", return_value=0
+    ) as call:
+        assert ENTRY["upload"]("true", dagger=True) == 0
+
+    assert "--dagger" in call.call_args.args[0]

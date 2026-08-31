@@ -171,6 +171,7 @@ def station_sync_command(
     source: Path,
     task_description: str,
     station_config: Path,
+    dagger: bool = False,
 ) -> SyncCommand:
     source = source.resolve()
     if not source.is_dir():
@@ -183,6 +184,8 @@ def station_sync_command(
     task_directory = load_configured_station(station_config).task_upload_directory(
         task_description
     )
+    if dagger:
+        task_directory += "_dagger"
     destination = f"{DEFAULT_BOS_ROOT}/{task_directory}/{collection_date}/"
     return SyncCommand(
         source,
@@ -866,6 +869,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--commands-file", type=Path)
     parser.add_argument("--source", type=Path)
     parser.add_argument("--task-description")
+    parser.add_argument("--dagger", action="store_true")
     parser.add_argument("--station-config", type=Path, default=DEFAULT_STATION_CONFIG)
     parser.add_argument(
         "--full-check",
@@ -887,6 +891,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     args.source,
                     args.task_description,
                     args.station_config,
+                    args.dagger,
                 ),
             )
             print(
@@ -894,8 +899,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 f"task={args.task_description!r} destination={commands[0].destination}"
             )
         else:
-            if args.task_description is not None:
-                raise ValueError("--task-description 需要 --source")
+            if args.task_description is not None or args.dagger:
+                raise ValueError("--task-description 和 --dagger 需要 --source")
             commands = parse_commands(_command_lines(args.commands_file))
         execute(
             commands,

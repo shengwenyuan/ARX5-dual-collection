@@ -70,7 +70,7 @@ def dagger(mode: str, rgb_only: bool = False) -> int:
     )
 
 
-def upload(full_check: str) -> int:
+def upload(full_check: str, dagger: bool = False) -> int:
     source = required("ARX5_OUTPUT_ROOT")
     task = required("ARX5_TASK_DESCRIPTION")
     temporary = Path.home() / "swy/bos-upload-tmp"
@@ -103,6 +103,7 @@ def upload(full_check: str) -> int:
             source,
             "--task-description",
             task,
+            *(["--dagger"] if dagger else []),
             "--full-check",
             full_check,
         ]
@@ -135,13 +136,14 @@ def main() -> int:
     upload_parser.add_argument(
         "--full-check", choices=("true", "false"), default="true"
     )
+    upload_parser.add_argument("--dagger", action="store_true")
     args = parser.parse_args()
     try:
         if args.command == "collect":
             return collect(args.rgb_only)
         if args.command == "dagger":
             return dagger(args.mode, args.rgb_only)
-        return upload(args.full_check)
+        return upload(args.full_check, args.dagger)
     except ValueError as error:
         parser.error(str(error))
 

@@ -179,6 +179,22 @@ def test_station_command_derives_task_and_date(tmp_path: Path) -> None:
     )
 
 
+def test_station_command_appends_dagger_to_task_route(tmp_path: Path) -> None:
+    source = tmp_path / "2026-08-27" / "fold_cloth_dagger"
+    source.mkdir(parents=True)
+
+    command = station_sync_command(
+        source,
+        "folding the cloth",
+        Path(__file__).parents[1] / "config" / "station.example.json",
+        dagger=True,
+    )
+
+    assert command.destination == (
+        "bos:/datainfra-demo/fold_cloth_dagger/2026-08-27/"
+    )
+
+
 def test_station_command_rejects_non_date_parent(tmp_path: Path) -> None:
     source = tmp_path / "today" / "fold_cloth"
     source.mkdir(parents=True)
