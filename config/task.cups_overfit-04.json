@@ -1,6 +1,5 @@
 {
   "task_id": "cups_overfit-04",
-  "task_description": "Cup manipulation overfit dataset batch 04",
   "streams": [
     {
       "id": "left_arm_state",

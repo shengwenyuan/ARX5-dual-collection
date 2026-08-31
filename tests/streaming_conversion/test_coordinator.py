@@ -171,7 +171,7 @@ class StreamingCoordinatorTest(unittest.TestCase):
         )
 
     def test_dispatches_frozen_episode_training_tasks(self) -> None:
-        manifest = self._manifest("episode-a", "episode-b", metadata_tasks=True)
+        manifest = self._manifest("episode-a", "episode-b")
         observed: dict[str, str] = {}
 
         def convert(work: ConversionWork) -> EpisodeConversionResult:
@@ -435,7 +435,7 @@ class StreamingCoordinatorTest(unittest.TestCase):
         self.assertEqual(len(quarantined), 1)
         self.assertEqual((quarantined[0] / "stage.json").read_text(), "not-json")
 
-    def _manifest(self, *episode_ids: str, metadata_tasks: bool = False) -> RunManifest:
+    def _manifest(self, *episode_ids: str) -> RunManifest:
         config = StreamingConversionConfig(
             1,
             SourceConfig(self.source_root, (Path("task"),), ()),
@@ -444,8 +444,7 @@ class StreamingCoordinatorTest(unittest.TestCase):
             RecipeConfig(
                 "pi05-equal-eef-v3",
                 str(RECIPE),
-                None if metadata_tasks else "folding the cloth",
-                "metadata.task.description" if metadata_tasks else None,
+                "metadata.task.description",
             ),
         )
         candidates = tuple(

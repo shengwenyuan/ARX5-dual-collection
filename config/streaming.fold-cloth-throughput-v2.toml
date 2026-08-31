@@ -22,4 +22,4 @@ repo_id = "local/fold_cloth"
 [recipe]
 name = "pi05-equal-eef-v3"
 profile = "conversion.pi05-equal-eef-v3.toml"
-task = "folding the cloth"
+task_source = "metadata.task.description"

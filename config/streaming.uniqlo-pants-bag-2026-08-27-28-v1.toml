@@ -3,14 +3,15 @@ schema_version = 3
 [source]
 root = "/mnt/bos/datainfra-demo"
 include_paths = [
-  "fold_cloth/2026-08-25",
-  "fold_cloth/2026-08-26",
+  "uniqlo/2026-08-27",
+  "uniqlo/2026-08-28/20260828T021906478288Z-dba931e4",
+  "uniqlo/2026-08-28/20260828T022201062508Z-0f2ad821",
 ]
-block = ["test", "tests", "abort", "aborted", "log", "logs"]
+block = ["test", "tests", "abort", "aborted", "fail", "log", "logs"]
 
 [runtime]
 pfs_root = "/mnt/pfs/swy"
-streaming_root = "/mnt/pfs/swy/dataset/1011/arx5/fold_cloth/streaming"
+streaming_root = "/mnt/pfs/swy/dataset/1011/arx5/uniqlo/streaming"
 stage_workers = 16
 conversion_workers = 64
 ready_low_bytes = 128_000_000_000
@@ -20,9 +21,9 @@ max_staged_episodes = 128
 min_free_bytes = 5_000_000_000_000
 
 [output]
-lerobot_root = "/mnt/pfs/swy/dataset/1011/arx5/fold_cloth/lerobot"
-dataset_name = "fold_cloth_2026-08-25_2026-08-26"
-repo_id = "local/fold_cloth_2026-08-25_2026-08-26"
+lerobot_root = "/mnt/pfs/swy/dataset/1011/arx5/uniqlo/lerobot"
+dataset_name = "uniqlo_fold_pants_then_bag_2026-08-27_2026-08-28"
+repo_id = "local/uniqlo_fold_pants_then_bag_2026-08-27_2026-08-28"
 
 [recipe]
 name = "pi05-equal-eef-v3"

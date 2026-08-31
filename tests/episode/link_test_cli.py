@@ -33,7 +33,6 @@ def main() -> None:
             json.dumps(
                 {
                     "task_id": "link-test",
-                    "task_description": "Run installed CLI core",
                     "streams": [
                         {
                             "id": "left_arm",
@@ -74,6 +73,8 @@ def main() -> None:
                 str(station_path),
                 "--output-root",
                 str(output_root),
+                "--task-description",
+                "Run installed CLI core",
                 "--episodes",
                 "2",
             ],

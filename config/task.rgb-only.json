@@ -1,6 +1,5 @@
 {
   "task_id": "rgb-only-collection",
-  "task_description": "Record synchronized dual-arm state and three RGB camera streams",
   "streams": [
     {
       "id": "left_arm_state",

@@ -38,7 +38,6 @@ class EpisodeCliTest(unittest.TestCase):
             json.dumps(
                 {
                     "task_id": "pick",
-                    "task_description": "Pick the object",
                     "streams": [
                         {
                             "id": "left_arm",
@@ -68,7 +67,12 @@ class EpisodeCliTest(unittest.TestCase):
         invalid["frame_count"] = 1
         self.task_config.write_text(json.dumps(invalid))
         with self.assertRaises(ValueError):
-            load_request(self.task_config, self.output_root, STATION_PATH)
+            load_request(
+                self.task_config,
+                self.output_root,
+                STATION_PATH,
+                task_description="Pick the object",
+            )
 
     def test_run_cli_records_two_episodes_and_reports_partial(self) -> None:
         EpisodeStore(self.output_root).prepare("stale")
@@ -134,7 +138,12 @@ class EpisodeCliTest(unittest.TestCase):
 
     def test_failed_episode_keeps_the_session_ready(self) -> None:
         trigger = ContextTrigger([True, True, True])
-        request = load_request(self.task_config, self.output_root, STATION_PATH)
+        request = load_request(
+            self.task_config,
+            self.output_root,
+            STATION_PATH,
+            task_description="Pick the object",
+        )
         runtime = self.runtime_factory(fail_first_episode=True)(request, trigger)
         output = io.StringIO()
         errors = io.StringIO()
@@ -164,7 +173,12 @@ class EpisodeCliTest(unittest.TestCase):
                 True,
             ]
         )
-        request = load_request(self.task_config, self.output_root, STATION_PATH)
+        request = load_request(
+            self.task_config,
+            self.output_root,
+            STATION_PATH,
+            task_description="Pick the object",
+        )
         runtime = self.runtime_factory()(request, trigger)
         output = io.StringIO()
         errors = io.StringIO()
@@ -185,7 +199,12 @@ class EpisodeCliTest(unittest.TestCase):
 
     def test_pre_episode_block_does_not_create_an_empty_episode(self) -> None:
         trigger = ContextTrigger([True, True, True])
-        request = load_request(self.task_config, self.output_root, STATION_PATH)
+        request = load_request(
+            self.task_config,
+            self.output_root,
+            STATION_PATH,
+            task_description="Pick the object",
+        )
         runtime = self.runtime_factory()(request, trigger)
         attempts = 0
 
@@ -221,7 +240,12 @@ class EpisodeCliTest(unittest.TestCase):
 
     def test_finalization_failure_never_announces_ready_again(self) -> None:
         trigger = ContextTrigger([True, True])
-        request = load_request(self.task_config, self.output_root, STATION_PATH)
+        request = load_request(
+            self.task_config,
+            self.output_root,
+            STATION_PATH,
+            task_description="Pick the object",
+        )
         runtime = self.runtime_factory()(request, trigger)
 
         class BrokenFinalizer:
@@ -284,6 +308,8 @@ class EpisodeCliTest(unittest.TestCase):
             str(STATION_PATH),
             "--output-root",
             str(self.output_root),
+            "--task-description",
+            "Pick the object",
             "--episodes",
             str(episodes),
         ]

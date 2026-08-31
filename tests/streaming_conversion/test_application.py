@@ -230,7 +230,7 @@ repo_id = "local/fold"
 [recipe]
 name = "pi05-equal-eef-v3"
 profile = "{RECIPE}"
-task = "folding the cloth"
+task_source = "metadata.task.description"
 '''
         )
 
@@ -260,7 +260,7 @@ repo_id = "local/fold"
 [recipe]
 name = "pi05-equal-eef-v3"
 profile = "{RECIPE}"
-task = "folding the cloth"
+task_source = "metadata.task.description"
 '''
         )
 

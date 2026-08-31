@@ -271,7 +271,7 @@ def set_process_ros_domain_id(value: object) -> int:
 
 def validate_task_streams(path: Path) -> CaptureProfile:
     payload = _load_object(path, "task")
-    _require_exact_keys(payload, {"task_id", "task_description", "streams"}, "task")
+    _require_exact_keys(payload, {"task_id", "streams"}, "task")
     streams = payload["streams"]
     if not isinstance(streams, list):
         raise ValueError("streams must be an array")

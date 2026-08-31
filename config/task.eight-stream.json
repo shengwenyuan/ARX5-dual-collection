@@ -1,6 +1,5 @@
 {
   "task_id": "eight-stream-collection",
-  "task_description": "Record synchronized dual-arm state and three aligned RGB-D camera streams",
   "streams": [
     {
       "id": "left_arm_state",

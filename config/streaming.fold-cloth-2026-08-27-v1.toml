@@ -3,10 +3,9 @@ schema_version = 3
 [source]
 root = "/mnt/bos/datainfra-demo"
 include_paths = [
-  "fold_cloth/2026-08-21",
-  "fold_cloth/2026-08-22",
+  "fold_cloth/2026-08-27",
 ]
-block = ["abort", "fail", "test", "logs"]
+block = ["test", "tests", "abort", "aborted", "fail", "log", "logs"]
 
 [runtime]
 pfs_root = "/mnt/pfs/swy"
@@ -21,10 +20,10 @@ min_free_bytes = 5_000_000_000_000
 
 [output]
 lerobot_root = "/mnt/pfs/swy/dataset/1011/arx5/fold_cloth/lerobot"
-dataset_name = "fold_cloth"
-repo_id = "local/fold_cloth"
+dataset_name = "fold_cloth_2026-08-27"
+repo_id = "local/fold_cloth_2026-08-27"
 
 [recipe]
 name = "pi05-equal-eef-v3"
-profile = "conversion.pi05-equal-eef-v3.toml"
+profile = "conversion.pi05-equal-eef-v3-svt-p8.toml"
 task_source = "metadata.task.description"

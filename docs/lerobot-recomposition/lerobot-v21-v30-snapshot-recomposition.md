@@ -195,12 +195,6 @@ Planner 只操作 `SnapshotDescriptor`，输出 backend-neutral `CompositionPlan
 
 不同 task prompt 可以共存于一个多任务 snapshot，只要上述训练字段契约一致。task 不因为父任务关系而改写：fold_cloth 仍保持 `folding the cloth`，uniqlo 的两个原生 prompt 也分别保留。
 
-历史 BOS 中存在通用描述
-`Record synchronized dual-arm state and three aligned RGB-D camera streams`。composition 层临时将其
-精确映射为 `folding the cloth`，并把实际发生的映射写入 composition contract/report；其他 task
-逐字保留。代码中的 `TODO(remove-legacy-bos-task-alias)` 是删除入口：待 BOS 历史 metadata 全量
-回填并重建所有派生 snapshot 后，必须删除该 alias，不将其演变为长期 task 推断机制。
-
 ## v2.1 Backend
 
 ### 支持范围

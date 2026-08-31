@@ -55,7 +55,7 @@ class AlignmentTest(unittest.TestCase):
                 recipe=RecipeConfig(
                     "pi05-equal-eef-v3",
                     "recipe.toml",
-                    "folding the cloth",
+                    "metadata.task.description",
                 ),
             )
             discovery = DiscoveryResult(root, (root,), (), (Path("task/date/logs"),))
@@ -64,7 +64,10 @@ class AlignmentTest(unittest.TestCase):
             rendered = render_alignment(report)
 
         self.assertIn("workers: 25", rendered)
-        self.assertIn("training_task: folding the cloth", rendered)
+        self.assertIn(
+            "training_task_source: metadata.task.description",
+            rendered,
+        )
         self.assertIn("episodes: 0", rendered)
         self.assertIn("fold_cloth_2026-08-25", rendered)
         self.assertIn("blocked_dirs: 1", rendered)
@@ -77,7 +80,7 @@ class AlignmentTest(unittest.TestCase):
                 SourceConfig(root, (Path("task"),), ()),
                 RuntimeConfig(Path("/tmp/streaming"), 1),
                 OutputConfig(Path("/tmp/out"), "dataset", "local/data"),
-                RecipeConfig("recipe", "recipe.toml", "folding the cloth"),
+                RecipeConfig("recipe", "recipe.toml", "metadata.task.description"),
             )
             discovery = DiscoveryResult(root, (root,), (), ())
 
@@ -100,7 +103,7 @@ class AlignmentTest(unittest.TestCase):
                     128,
                 ),
                 OutputConfig(root / "lerobot", "dataset", "local/data"),
-                RecipeConfig("recipe", "recipe.toml", "folding the cloth"),
+                RecipeConfig("recipe", "recipe.toml", "metadata.task.description"),
             )
             discovery = DiscoveryResult(root / "source", (), (), ())
             report = build_alignment_report(
@@ -135,7 +138,7 @@ class AlignmentTest(unittest.TestCase):
                     5_000_000_000_000,
                 ),
                 OutputConfig(root / "lerobot", "dataset", "local/data"),
-                RecipeConfig("recipe", "recipe.toml", "folding the cloth"),
+                RecipeConfig("recipe", "recipe.toml", "metadata.task.description"),
             )
             discovery = DiscoveryResult(root / "source", (), (), ())
 

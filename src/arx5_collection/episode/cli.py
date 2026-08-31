@@ -29,6 +29,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--task-config", type=Path, required=True)
     parser.add_argument("--station-config", type=Path, required=True)
     parser.add_argument("--output-root", type=Path, required=True)
+    parser.add_argument("--task-description", type=non_empty_text, required=True)
     parser.add_argument("--episodes", type=non_negative_int, default=0)
     parser.add_argument("--trigger-key", type=one_character, default=" ")
     return parser
@@ -39,10 +40,10 @@ def load_request(
     output_root: Path,
     station_config: Path,
     *,
-    task_description: str | None = None,
+    task_description: str,
 ) -> EpisodeRequest:
     config = json.loads(task_config.read_text())
-    require_exact_keys(config, {"task_id", "task_description", "streams"}, "task")
+    require_exact_keys(config, {"task_id", "streams"}, "task")
     if not config["streams"]:
         raise ValueError("task must contain at least one stream")
 
@@ -64,11 +65,7 @@ def load_request(
 
     return EpisodeRequest(
         task_id=config["task_id"],
-        task_description=(
-            config["task_description"]
-            if task_description is None
-            else task_description
-        ),
+        task_description=task_description,
         output_root=output_root,
         station_config=station_config,
         streams=tuple(streams),
@@ -85,7 +82,12 @@ def run_cli(
     args = build_parser().parse_args(argv)
     output = stdout or sys.stdout
     error_output = stderr or sys.stderr
-    request = load_request(args.task_config, args.output_root, args.station_config)
+    request = load_request(
+        args.task_config,
+        args.output_root,
+        args.station_config,
+        task_description=args.task_description,
+    )
     make_trigger = trigger_factory or (lambda key: KeyboardTrigger(key=key))
 
     with make_trigger(args.trigger_key) as trigger:
@@ -225,4 +227,10 @@ def non_negative_int(value: str) -> int:
 def one_character(value: str) -> str:
     if len(value) != 1:
         raise argparse.ArgumentTypeError("must be one character")
+    return value
+
+
+def non_empty_text(value: str) -> str:
+    if not value.strip():
+        raise argparse.ArgumentTypeError("must not be empty")
     return value

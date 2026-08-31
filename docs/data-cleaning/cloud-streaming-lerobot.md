@@ -386,7 +386,7 @@ repo_id = "<owner>/<dataset_name>"
 [recipe]
 name = "pi05-equal-eef-v3"
 profile = "<existing-recipe-config>"
-task = "folding the cloth"
+task_source = "metadata.task.description"
 ```
 
 `include_paths` 是本次 LeRobot 的显式来源，不再另设隐式日期参数。`block` 默认空列表，示例值只是配方选择，不是代码内建规则。
@@ -395,7 +395,7 @@ schema v3 的 low/high 只控制 conversion 前方的 ready buffer；`temporary_
 
 每个 run 在 `metrics.jsonl` 持久化 stage/conversion wall time、源字节、frame 数、内部 conversion phase、队列水位、累计吞吐和 PFS 剩余空间。标准输出保留同一份 progress 快照，便于 tmux 直接监督。
 
-首版 recipe 的 `task` 是临时兼容字段，字符串原样进入全部训练 Segment。真实 Episode metadata 目前仍写入通用采集描述；采集侧修复见 `docs/episode-runtime/task-description-todo.md`。该 TODO 验收前不允许从目录名猜测 task；验收后再以显式 schema 版本迁移到逐 Episode metadata task。
+训练 task 逐条原样读取 Episode 的 `metadata.task.description`。目录名和 streaming profile 均不得推断、归一化、翻译或替换任务语义。
 
 未提供 `--output` 时，默认输出为 `<lerobot_root>/<owner>/<dataset_name>_<YYYY-MM-DD>`，有效 repo ID 同步冻结为 `<owner>/<dataset_name>_<YYYY-MM-DD>`，可由 `HF_LEROBOT_HOME=<lerobot_root>` 的训练入口直接定位。`--output` 必须是绝对路径；覆盖时使用其 basename 作为有效 dataset 名。默认路径或覆盖路径已存在时直接拒绝，不自动覆盖、合并或添加随机后缀。recipe `profile` 的相对路径以 streaming config 所在目录为基准解析。
 
@@ -492,7 +492,7 @@ src/arx5_collection/dataset_cli.py
 - 云端：`pi05-cpu` 已确认 `25 CPU / 120 GiB`；两条 BOS Episode 只读发现通过，合计 `18,307,622,138 bytes`。
 - ENTER 闸门验证前后均未创建 PFS streaming root、Fragment 或输出目录。
 - 已验证白名单互斥、任意深度 Episode 边界、精确 block、重复 ID、metadata/path 冲突和符号链接逃逸。
-- 真实 metadata task 是通用采集描述，而既有训练数据通过转换参数写入 `folding the cloth`。首版已冻结为 recipe 显式 task；采集侧逐 Episode task 缺口独立记录在 `docs/episode-runtime/task-description-todo.md`。
+- Episode metadata 是训练 task description 的唯一事实来源；streaming 只把每条已选择的原值冻结进 run manifest。
 - `pi05-cpu` 上 `13` 个定向测试和两条真实 BOS Episode 的无副作用对齐 smoke 通过，单位 1 收口。
 
 ### 单位 2：Frozen Manifest / Job State / Resume
@@ -530,7 +530,7 @@ src/arx5_collection/dataset_cli.py
 本单位先冻结 Worker 将要复用的转换参数，不实现 Worker、Fragment 或 Builder：
 
 - `pi05-equal-eef-v3` conversion recipe 显式记录 cleaning、等 EEF 采样、`arx5-gripper-v1` 与 LeRobot v2.1 backend；station 仅保留来源身份。
-- 流式 profile 的 `recipe.name` 必须与 conversion recipe 一致；`recipe.task` 继续是本批 legacy Episode 的原样 prompt，两者不混为一个配置。
+- 流式 profile 的 `recipe.name` 必须与 conversion recipe 一致；`recipe.task_source` 固定为 `metadata.task.description`。
 - recipe loader 使用严格 schema 和字段集合，拒绝未知字段、缺字段和隐式版本升级。
 - Worker 从 Episode metadata 读取 `station.id` 作为来源信息；W3/W4 和未来 station 均使用设备固定的 `arx5-gripper-v1`。
 - DAgger selector 接受 `outcome=success`，以及已被 authority classifier 判定有效的 `outcome=fail`；两者都只选择完整闭合的 expert correction。

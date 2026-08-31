@@ -74,15 +74,14 @@ class OutputConfig:
 class RecipeConfig:
     name: str
     profile: str
-    task: str | None = None
-    task_source: str | None = None
+    task_source: str
 
     @property
     def task_identity(self) -> str:
-        return self.task or self.task_source or ""
+        return self.task_source
 
     def training_task(self, metadata_description: str) -> str:
-        return metadata_description if self.task_source else self.task or ""
+        return metadata_description
 
 
 @dataclass(frozen=True, slots=True)
@@ -152,10 +151,7 @@ class StreamingConversionConfig:
             {"lerobot_root", "dataset_name", "repo_id"},
             "output",
         )
-        task_key = "task" if "task" in recipe else "task_source"
-        _exact_keys(recipe, {"name", "profile", task_key}, "recipe")
-        if ("task" in recipe) == ("task_source" in recipe):
-            raise ValueError("recipe must use exactly one of task or task_source")
+        _exact_keys(recipe, {"name", "profile", "task_source"}, "recipe")
 
         runtime_config = _runtime_config(schema_version, runtime)
         dataset_name = _single_component(
@@ -182,16 +178,7 @@ class StreamingConversionConfig:
             recipe=RecipeConfig(
                 name=_non_empty_string(recipe["name"], "recipe.name"),
                 profile=_non_empty_string(recipe["profile"], "recipe.profile"),
-                task=(
-                    _non_empty_string(recipe["task"], "recipe.task")
-                    if "task" in recipe
-                    else None
-                ),
-                task_source=(
-                    _task_source(recipe["task_source"])
-                    if "task_source" in recipe
-                    else None
-                ),
+                task_source=_task_source(recipe["task_source"]),
             ),
         )
         if isinstance(runtime_config, (PrefetchRuntimeConfig, BufferedRuntimeConfig)):

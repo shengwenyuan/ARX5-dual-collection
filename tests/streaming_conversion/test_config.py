@@ -27,7 +27,7 @@ class StreamingConfigTest(unittest.TestCase):
         )
         self.assertEqual(config.source.block, ("aborted", "logs"))
         self.assertEqual(config.runtime.workers, 20)
-        self.assertEqual(config.recipe.task, "folding the cloth")
+        self.assertEqual(config.recipe.task_source, "metadata.task.description")
         self.assertEqual(
             config.output.dated_path(date(2026, 8, 25)),
             Path("/mnt/pfs/swy/dataset/lerobot/local/fold_cloth_2026-08-25"),
@@ -42,15 +42,9 @@ class StreamingConfigTest(unittest.TestCase):
     def test_loads_episode_metadata_task_source(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "streaming.toml"
-            path.write_text(
-                _profile().replace(
-                    'task = "folding the cloth"',
-                    'task_source = "metadata.task.description"',
-                )
-            )
+            path.write_text(_profile())
             config = StreamingConversionConfig.load(path)
 
-        self.assertIsNone(config.recipe.task)
         self.assertEqual(config.recipe.task_source, "metadata.task.description")
 
     def test_rejects_non_positive_worker_count(self) -> None:
@@ -210,7 +204,7 @@ def _profile() -> str:
         [recipe]
         name = "pi05-equal-eef-v3"
         profile = "config/fold_cloth.toml"
-        task = "folding the cloth"
+        task_source = "metadata.task.description"
         """
     )
 
@@ -243,7 +237,7 @@ def _prefetch_profile(root: Path) -> str:
         [recipe]
         name = "pi05-equal-eef-v3"
         profile = "config/fold_cloth.toml"
-        task = "folding the cloth"
+        task_source = "metadata.task.description"
         '''
     )
 
@@ -278,7 +272,7 @@ def _buffered_profile(root: Path) -> str:
         [recipe]
         name = "pi05-equal-eef-v3"
         profile = "config/fold_cloth.toml"
-        task = "folding the cloth"
+        task_source = "metadata.task.description"
         '''
     )
 

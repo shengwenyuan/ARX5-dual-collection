@@ -160,7 +160,11 @@ class LeRobotV21BuilderTest(unittest.TestCase):
             SourceConfig(self.source_root, (Path("task"),), ()),
             RuntimeConfig(self.root / "streaming", 2),
             OutputConfig(self.root / "lerobot", "fold", "local/fold"),
-            RecipeConfig("pi05-equal-eef-v3", str(RECIPE), "folding the cloth"),
+            RecipeConfig(
+                "pi05-equal-eef-v3",
+                str(RECIPE),
+                "metadata.task.description",
+            ),
         )
         candidates = tuple(
             EpisodeCandidate(
