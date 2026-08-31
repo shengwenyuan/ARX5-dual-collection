@@ -39,6 +39,20 @@ class StreamingConfigTest(unittest.TestCase):
             "local/custom",
         )
 
+    def test_loads_episode_metadata_task_source(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "streaming.toml"
+            path.write_text(
+                _profile().replace(
+                    'task = "folding the cloth"',
+                    'task_source = "metadata.task.description"',
+                )
+            )
+            config = StreamingConversionConfig.load(path)
+
+        self.assertIsNone(config.recipe.task)
+        self.assertEqual(config.recipe.task_source, "metadata.task.description")
+
     def test_rejects_non_positive_worker_count(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "streaming.toml"

@@ -115,7 +115,7 @@ class RunManifest:
                 outcome=item.outcome,
                 metadata_task_id=item.task_id,
                 metadata_task_description=item.task_description,
-                training_task=config.recipe.task,
+                training_task=config.recipe.training_task(item.task_description),
                 mcap=item.mcap,
                 metadata=item.metadata,
             )
@@ -144,7 +144,7 @@ class RunManifest:
             "recipe": {
                 "name": config.recipe.name,
                 "profile": config.recipe.profile,
-                "task": config.recipe.task,
+                "task": config.recipe.task_identity,
             },
         }
         with staged_directory(target) as temporary:

@@ -86,12 +86,12 @@ def render_alignment(report: AlignmentReport) -> str:
                 f"workers: {runtime.workers}",
             ]
         )
-    lines.extend(
-        [
-            f"training_task: {report.config.recipe.task}",
-            "include_paths:",
-        ]
-    )
+    if report.config.recipe.task_source:
+        lines.append(f"training_task_source: {report.config.recipe.task_source}")
+        lines.append(f"training_tasks: {discovery.task_counts()}")
+    else:
+        lines.append(f"training_task: {report.config.recipe.task}")
+    lines.append("include_paths:")
     lines.extend(f"  - {path}" for path in report.config.source.include_paths)
     lines.append("block:")
     lines.extend(f"  - {name}" for name in report.config.source.block)

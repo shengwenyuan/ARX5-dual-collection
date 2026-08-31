@@ -74,7 +74,15 @@ class OutputConfig:
 class RecipeConfig:
     name: str
     profile: str
-    task: str
+    task: str | None = None
+    task_source: str | None = None
+
+    @property
+    def task_identity(self) -> str:
+        return self.task or self.task_source or ""
+
+    def training_task(self, metadata_description: str) -> str:
+        return metadata_description if self.task_source else self.task or ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -144,7 +152,10 @@ class StreamingConversionConfig:
             {"lerobot_root", "dataset_name", "repo_id"},
             "output",
         )
-        _exact_keys(recipe, {"name", "profile", "task"}, "recipe")
+        task_key = "task" if "task" in recipe else "task_source"
+        _exact_keys(recipe, {"name", "profile", task_key}, "recipe")
+        if ("task" in recipe) == ("task_source" in recipe):
+            raise ValueError("recipe must use exactly one of task or task_source")
 
         runtime_config = _runtime_config(schema_version, runtime)
         dataset_name = _single_component(
@@ -171,7 +182,16 @@ class StreamingConversionConfig:
             recipe=RecipeConfig(
                 name=_non_empty_string(recipe["name"], "recipe.name"),
                 profile=_non_empty_string(recipe["profile"], "recipe.profile"),
-                task=_non_empty_string(recipe["task"], "recipe.task"),
+                task=(
+                    _non_empty_string(recipe["task"], "recipe.task")
+                    if "task" in recipe
+                    else None
+                ),
+                task_source=(
+                    _task_source(recipe["task_source"])
+                    if "task_source" in recipe
+                    else None
+                ),
             ),
         )
         if isinstance(runtime_config, (PrefetchRuntimeConfig, BufferedRuntimeConfig)):
@@ -181,6 +201,13 @@ class StreamingConversionConfig:
                 "output.lerobot_root",
             )
         return config
+
+
+def _task_source(value: object) -> str:
+    source = _non_empty_string(value, "recipe.task_source")
+    if source != "metadata.task.description":
+        raise ValueError("recipe.task_source must be 'metadata.task.description'")
+    return source
 
 
 def _runtime_config(

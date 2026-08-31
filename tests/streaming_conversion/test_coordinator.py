@@ -170,6 +170,21 @@ class StreamingCoordinatorTest(unittest.TestCase):
             "spawn",
         )
 
+    def test_dispatches_frozen_episode_training_tasks(self) -> None:
+        manifest = self._manifest("episode-a", "episode-b", metadata_tasks=True)
+        observed: dict[str, str] = {}
+
+        def convert(work: ConversionWork) -> EpisodeConversionResult:
+            observed[work.receipt.episode_id] = work.task
+            return _committed(work.receipt.episode_id, work.target)
+
+        self._coordinator(manifest, _fake_stage, convert, workers=1).run()
+
+        self.assertEqual(
+            observed,
+            {"episode-a": "task episode-a", "episode-b": "task episode-b"},
+        )
+
     def test_bounded_prefetch_overlaps_independent_stage_and_conversion_pools(self) -> None:
         manifest = self._manifest(
             "episode-a", "episode-b", "episode-c", "episode-d"
@@ -420,13 +435,18 @@ class StreamingCoordinatorTest(unittest.TestCase):
         self.assertEqual(len(quarantined), 1)
         self.assertEqual((quarantined[0] / "stage.json").read_text(), "not-json")
 
-    def _manifest(self, *episode_ids: str) -> RunManifest:
+    def _manifest(self, *episode_ids: str, metadata_tasks: bool = False) -> RunManifest:
         config = StreamingConversionConfig(
             1,
             SourceConfig(self.source_root, (Path("task"),), ()),
             RuntimeConfig(self.root / "streaming", 2),
             OutputConfig(self.root / "lerobot", "fold", "local/fold"),
-            RecipeConfig("pi05-equal-eef-v3", str(RECIPE), "folding the cloth"),
+            RecipeConfig(
+                "pi05-equal-eef-v3",
+                str(RECIPE),
+                None if metadata_tasks else "folding the cloth",
+                "metadata.task.description" if metadata_tasks else None,
+            ),
         )
         candidates = tuple(
             EpisodeCandidate(
@@ -438,7 +458,7 @@ class StreamingCoordinatorTest(unittest.TestCase):
                 collection_type="demonstration",
                 outcome="success",
                 task_id="task",
-                task_description="folding the cloth",
+                task_description=f"task {episode_id}",
                 mcap=FileIdentity(10, index + 1),
                 metadata=FileIdentity(20, index + 11),
             )
@@ -469,7 +489,6 @@ class StreamingCoordinatorTest(unittest.TestCase):
             manifest,
             self.source_root,
             self.recipe,
-            "folding the cloth",
             "local/fold",
             workers,
             stage_runner=stage_runner,
@@ -504,7 +523,6 @@ class StreamingCoordinatorTest(unittest.TestCase):
             manifest,
             self.source_root,
             self.recipe,
-            "folding the cloth",
             "local/fold",
             runtime,
             stage_runner=stage_runner,
@@ -542,7 +560,6 @@ class StreamingCoordinatorTest(unittest.TestCase):
             manifest,
             self.source_root,
             self.recipe,
-            "folding the cloth",
             "local/fold",
             runtime,
             stage_runner=stage_runner,

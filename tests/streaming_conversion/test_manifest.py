@@ -63,6 +63,25 @@ class RunManifestTest(unittest.TestCase):
         )
         self.assertFalse(self.output.exists())
 
+    def test_freezes_episode_metadata_as_training_task(self) -> None:
+        config = StreamingConversionConfig(
+            self.config.schema_version,
+            self.config.source,
+            self.config.runtime,
+            self.config.output,
+            RecipeConfig(
+                "pi05-equal-eef-v3",
+                "recipe.toml",
+                task_source="metadata.task.description",
+            ),
+        )
+        run = RunManifest.create(config, self.discovery, self.output, "metadata-tasks")
+
+        self.assertEqual(
+            {item.training_task for item in run.selection},
+            {"Record synchronized streams"},
+        )
+
     def test_rejects_existing_run_and_output(self) -> None:
         self._create()
         with self.assertRaises(FileExistsError):

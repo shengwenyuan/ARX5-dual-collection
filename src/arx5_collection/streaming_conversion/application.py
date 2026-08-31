@@ -139,7 +139,6 @@ def execute_frozen_streaming_run(
         manifest,
         config.source.root,
         recipe,
-        config.recipe.task,
         manifest.definition.repo_id,
         config.runtime,
         progress_reporter=lambda progress: _write_progress(
@@ -207,7 +206,7 @@ def _validate_resume_config(
         "repo_id": config.output.repo_id_for(frozen.output_path),
         "recipe_name": config.recipe.name,
         "recipe_profile": config.recipe.profile,
-        "recipe_task": config.recipe.task,
+        "recipe_task": config.recipe.task_identity,
     }
     expected = {
         "source_root": frozen.source_root,

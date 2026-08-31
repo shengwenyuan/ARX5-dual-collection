@@ -113,7 +113,6 @@ class StreamingCoordinator:
         manifest: RunManifest,
         source_root: Path,
         recipe: Pi05ConversionRecipe,
-        task: str,
         repo_id: str,
         runtime: RuntimeSettings | int,
         *,
@@ -127,12 +126,9 @@ class StreamingCoordinator:
         disk_free_reader: DiskFreeReader | None = None,
         progress_interval_seconds: float = 10.0,
     ) -> None:
-        if not task.strip():
-            raise ValueError("Coordinator task must not be empty")
         self._manifest = manifest
         self._source_root = source_root
         self._recipe = recipe
-        self._task = task
         self._repo_id = repo_id
         if isinstance(runtime, bool) or not isinstance(
             runtime, (int, RuntimeConfig, PrefetchRuntimeConfig, BufferedRuntimeConfig)
@@ -244,7 +240,7 @@ class StreamingCoordinator:
                     receipt=receipt,
                     target=self._manifest.run_dir / "fragments" / receipt.episode_id,
                     recipe=self._recipe,
-                    task=self._task,
+                    task=self._selection[receipt.episode_id].training_task,
                     repo_id=_fragment_repo_id(self._repo_id, receipt.episode_id),
                 )
                 future = executor.submit(self._conversion_runner, work)
@@ -424,7 +420,7 @@ class StreamingCoordinator:
                 receipt=receipt,
                 target=self._manifest.run_dir / "fragments" / receipt.episode_id,
                 recipe=self._recipe,
-                task=self._task,
+                task=self._selection[receipt.episode_id].training_task,
                 repo_id=_fragment_repo_id(self._repo_id, receipt.episode_id),
             )
             future = executor.submit(self._conversion_runner, work)
