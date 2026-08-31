@@ -190,7 +190,7 @@ Planner 只操作 `SnapshotDescriptor`，输出 backend-neutral `CompositionPlan
 - gripper contract、raw 边界和 normalization；
 - sampling、filter、action horizon 与 OpenPI contract；
 - video codec、pixel format、分辨率和 fps；
-- 同一 source Episode/Session 内的 task 一致性；
+- 同一 source Episode 内的 task 一致性；source Session 可以包含多个真实 task；
 - 重复 segment 或 lineage 冲突。
 
 不同 task prompt 可以共存于一个多任务 snapshot，只要上述训练字段契约一致。task 不因为父任务关系而改写：fold_cloth 仍保持 `folding the cloth`，uniqlo 的两个原生 prompt 也分别保留。

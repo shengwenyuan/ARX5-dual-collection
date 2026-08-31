@@ -121,6 +121,10 @@ class CompositionTest(unittest.TestCase):
         episodes = _read_jsonl(source / "meta/episodes.jsonl")
         episodes[1]["tasks"] = ["task B"]
         _write_jsonl(source / "meta/episodes.jsonl", episodes)
+        provenance = _read_jsonl(source / "reports/source_manifest.jsonl")
+        for row in provenance:
+            row["source_session_id"] = "shared-multi-task-session"
+        _write_jsonl(source / "reports/source_manifest.jsonl", provenance)
         info = _read(source / "meta/info.json")
         info["total_tasks"] = 2
         _write(source / "meta/info.json", info)

@@ -198,16 +198,12 @@ def _validate_unique_segments(selected: tuple[SelectedEpisode, ...]) -> None:
 
 def _validate_task_scope(selected: tuple[SelectedEpisode, ...]) -> None:
     episode_tasks: dict[str, set[str]] = {}
-    session_tasks: dict[str, set[str]] = {}
     for item in selected:
         episode_id = _string(item.episode.provenance.get("source_episode_id"), "source_episode_id")
-        session_id = _string(item.episode.provenance.get("source_session_id"), "source_session_id")
         episode_tasks.setdefault(episode_id, set()).update(item.episode.tasks)
-        session_tasks.setdefault(session_id, set()).update(item.episode.tasks)
-    for label, mapping in (("Episode", episode_tasks), ("Session", session_tasks)):
-        for identity, tasks in mapping.items():
-            if len(tasks) != 1:
-                raise ValueError(f"task mismatch within source {label}: {identity}")
+    for episode_id, tasks in episode_tasks.items():
+        if len(tasks) != 1:
+            raise ValueError(f"task mismatch within source Episode: {episode_id}")
 
 
 def _validate_v3_shard_selection(selected: tuple[SelectedEpisode, ...]) -> None:
