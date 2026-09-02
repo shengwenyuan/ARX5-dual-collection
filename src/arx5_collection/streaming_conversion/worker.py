@@ -211,6 +211,11 @@ def convert_episode_fragment(
                     f"expected={receipt.source_session_id!r}, "
                     f"observed={sorted(observed_sessions)!r}"
                 )
+            revalidated = timed(
+                "stage_revalidate", lambda: validate_stage(receipt.stage_dir)
+            )
+            if revalidated != receipt:
+                raise ValueError("StageReceipt changed during conversion")
             fragment = _fragment_value(
                 receipt,
                 recipe,
@@ -237,6 +242,11 @@ def convert_episode_fragment(
             )
             phases.append(("finalize", max(time.monotonic() - finalize_started, 0.0)))
     except _Excluded as excluded:
+        revalidated = timed(
+            "stage_revalidate", lambda: validate_stage(receipt.stage_dir)
+        )
+        if revalidated != receipt:
+            raise ValueError("StageReceipt changed during conversion")
         return excluded.result
 
     return EpisodeConversionResult(

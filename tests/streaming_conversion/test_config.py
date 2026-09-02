@@ -26,6 +26,7 @@ class StreamingConfigTest(unittest.TestCase):
             (Path("fold_cloth/2026-08-21"), Path("fold_cloth/2026-08-22")),
         )
         self.assertEqual(config.source.block, ("aborted", "logs"))
+        self.assertEqual(config.source.materialization, "copy")
         self.assertEqual(config.runtime.workers, 20)
         self.assertEqual(config.recipe.task_source, "metadata.task.description")
         self.assertEqual(
@@ -143,6 +144,68 @@ class StreamingConfigTest(unittest.TestCase):
                 with self.subTest(reason=reason):
                     with self.assertRaisesRegex(ValueError, reason):
                         StreamingConversionConfig.load(path)
+
+    def test_loads_direct_pfs_source_and_rejects_unsafe_variants(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            baseline = _buffered_profile(root).replace(
+                f'root = "{root / "source"}"',
+                f'root = "{root / "pfs" / "tmp" / "source"}"\n'
+                '        materialization = "direct"',
+            )
+            path = root / "direct.toml"
+            path.write_text(baseline)
+
+            config = StreamingConversionConfig.load(path)
+
+            self.assertEqual(config.source.materialization, "direct")
+            for profile, reason in (
+                (
+                    baseline.replace(
+                        f'root = "{root / "pfs" / "tmp" / "source"}"',
+                        f'root = "{root / "outside"}"',
+                    ),
+                    "source.root must be below runtime.pfs_root",
+                ),
+                (
+                    baseline.replace(
+                        'materialization = "direct"', 'materialization = "move"'
+                    ),
+                    "must be 'copy' or 'direct'",
+                ),
+                (
+                    baseline.replace(
+                        f'root = "{root / "pfs" / "tmp" / "source"}"',
+                        f'root = "{root / "pfs" / "tmp" / "group" / "source"}"',
+                    ),
+                    "must be pfs_root/tmp/<dataset>",
+                ),
+            ):
+                path.write_text(profile)
+                with self.subTest(reason=reason):
+                    with self.assertRaisesRegex(ValueError, reason):
+                        StreamingConversionConfig.load(path)
+
+            target = root / "pfs" / "tmp" / "target"
+            target.mkdir(parents=True)
+            link = root / "pfs" / "tmp" / "source"
+            link.symlink_to(target, target_is_directory=True)
+            path.write_text(baseline)
+            with self.assertRaisesRegex(ValueError, "must not be a symbolic link"):
+                StreamingConversionConfig.load(path)
+
+    def test_rejects_direct_source_with_legacy_runtime(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "streaming.toml"
+            path.write_text(
+                _profile().replace(
+                    'block = ["aborted", "logs"]',
+                    'block = ["aborted", "logs"]\nmaterialization = "direct"',
+                )
+            )
+
+            with self.assertRaisesRegex(ValueError, "requires a PFS runtime"):
+                StreamingConversionConfig.load(path)
 
     def test_rejects_absolute_include_path(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

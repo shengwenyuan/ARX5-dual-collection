@@ -41,6 +41,7 @@ class StageWork:
     source_root: Path
     selection: SelectionEntry
     target: Path
+    materialization: str = "copy"
 
 
 @dataclass(frozen=True, slots=True)
@@ -116,6 +117,7 @@ class StreamingCoordinator:
         repo_id: str,
         runtime: RuntimeSettings | int,
         *,
+        source_materialization: str = "copy",
         stage_runner: StageRunner | None = None,
         conversion_runner: ConversionRunner | None = None,
         executor_factory: ExecutorFactory | None = None,
@@ -130,6 +132,9 @@ class StreamingCoordinator:
         self._source_root = source_root
         self._recipe = recipe
         self._repo_id = repo_id
+        if source_materialization not in {"copy", "direct"}:
+            raise ValueError("source materialization must be 'copy' or 'direct'")
+        self._source_materialization = source_materialization
         if isinstance(runtime, bool) or not isinstance(
             runtime, (int, RuntimeConfig, PrefetchRuntimeConfig, BufferedRuntimeConfig)
         ):
@@ -257,6 +262,7 @@ class StreamingCoordinator:
                 source_root=self._source_root,
                 selection=self._selection[episode_id],
                 target=self._manifest.run_dir / "staging" / episode_id,
+                materialization=self._source_materialization,
             )
             future = executor.submit(self._stage_runner, work)
             active[future] = ActiveWork(
@@ -345,7 +351,7 @@ class StreamingCoordinator:
                             self._manifest.transition(
                                 work.episode_id, JobState.CONVERTING
                             )
-                            self._staged_bytes += self._episode_bytes(work.episode_id)
+                            self._staged_bytes += self._staging_bytes(work.episode_id)
                             self._report_work(work, result, None)
                             ready_convert.append(result)
                             continue
@@ -386,7 +392,12 @@ class StreamingCoordinator:
                 receipt = validate_stage(target)
                 _validate_reused_stage(
                     receipt,
-                    StageWork(self._source_root, selection, target),
+                    StageWork(
+                        self._source_root,
+                        selection,
+                        target,
+                        self._source_materialization,
+                    ),
                 )
             except (OSError, ValueError, StageValidationError):
                 _quarantine_invalid_stage(
@@ -450,7 +461,7 @@ class StreamingCoordinator:
                 return False
         while active_count < runtime.stage_workers and ready_stage:
             episode_id = ready_stage[0]
-            episode_bytes = self._episode_bytes(episode_id)
+            episode_bytes = self._staging_bytes(episode_id)
             hard_max = (
                 runtime.temporary_hard_max_bytes
                 if isinstance(runtime, BufferedRuntimeConfig)
@@ -492,6 +503,7 @@ class StreamingCoordinator:
                 source_root=self._source_root,
                 selection=self._selection[episode_id],
                 target=self._manifest.run_dir / "staging" / episode_id,
+                materialization=self._source_materialization,
             )
             reserved.add(episode_id)
             try:
@@ -509,8 +521,13 @@ class StreamingCoordinator:
         selection = self._selection[episode_id]
         return selection.mcap.size + selection.metadata.size
 
+    def _staging_bytes(self, episode_id: str) -> int:
+        if self._source_materialization == "direct":
+            return 0
+        return self._episode_bytes(episode_id)
+
     def _reserved_bytes(self, reserved: set[str]) -> int:
-        return sum(self._episode_bytes(episode_id) for episode_id in reserved)
+        return sum(self._staging_bytes(episode_id) for episode_id in reserved)
 
     def _ready_staging_bytes(
         self,
@@ -518,12 +535,12 @@ class StreamingCoordinator:
         ready_convert: deque[StageReceipt],
     ) -> int:
         active_stage = sum(
-            self._episode_bytes(work.episode_id)
+            self._staging_bytes(work.episode_id)
             for work in active.values()
             if work.phase is WorkPhase.STAGE
         )
         return active_stage + sum(
-            self._episode_bytes(receipt.episode_id) for receipt in ready_convert
+            self._staging_bytes(receipt.episode_id) for receipt in ready_convert
         )
 
     def _nonstage_temporary_bytes(self) -> int:
@@ -705,7 +722,9 @@ def stage_episode(work: StageWork) -> StageReceipt:
         mcap=work.selection.mcap,
         metadata=work.selection.metadata,
     )
-    return MountedEpisodeSource(work.source_root).stage(candidate, work.target)
+    return MountedEpisodeSource(work.source_root, work.materialization).stage(
+        candidate, work.target
+    )
 
 
 def convert_staged_episode(work: ConversionWork) -> EpisodeConversionResult:
@@ -779,6 +798,7 @@ def _validate_reused_stage(receipt: StageReceipt, work: StageWork) -> None:
         or receipt.source_dir != selection.source_dir
         or receipt.mcap != selection.mcap
         or receipt.metadata != selection.metadata
+        or receipt.materialization != work.materialization
     ):
         raise StageValidationError("committed staging does not match frozen selection")
 

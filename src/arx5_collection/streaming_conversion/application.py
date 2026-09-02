@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
+import shutil
 from typing import Callable, TextIO
 
 from .alignment import build_alignment_report
@@ -23,6 +24,8 @@ from .coordinator import StreamingCoordinator
 from .discovery import discover_episodes
 from .manifest import RunManifest
 from .models import DiscoveryResult
+from .models import JobSnapshot
+from .models import JobState
 from .recipe import Pi05ConversionRecipe
 
 
@@ -141,6 +144,7 @@ def execute_frozen_streaming_run(
         recipe,
         manifest.definition.repo_id,
         config.runtime,
+        source_materialization=config.source.materialization,
         progress_reporter=lambda progress: _write_progress(
             output_stream, progress, metrics
         ),
@@ -152,6 +156,21 @@ def execute_frozen_streaming_run(
         recipe,
         manifest.definition.repo_id,
     )
+    removed_source = _remove_committed_direct_source(config, jobs)
+    if removed_source is not None:
+        output_stream.write(
+            json.dumps(
+                {
+                    "direct_source_cleanup": {
+                        "path": str(removed_source),
+                        "status": "deleted",
+                    }
+                },
+                sort_keys=True,
+            )
+            + "\n"
+        )
+        output_stream.flush()
     states = [job.state.value for job in jobs.values()]
     return StreamingApplicationResult(
         run_id=manifest.run_id,
@@ -160,6 +179,37 @@ def execute_frozen_streaming_run(
         excluded=states.count("excluded"),
         discarded=states.count("discarded"),
     )
+
+
+def _remove_committed_direct_source(
+    config: StreamingConversionConfig,
+    jobs: dict[str, JobSnapshot],
+) -> Path | None:
+    if config.source.materialization != "direct":
+        return None
+    states = {job.state for job in jobs.values()}
+    if JobState.COMMITTED not in states or states & {
+        JobState.DISCOVERED,
+        JobState.STAGING,
+        JobState.CONVERTING,
+        JobState.VALIDATING,
+        JobState.FAILED,
+    }:
+        return None
+    runtime = config.runtime
+    if not isinstance(runtime, (PrefetchRuntimeConfig, BufferedRuntimeConfig)):
+        raise RuntimeError("direct source cleanup requires a PFS runtime")
+    source = config.source.root
+    if source.is_symlink():
+        raise RuntimeError("refusing to delete a symbolic-link direct source")
+    resolved = source.resolve(strict=True)
+    temporary_root = (runtime.pfs_root / "tmp").resolve(strict=True)
+    if not resolved.is_dir() or resolved.parent != temporary_root:
+        raise RuntimeError(
+            "refusing to delete direct source outside pfs_root/tmp/<dataset>"
+        )
+    shutil.rmtree(resolved)
+    return resolved
 
 
 def _validate_request(request: StreamingRunRequest) -> None:
@@ -201,6 +251,7 @@ def _validate_resume_config(
     frozen = manifest.definition
     current = {
         "source_root": config.source.root.resolve(strict=True),
+        "source_materialization": config.source.materialization,
         "streaming_root": config.runtime.streaming_root,
         "repo_id": config.output.repo_id_for(frozen.output_path),
         "recipe_name": config.recipe.name,
@@ -209,6 +260,7 @@ def _validate_resume_config(
     }
     expected = {
         "source_root": frozen.source_root,
+        "source_materialization": frozen.source_materialization,
         "streaming_root": frozen.streaming_root,
         "repo_id": frozen.repo_id,
         "recipe_name": frozen.recipe_name,

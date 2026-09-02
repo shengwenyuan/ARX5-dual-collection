@@ -15,6 +15,7 @@ from arx5_collection.streaming_conversion.models import EpisodeCandidate
 from arx5_collection.streaming_conversion.models import FileIdentity
 from arx5_collection.streaming_conversion.recipe import Pi05ConversionRecipe
 from arx5_collection.streaming_conversion.source import MountedEpisodeSource
+from arx5_collection.streaming_conversion.source import SourceChangedError
 from arx5_collection.streaming_conversion.worker import convert_episode_fragment
 
 
@@ -53,6 +54,7 @@ class ConvertEpisodeFragmentTest(unittest.TestCase):
             {name for name, _ in result.phase_seconds},
             {
                 "stage_validate",
+                "stage_revalidate",
                 "metadata",
                 "clean",
                 "select",
@@ -249,6 +251,35 @@ class ConvertEpisodeFragmentTest(unittest.TestCase):
         self.assertFalse(target.exists())
         self.assertEqual(list(target.parent.glob(f".{target.name}.*")), [])
 
+    def test_direct_source_change_during_conversion_prevents_commit(self) -> None:
+        receipt = self._stage(
+            "demonstration", "success", "success", materialization="direct"
+        )
+        target = self.root / "fragments" / receipt.episode_id
+
+        def export_and_change(*args, **kwargs):
+            dataset = self._fake_export(*args, **kwargs)
+            (receipt.source_dir / "episode.mcap").write_bytes(b"changed")
+            return dataset
+
+        with (
+            self._successful_pipeline(receipt.episode_id, target),
+            patch(
+                "arx5_collection.streaming_conversion.worker.export_lerobot",
+                side_effect=export_and_change,
+            ),
+            self.assertRaisesRegex(SourceChangedError, "source changed"),
+        ):
+            convert_episode_fragment(
+                receipt,
+                target,
+                self.recipe,
+                "folding the cloth",
+                "local/fragment-test",
+            )
+
+        self.assertFalse(target.exists())
+
     def _stage(
         self,
         collection_type: str,
@@ -256,6 +287,7 @@ class ConvertEpisodeFragmentTest(unittest.TestCase):
         bucket: str,
         *,
         station_id: str = "w3",
+        materialization: str = "copy",
     ):
         source_dir = self.source_root / bucket / "episode-a"
         source_dir.mkdir(parents=True)
@@ -289,7 +321,9 @@ class ConvertEpisodeFragmentTest(unittest.TestCase):
         )
         self.source_session_id = candidate.source_session_id
         stage = self.root / "staging" / bucket / "episode-a"
-        return MountedEpisodeSource(self.source_root).stage(candidate, stage)
+        return MountedEpisodeSource(self.source_root, materialization).stage(
+            candidate, stage
+        )
 
     def _successful_pipeline(self, episode_id: str, target: Path, dagger: bool = False):
         selector_name = (

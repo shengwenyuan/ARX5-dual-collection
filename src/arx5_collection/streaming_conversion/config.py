@@ -11,6 +11,7 @@ class SourceConfig:
     root: Path
     include_paths: tuple[Path, ...]
     block: tuple[str, ...]
+    materialization: str = "copy"
 
 
 @dataclass(frozen=True, slots=True)
@@ -113,7 +114,15 @@ class StreamingConversionConfig:
         runtime = _table(payload, "runtime")
         output = _table(payload, "output")
         recipe = _table(payload, "recipe")
-        _exact_keys(source, {"root", "include_paths", "block"}, "source")
+        source_keys = set(source)
+        if source_keys not in (
+            {"root", "include_paths", "block"},
+            {"root", "include_paths", "block", "materialization"},
+        ):
+            raise ValueError(
+                "source keys must be exactly "
+                "['block', 'include_paths', 'root'] with optional materialization"
+            )
         if schema_version == 1:
             _exact_keys(runtime, {"streaming_root", "workers"}, "runtime")
         elif schema_version == 2:
@@ -166,6 +175,9 @@ class StreamingConversionConfig:
                 root=_absolute_path(source["root"], "source.root"),
                 include_paths=_include_paths(source["include_paths"]),
                 block=_block_names(source["block"]),
+                materialization=_source_materialization(
+                    source.get("materialization", "copy")
+                ),
             ),
             runtime=runtime_config,
             output=OutputConfig(
@@ -187,7 +199,22 @@ class StreamingConversionConfig:
                 runtime_config.pfs_root,
                 "output.lerobot_root",
             )
+        if config.source.materialization == "direct":
+            if not isinstance(
+                runtime_config, (PrefetchRuntimeConfig, BufferedRuntimeConfig)
+            ):
+                raise ValueError(
+                    "source.materialization='direct' requires a PFS runtime"
+                )
+            _require_direct_source(config.source.root, runtime_config.pfs_root)
         return config
+
+
+def _source_materialization(value: object) -> str:
+    materialization = _non_empty_string(value, "source.materialization")
+    if materialization not in {"copy", "direct"}:
+        raise ValueError("source.materialization must be 'copy' or 'direct'")
+    return materialization
 
 
 def _task_source(value: object) -> str:
@@ -310,6 +337,16 @@ def _require_within(path: Path, root: Path, label: str) -> None:
     normalized_root = root.resolve(strict=False)
     if normalized_path == normalized_root or normalized_root not in normalized_path.parents:
         raise ValueError(f"{label} must be below runtime.pfs_root")
+
+
+def _require_direct_source(path: Path, pfs_root: Path) -> None:
+    _require_within(path, pfs_root, "source.root")
+    if path.is_symlink():
+        raise ValueError("direct source.root must not be a symbolic link")
+    normalized = path.resolve(strict=False)
+    temporary_root = (pfs_root / "tmp").resolve(strict=False)
+    if normalized.parent != temporary_root:
+        raise ValueError("direct source.root must be pfs_root/tmp/<dataset>")
 
 
 def _single_component(value: object, label: str) -> str:

@@ -333,6 +333,28 @@ class StreamingCoordinatorTest(unittest.TestCase):
         self.assertEqual(progress[-1].reserved_staging_bytes, 0)
         self.assertEqual(progress[-1].states, {"committed": 1})
 
+    def test_direct_source_does_not_reserve_logical_input_bytes(self) -> None:
+        manifest = self._manifest("episode-a", "episode-b")
+        progress = []
+
+        jobs = self._prefetch_coordinator(
+            manifest,
+            _fake_stage,
+            lambda work: _committed(work.receipt.episode_id, work.target),
+            stage_workers=1,
+            conversion_workers=1,
+            target_bytes=1,
+            max_bytes=1,
+            max_episodes=2,
+            progress_reporter=progress.append,
+            source_materialization="direct",
+        ).run()
+
+        self.assertEqual({job.state for job in jobs.values()}, {JobState.COMMITTED})
+        self.assertTrue(progress)
+        self.assertTrue(all(item.reserved_staging_bytes == 0 for item in progress))
+        self.assertTrue(all(item.ready_staging_bytes == 0 for item in progress))
+
     def test_prefetch_resume_reuses_valid_complete_stage_without_copy(self) -> None:
         manifest = self._manifest("episode-a")
         selection = manifest.selection[0]
@@ -507,6 +529,7 @@ class StreamingCoordinatorTest(unittest.TestCase):
         max_bytes: int,
         max_episodes: int,
         progress_reporter=None,
+        source_materialization: str = "copy",
     ) -> StreamingCoordinator:
         runtime = PrefetchRuntimeConfig(
             pfs_root=self.root,
@@ -524,6 +547,7 @@ class StreamingCoordinatorTest(unittest.TestCase):
             self.recipe,
             "local/fold",
             runtime,
+            source_materialization=source_materialization,
             stage_runner=stage_runner,
             conversion_runner=conversion_runner,
             stage_executor_factory=executor_factory,
@@ -582,6 +606,7 @@ def _receipt(work: StageWork) -> StageReceipt:
         stage_dir=work.target,
         mcap=work.selection.mcap,
         metadata=work.selection.metadata,
+        materialization=work.materialization,
     )
 
 

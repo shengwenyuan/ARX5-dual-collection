@@ -188,6 +188,7 @@ class RunManifestTest(unittest.TestCase):
         value = json.loads(path.read_text())
         value["schema_version"] = 2
         value["workers"] = value.pop("runtime")["workers"]
+        value.pop("source_materialization")
         path.write_text(json.dumps(value))
 
         reopened = RunManifest.open(run.run_dir)
@@ -232,7 +233,7 @@ class RunManifestTest(unittest.TestCase):
     def test_freezes_buffered_prefetch_runtime(self) -> None:
         config = StreamingConversionConfig(
             3,
-            SourceConfig(self.root / "source", (Path("task"),), ()),
+            SourceConfig(self.root / "source", (Path("task"),), (), "direct"),
             BufferedRuntimeConfig(
                 self.root,
                 self.root / "streaming-v3",
@@ -263,6 +264,7 @@ class RunManifestTest(unittest.TestCase):
         self.assertEqual(run.definition.ready_high_bytes, 256_000_000_000)
         self.assertEqual(run.definition.temporary_hard_max_bytes, 2_000_000_000_000)
         self.assertEqual(run.definition.min_free_bytes, 100_000_000_000)
+        self.assertEqual(run.definition.source_materialization, "direct")
 
     def _create(self) -> RunManifest:
         return RunManifest.create(

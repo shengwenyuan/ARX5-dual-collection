@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 from arx5_collection.streaming_conversion.models import EpisodeCandidate
 from arx5_collection.streaming_conversion.models import FileIdentity
+from arx5_collection.streaming_conversion.coordinator import _remove_stage
 from arx5_collection.streaming_conversion.source import MountedEpisodeSource
 from arx5_collection.streaming_conversion.source import SourceChangedError
 from arx5_collection.streaming_conversion.source import StageValidationError
@@ -43,6 +44,45 @@ class MountedEpisodeSourceTest(unittest.TestCase):
             sorted(path.name for path in self.target.iterdir()),
             ["episode.mcap", "metadata.json", "stage.json"],
         )
+        self.assertFalse((self.target / "episode.mcap").is_symlink())
+
+    def test_direct_stage_links_frozen_source_without_copying(self) -> None:
+        source = MountedEpisodeSource(self.source_root, "direct")
+
+        receipt = source.stage(self.candidate, self.target)
+
+        self.assertEqual(receipt.materialization, "direct")
+        self.assertEqual(receipt, validate_stage(self.target))
+        self.assertTrue((self.target / "episode.mcap").is_symlink())
+        self.assertEqual(
+            (self.target / "episode.mcap").resolve(),
+            self.source_dir / "episode.mcap",
+        )
+
+        _remove_stage(self.root / "streaming" / "run", "episode-a")
+
+        self.assertFalse(self.target.exists())
+        self.assertEqual((self.source_dir / "episode.mcap").read_bytes(), b"mcap-data")
+
+    def test_direct_stage_rejects_changed_or_retargeted_source(self) -> None:
+        source = MountedEpisodeSource(self.source_root, "direct")
+        source.stage(self.candidate, self.target)
+        mcap = self.source_dir / "episode.mcap"
+        mcap.write_bytes(b"new-bytes")
+        os.utime(mcap, ns=(self.candidate.mcap.mtime_ns + 1,) * 2)
+
+        with self.assertRaisesRegex(SourceChangedError, "source changed"):
+            validate_stage(self.target)
+
+        mcap.write_bytes(b"mcap-data")
+        os.utime(mcap, ns=(self.candidate.mcap.mtime_ns,) * 2)
+        outside = self.root / "outside.mcap"
+        outside.write_bytes(b"mcap-data")
+        link = self.target / "episode.mcap"
+        link.unlink()
+        link.symlink_to(outside)
+        with self.assertRaisesRegex(SourceChangedError, "source changed"):
+            validate_stage(self.target)
 
     def test_rejects_source_changed_before_copy(self) -> None:
         mcap = self.source_dir / "episode.mcap"

@@ -22,8 +22,8 @@ from .models import RunDefinition
 from .models import SelectionEntry
 
 
-RUN_SCHEMA_VERSION = 4
-_SUPPORTED_RUN_SCHEMA_VERSIONS = {2, 3, RUN_SCHEMA_VERSION}
+RUN_SCHEMA_VERSION = 5
+_SUPPORTED_RUN_SCHEMA_VERSIONS = {2, 3, 4, RUN_SCHEMA_VERSION}
 SELECTION_SCHEMA_VERSION = 2
 JOB_EVENT_SCHEMA_VERSION = 1
 _REASON_CODE = re.compile(r"^[a-z][a-z0-9_]*(/[a-z][a-z0-9_]*)*$")
@@ -137,6 +137,7 @@ class RunManifest:
             "run_id": run_id,
             "created_at": recorded_at,
             "source_root": str(discovery.source_root),
+            "source_materialization": config.source.materialization,
             "streaming_root": str(config.runtime.streaming_root),
             "output_path": str(output_path),
             "repo_id": repo_id or config.output.repo_id_for(output_path),
@@ -184,6 +185,8 @@ class RunManifest:
             "repo_id",
             "recipe",
         }
+        if schema_version == RUN_SCHEMA_VERSION:
+            common_keys.add("source_materialization")
         _exact_keys(
             run_value,
             common_keys | ({"workers"} if schema_version == 2 else {"runtime"}),
@@ -455,7 +458,19 @@ def _run_definition(value: dict[str, Any], schema_version: int) -> RunDefinition
         recipe_name=_string(recipe["name"], "run recipe name"),
         recipe_profile=_string(recipe["profile"], "run recipe profile"),
         recipe_task=_string(recipe["task"], "run recipe task"),
+        source_materialization=(
+            _run_source_materialization(value["source_materialization"])
+            if schema_version == RUN_SCHEMA_VERSION
+            else "copy"
+        ),
     )
+
+
+def _run_source_materialization(value: object) -> str:
+    materialization = _string(value, "run source_materialization")
+    if materialization not in {"copy", "direct"}:
+        raise ValueError("run source_materialization must be 'copy' or 'direct'")
+    return materialization
 
 
 def _run_runtime(

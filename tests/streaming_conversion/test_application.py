@@ -33,7 +33,7 @@ class StreamingApplicationTest(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary.name).resolve()
-        self.source = self.root / "source"
+        self.source = self.root / "tmp" / "source"
         episode = self.source / "task" / "episode-a"
         episode.mkdir(parents=True)
         (episode / "episode.mcap").write_bytes(b"mcap")
@@ -169,6 +169,72 @@ class StreamingApplicationTest(unittest.TestCase):
                 builder=_fake_builder,
             )
 
+    def test_resume_rejects_changed_source_materialization(self) -> None:
+        self._write_prefetch_config(conversion_workers=64, materialization="direct")
+        self._create_manifest("resume-direct")
+        self._write_prefetch_config(conversion_workers=64)
+
+        with self.assertRaisesRegex(ValueError, "source_materialization"):
+            execute_streaming_conversion(
+                StreamingRunRequest(
+                    self.config_path,
+                    resume_run_id="resume-direct",
+                ),
+                _TTY(),
+                _TTY(),
+                builder=_fake_builder,
+            )
+
+    def test_direct_source_is_deleted_only_after_successful_snapshot(self) -> None:
+        self._write_prefetch_config(conversion_workers=64, materialization="direct")
+        output = _TTY()
+
+        with patch(
+            "arx5_collection.streaming_conversion.application.StreamingCoordinator",
+            side_effect=_successful_coordinator,
+        ):
+            execute_streaming_conversion(
+                StreamingRunRequest(
+                    self.config_path,
+                    output_override=self.output,
+                    run_id="direct-success",
+                ),
+                _TTY("\n"),
+                output,
+                builder=_fake_builder,
+                clock=lambda: NOW,
+            )
+
+        self.assertFalse(self.source.exists())
+        self.assertIn('"status": "deleted"', output.getvalue())
+
+    def test_direct_source_is_preserved_when_snapshot_build_fails(self) -> None:
+        self._write_prefetch_config(conversion_workers=64, materialization="direct")
+
+        def failed_builder(*args, **kwargs):
+            raise RuntimeError("injected snapshot failure")
+
+        with (
+            patch(
+                "arx5_collection.streaming_conversion.application.StreamingCoordinator",
+                side_effect=_successful_coordinator,
+            ),
+            self.assertRaisesRegex(RuntimeError, "injected snapshot failure"),
+        ):
+            execute_streaming_conversion(
+                StreamingRunRequest(
+                    self.config_path,
+                    output_override=self.output,
+                    run_id="direct-failure",
+                ),
+                _TTY("\n"),
+                _TTY(),
+                builder=failed_builder,
+                clock=lambda: NOW,
+            )
+
+        self.assertTrue(self.source.is_dir())
+
     def test_request_rejects_ambiguous_run_controls(self) -> None:
         for request, reason in (
             (
@@ -234,13 +300,20 @@ task_source = "metadata.task.description"
 '''
         )
 
-    def _write_prefetch_config(self, *, conversion_workers: int) -> None:
+    def _write_prefetch_config(
+        self, *, conversion_workers: int, materialization: str = "copy"
+    ) -> None:
+        materialization_line = (
+            f'materialization = "{materialization}"\n'
+            if materialization != "copy"
+            else ""
+        )
         self.config_path.write_text(
             f'''schema_version = 2
 
 [source]
 root = "{self.source}"
-include_paths = ["task"]
+{materialization_line}include_paths = ["task"]
 block = []
 
 [runtime]

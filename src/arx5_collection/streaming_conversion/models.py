@@ -85,6 +85,7 @@ class RunDefinition:
     recipe_name: str
     recipe_profile: str
     recipe_task: str
+    source_materialization: str = "copy"
 
 
 @dataclass(frozen=True, slots=True)
@@ -132,6 +133,7 @@ class StageReceipt:
     stage_dir: Path
     mcap: FileIdentity
     metadata: FileIdentity
+    materialization: str = "copy"
 
 
 class ConversionStatus(str, Enum):

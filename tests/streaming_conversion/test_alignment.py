@@ -64,6 +64,7 @@ class AlignmentTest(unittest.TestCase):
             rendered = render_alignment(report)
 
         self.assertIn("workers: 25", rendered)
+        self.assertIn("source_materialization: copy", rendered)
         self.assertIn(
             "training_task_source: metadata.task.description",
             rendered,

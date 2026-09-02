@@ -13,16 +13,17 @@ from .models import FileIdentity
 from .models import StageReceipt
 
 
-STAGE_SCHEMA_VERSION = 2
+STAGE_SCHEMA_VERSION = 3
+_SUPPORTED_STAGE_SCHEMA_VERSIONS = {2, STAGE_SCHEMA_VERSION}
 _MCAP_NAME = "episode.mcap"
 _METADATA_NAME = "metadata.json"
 
 
-class SourceChangedError(RuntimeError):
+class StageValidationError(RuntimeError):
     pass
 
 
-class StageValidationError(RuntimeError):
+class SourceChangedError(StageValidationError):
     pass
 
 
@@ -31,10 +32,13 @@ class EpisodeSource(Protocol):
 
 
 class MountedEpisodeSource:
-    def __init__(self, source_root: Path) -> None:
+    def __init__(self, source_root: Path, materialization: str = "copy") -> None:
         self._source_root = source_root.resolve(strict=True)
         if not self._source_root.is_dir():
             raise NotADirectoryError(self._source_root)
+        if materialization not in {"copy", "direct"}:
+            raise ValueError("source materialization must be 'copy' or 'direct'")
+        self._materialization = materialization
 
     def stage(self, candidate: EpisodeCandidate, target: Path) -> StageReceipt:
         if not target.is_absolute():
@@ -48,8 +52,8 @@ class MountedEpisodeSource:
         self._assert_source_identity(source_metadata, candidate.metadata)
 
         with staged_directory(target) as temporary:
-            _copy_file(source_mcap, temporary / _MCAP_NAME)
-            _copy_file(source_metadata, temporary / _METADATA_NAME)
+            self._materialize(source_mcap, temporary / _MCAP_NAME)
+            self._materialize(source_metadata, temporary / _METADATA_NAME)
             self._assert_source_identity(source_mcap, candidate.mcap)
             self._assert_source_identity(source_metadata, candidate.metadata)
             receipt = StageReceipt(
@@ -59,11 +63,18 @@ class MountedEpisodeSource:
                 stage_dir=target,
                 mcap=candidate.mcap,
                 metadata=candidate.metadata,
+                materialization=self._materialization,
             )
             _validate_staged_files(receipt, temporary)
             _write_stage_manifest(temporary / "stage.json", receipt)
 
         return validate_stage(target)
+
+    def _materialize(self, source: Path, target: Path) -> None:
+        if self._materialization == "direct":
+            target.symlink_to(source)
+        else:
+            _copy_file(source, target)
 
     def _inside_root(self, path: Path) -> Path:
         try:
@@ -96,16 +107,22 @@ def validate_stage(stage_dir: Path) -> StageReceipt:
         value = json.loads(manifest_path.read_text())
     except (OSError, json.JSONDecodeError) as error:
         raise StageValidationError(f"cannot read stage manifest: {manifest_path}") from error
-    if not isinstance(value, dict) or set(value) != {
+    if not isinstance(value, dict):
+        raise StageValidationError("invalid stage manifest")
+    schema_version = value.get("schema_version")
+    expected_keys = {
         "schema_version",
         "episode_id",
         "source_session_id",
         "source_dir",
         "mcap",
         "metadata",
-    }:
+    }
+    if schema_version == STAGE_SCHEMA_VERSION:
+        expected_keys.add("materialization")
+    if set(value) != expected_keys:
         raise StageValidationError("invalid stage manifest keys")
-    if value["schema_version"] != STAGE_SCHEMA_VERSION:
+    if schema_version not in _SUPPORTED_STAGE_SCHEMA_VERSIONS:
         raise StageValidationError("unsupported stage manifest schema_version")
     receipt = StageReceipt(
         episode_id=_string(value["episode_id"], "episode_id"),
@@ -114,6 +131,11 @@ def validate_stage(stage_dir: Path) -> StageReceipt:
         stage_dir=stage_dir,
         mcap=_manifest_identity(value["mcap"], "mcap"),
         metadata=_manifest_identity(value["metadata"], "metadata"),
+        materialization=(
+            _materialization(value["materialization"])
+            if schema_version == STAGE_SCHEMA_VERSION
+            else "copy"
+        ),
     )
     _validate_staged_files(receipt, stage_dir)
     return receipt
@@ -127,20 +149,42 @@ def _copy_file(source: Path, target: Path) -> None:
 
 
 def _validate_staged_files(receipt: StageReceipt, stage_dir: Path) -> None:
-    expected_sizes = {
-        _MCAP_NAME: receipt.mcap.size,
-        _METADATA_NAME: receipt.metadata.size,
+    expected = {
+        _MCAP_NAME: receipt.mcap,
+        _METADATA_NAME: receipt.metadata,
     }
-    for name, expected_size in expected_sizes.items():
+    for name, expected_identity in expected.items():
         path = stage_dir / name
         try:
-            observed_size = path.stat().st_size
+            observed = _identity(path)
         except OSError as error:
+            if receipt.materialization == "direct" and path.is_symlink():
+                raise SourceChangedError(
+                    f"source changed after confirmation: missing target: {path}"
+                ) from error
             raise StageValidationError(f"missing staged file: {path}") from error
-        if not path.is_file() or observed_size != expected_size:
+        if receipt.materialization == "direct":
+            expected_target = receipt.source_dir / name
+            try:
+                valid_target = (
+                    path.is_symlink()
+                    and path.resolve(strict=True) == expected_target
+                )
+            except OSError:
+                valid_target = False
+            if not valid_target or observed != expected_identity:
+                raise SourceChangedError(
+                    f"source changed after confirmation: {path}: "
+                    f"expected={expected_identity}, observed={observed}"
+                )
+        elif (
+            path.is_symlink()
+            or not path.is_file()
+            or observed.size != expected_identity.size
+        ):
             raise StageValidationError(
                 f"staged file size mismatch: {path}: "
-                f"expected={expected_size}, observed={observed_size}"
+                f"expected={expected_identity.size}, observed={observed.size}"
             )
 
 
@@ -152,6 +196,7 @@ def _write_stage_manifest(path: Path, receipt: StageReceipt) -> None:
         "source_dir": str(receipt.source_dir),
         "mcap": _identity_value(receipt.mcap),
         "metadata": _identity_value(receipt.metadata),
+        "materialization": receipt.materialization,
     }
     with path.open("x") as stream:
         json.dump(value, stream, indent=2, sort_keys=True)
@@ -176,6 +221,13 @@ def _manifest_identity(value: object, label: str) -> FileIdentity:
         _non_negative_int(value["size"], f"{label}.size"),
         _non_negative_int(value["mtime_ns"], f"{label}.mtime_ns"),
     )
+
+
+def _materialization(value: object) -> str:
+    materialization = _string(value, "materialization")
+    if materialization not in {"copy", "direct"}:
+        raise StageValidationError("materialization must be 'copy' or 'direct'")
+    return materialization
 
 
 def _string(value: object, label: str) -> str:

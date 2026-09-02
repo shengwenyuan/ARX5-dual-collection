@@ -49,6 +49,7 @@ def render_alignment(report: AlignmentReport) -> str:
     lines = [
         "ARX5 streaming conversion alignment",
         f"source_root: {discovery.source_root}",
+        f"source_materialization: {report.config.source.materialization}",
         f"streaming_root: {report.config.runtime.streaming_root}",
         f"output: {report.output_path}",
     ]
