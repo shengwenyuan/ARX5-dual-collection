@@ -54,6 +54,11 @@ class DatasetCliTest(unittest.TestCase):
             ],
             ["validate-pi05", "--dataset-root", "/data", "--repo-id", "local/data"],
             ["stream-to-lerobot", "--config", "/config.toml"],
+            [
+                "bucketlink-to-lerobot",
+                "--config", "/config.toml",
+                "--run-id", "run-1",
+            ],
             ["compose-lerobot", "--config", "/composition.toml"],
         )
 

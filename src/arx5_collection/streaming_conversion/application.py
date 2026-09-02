@@ -63,8 +63,29 @@ def execute_streaming_conversion(
     builder: Builder = build_lerobot_v21_snapshot,
     clock: Callable[[], datetime] | None = None,
 ) -> StreamingApplicationResult:
-    _validate_request(request)
     config = StreamingConversionConfig.load(request.config_path)
+    return execute_streaming_config(
+        config,
+        request,
+        input_stream,
+        output_stream,
+        discover=discover,
+        builder=builder,
+        clock=clock,
+    )
+
+
+def execute_streaming_config(
+    config: StreamingConversionConfig,
+    request: StreamingRunRequest,
+    input_stream: TextIO,
+    output_stream: TextIO,
+    *,
+    discover: Discovery = discover_episodes,
+    builder: Builder = build_lerobot_v21_snapshot,
+    clock: Callable[[], datetime] | None = None,
+) -> StreamingApplicationResult:
+    _validate_request(request)
     recipe = load_conversion_recipe(config)
 
     if request.resume_run_id is not None:

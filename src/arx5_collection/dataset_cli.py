@@ -10,6 +10,8 @@ from typing import Sequence
 from arx5_collection.cleaning.pipeline import clean_episode
 from arx5_collection.cleaning.pipeline import inspect_episode
 from arx5_collection.cleaning.reader import load_metadata
+from arx5_collection.bucketlink_conversion import BucketLinkRunRequest
+from arx5_collection.bucketlink_conversion import execute_bucketlink_conversion
 from arx5_collection.dagger_dataset.pipeline import classify_dagger_episode
 from arx5_collection.dagger_dataset.selection import select_equal_eef_dagger_dataset
 from arx5_collection.gripper import ARX5_GRIPPER_CALIBRATION
@@ -26,6 +28,7 @@ from arx5_collection.pi05_dataset.selection_pipeline import DatasetSelection
 from arx5_collection.pi05_dataset.selection_pipeline import select_equal_eef_dataset
 from arx5_collection.pi05_dataset.validate import validate_lerobot
 from arx5_collection.streaming_conversion.alignment import AlignmentCancelled
+from arx5_collection.streaming_conversion.application import StreamingApplicationResult
 from arx5_collection.streaming_conversion.application import StreamingRunRequest
 from arx5_collection.streaming_conversion.application import execute_streaming_conversion
 
@@ -237,6 +240,28 @@ def _handle_stream_to_lerobot(args: argparse.Namespace) -> int:
     except AlignmentCancelled as error:
         print(f"cancelled: {error}", file=sys.stderr)
         return 2
+    _print_streaming_result(result)
+    return 0
+
+
+def _handle_bucketlink_to_lerobot(args: argparse.Namespace) -> int:
+    request = BucketLinkRunRequest(
+        config_path=args.config,
+        output_override=args.output,
+        run_id=args.run_id,
+        resume_run_id=args.resume,
+        retry_failed=args.retry_failed,
+    )
+    try:
+        result = execute_bucketlink_conversion(request, sys.stdin, sys.stdout)
+    except AlignmentCancelled as error:
+        print(f"cancelled: {error}", file=sys.stderr)
+        return 2
+    _print_streaming_result(result)
+    return 0
+
+
+def _print_streaming_result(result: StreamingApplicationResult) -> None:
     print(
         json.dumps(
             {
@@ -254,7 +279,6 @@ def _handle_stream_to_lerobot(args: argparse.Namespace) -> int:
             sort_keys=True,
         )
     )
-    return 0
 
 
 def _handle_compose_lerobot(args: argparse.Namespace) -> int:
@@ -406,6 +430,18 @@ def build_parser() -> argparse.ArgumentParser:
     run_identity.add_argument("--resume", metavar="RUN_ID")
     stream_parser.add_argument("--retry-failed", action="store_true")
     stream_parser.set_defaults(handler=_handle_stream_to_lerobot)
+
+    bucketlink_parser = subparsers.add_parser(
+        "bucketlink-to-lerobot",
+        help="import one BOS task/date batch to PFS, then build LeRobot",
+    )
+    bucketlink_parser.add_argument("--config", type=Path, required=True)
+    bucketlink_parser.add_argument("--output", type=Path)
+    bucketlink_identity = bucketlink_parser.add_mutually_exclusive_group(required=True)
+    bucketlink_identity.add_argument("--run-id")
+    bucketlink_identity.add_argument("--resume", metavar="RUN_ID")
+    bucketlink_parser.add_argument("--retry-failed", action="store_true")
+    bucketlink_parser.set_defaults(handler=_handle_bucketlink_to_lerobot)
 
     compose_parser = subparsers.add_parser(
         "compose-lerobot",

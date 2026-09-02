@@ -97,6 +97,10 @@ class StreamingConversionConfig:
     def load(cls, path: str | Path) -> StreamingConversionConfig:
         with Path(path).open("rb") as stream:
             payload = tomllib.load(stream)
+        return cls.from_mapping(payload)
+
+    @classmethod
+    def from_mapping(cls, payload: dict[str, object]) -> StreamingConversionConfig:
         _exact_keys(
             payload,
             {"schema_version", "source", "runtime", "output", "recipe"},
