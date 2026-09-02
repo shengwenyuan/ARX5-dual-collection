@@ -9,6 +9,7 @@ from arx5_collection.bos2pfs import BucketLinkCreated, BucketLinkStatus
 from arx5_collection.bucketlink_conversion import BucketLinkRunRequest
 from arx5_collection.bucketlink_conversion import execute_bucketlink_conversion
 from arx5_collection.bucketlink_conversion import load_bucketlink_config
+from arx5_collection.streaming_conversion.discovery import discover_episodes
 
 
 class TTY(StringIO):
@@ -45,6 +46,26 @@ class SuccessfulClient:
             source="bos://bucket/task/2026-09-01/",
             destination="/swy/tmp/task-0901/2026-09-01",
         )
+
+
+class DaggerFailClient(SuccessfulClient):
+    def create(self, spec, name):
+        episode = self.target / "dagger_fail" / "episode-a"
+        episode.mkdir(parents=True)
+        (episode / "episode.mcap").write_bytes(b"mcap")
+        (episode / "metadata.json").write_text(
+            json.dumps(
+                {
+                    "episode_id": "episode-a",
+                    "collection_type": "dagger",
+                    "outcome": "fail",
+                    "task": {"id": "task", "description": "do task"},
+                    "station": {"id": "w4"},
+                    "timing": {"started_at": "2026-09-01T00:00:00Z"},
+                }
+            )
+        )
+        return BucketLinkCreated("dflow-1", "request-1")
 
 
 def write_config(tmp_path: Path) -> tuple[Path, Path]:
@@ -126,6 +147,34 @@ def test_successful_transfer_enters_existing_conversion_boundary(tmp_path: Path)
     assert result is sentinel
     assert execute.call_args.args[0].source.materialization == "direct"
     assert (target / "episode-a/episode.mcap").is_file()
+
+
+def test_dagger_fail_survives_bucketlink_discovery_gate(tmp_path: Path) -> None:
+    config_path, target = write_config(tmp_path)
+    sentinel = object()
+
+    def assert_discovery(config, *_args, **_kwargs):
+        discovery = discover_episodes(config.source)
+        assert [item.relative_dir.as_posix() for item in discovery.candidates] == [
+            "2026-09-01/dagger_fail/episode-a"
+        ]
+        candidate = discovery.candidates[0]
+        assert (candidate.collection_type, candidate.outcome) == ("dagger", "fail")
+        return sentinel
+
+    with patch(
+        "arx5_collection.bucketlink_conversion.execute_streaming_config",
+        side_effect=assert_discovery,
+    ):
+        result = execute_bucketlink_conversion(
+            BucketLinkRunRequest(config_path, tmp_path / "lerobot/output", "run-1", None),
+            TTY("\n"),
+            TTY(),
+            client=DaggerFailClient(target),
+            report_reader=lambda _: "totalCount: 2\nskippedCount: 0\nfailedCount: 0\n",
+        )
+
+    assert result is sentinel
 
 
 def test_report_failure_blocks_conversion(tmp_path: Path) -> None:

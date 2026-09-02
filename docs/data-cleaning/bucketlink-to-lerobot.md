@@ -111,6 +111,11 @@ PFS 实例并发任务上限约束。未来若需要更细粒度重叠，应优�
 BucketLink 会导入 prefix 下的全部对象。原有 `block` 和 Episode 质量选择在 PFS discovery 后
 继续生效，但无法节省这些被排除目录的传输开销；需要节省时应在 BOS 端提供更窄的 prefix。
 
+DAgger 的训练资格保持与原转换链一致：`dagger + success` 与位于 `dagger_fail/` 下的
+`dagger + fail` 都进入 DAgger authority selector；后者只贡献 fault 前已经完整闭合的
+expert correction。`block = ["fail", ...]` 只屏蔽目录名精确为 `fail` 的普通失败目录，
+不会屏蔽 `dagger_fail`。来源目录与 metadata 不一致时仍拒绝转换。
+
 ## 状态与恢复
 
 新入口维护两级状态：
