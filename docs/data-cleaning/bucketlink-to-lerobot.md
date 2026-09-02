@@ -65,8 +65,9 @@ pool 同时争抢同一台 CPU 设备。
 5. 成功后取得并校验任务报告的 total/skipped/failed counts；失败、取消或异常时停止。
 6. 恢复运行时优先查询已记录的任务，不重复创建 BucketLink。
 
-AK/SK 只通过环境变量或运行环境的 Secret 注入，不进入 TOML、日志、异常文本或 Git。
-当前使用 `BCE_ACCESS_KEY_ID`、`BCE_SECRET_ACCESS_KEY`；任务报告只读取一个很小的文本对象，
+AK/SK 不进入 TOML、日志、异常文本或 Git。完整的 `BCE_ACCESS_KEY_ID`、
+`BCE_SECRET_ACCESS_KEY` 环境变量对优先；两者都未设置时读取 `bcecmd -c` 生成的
+`~/.go-bcecli/credentials`。只设置一个环境变量时拒绝运行，避免跨账号混用。任务报告
 默认从 `/mnt/bos/<bucket>/...` 取得，也可用 `ARX5_BOS_MOUNT_ROOT` 调整挂载根。
 
 `bos2pfs.py` 不负责 MCAP 解码、Episode 清洗、LeRobot 写入和最终 PFS 清理。这些仍由

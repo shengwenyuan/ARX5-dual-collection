@@ -62,7 +62,7 @@ def execute_bucketlink_conversion(
         require_enter_confirmation(input_stream, output_stream)
         _prepare_empty_target(spec, conversion)
 
-    api = client or BaiduBucketLinkClient.from_environment(spec.endpoint)
+    api = client or BaiduBucketLinkClient.from_default_credentials(spec.endpoint)
     status = wait_for_bucket_link(
         spec,
         run_id,

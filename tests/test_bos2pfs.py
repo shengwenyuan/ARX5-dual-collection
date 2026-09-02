@@ -5,6 +5,7 @@ import pytest
 from arx5_collection.bos2pfs import BucketLinkCreated
 from arx5_collection.bos2pfs import BucketLinkSpec
 from arx5_collection.bos2pfs import BucketLinkStatus
+from arx5_collection.bos2pfs import _load_bce_credentials
 from arx5_collection.bos2pfs import mounted_report_path
 from arx5_collection.bos2pfs import validate_report
 from arx5_collection.bos2pfs import wait_for_bucket_link
@@ -112,3 +113,27 @@ def test_report_parser_and_mounted_path() -> None:
     assert mounted_report_path("bos://bucket/reports/result", Path("/mnt/bos")) == Path(
         "/mnt/bos/bucket/reports/result"
     )
+
+
+def test_credentials_prefer_complete_environment(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("BCE_ACCESS_KEY_ID", "environment-ak")
+    monkeypatch.setenv("BCE_SECRET_ACCESS_KEY", "environment-sk")
+    assert _load_bce_credentials(tmp_path / "missing") == (
+        "environment-ak",
+        "environment-sk",
+    )
+
+
+def test_credentials_fall_back_to_bcecmd(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.delenv("BCE_ACCESS_KEY_ID", raising=False)
+    monkeypatch.delenv("BCE_SECRET_ACCESS_KEY", raising=False)
+    path = tmp_path / "credentials"
+    path.write_text("[Defaults]\nAk = configured-ak\nSk = configured-sk\nSts =\n")
+    assert _load_bce_credentials(path) == ("configured-ak", "configured-sk")
+
+
+def test_credentials_reject_partial_environment(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("BCE_ACCESS_KEY_ID", "environment-ak")
+    monkeypatch.delenv("BCE_SECRET_ACCESS_KEY", raising=False)
+    with pytest.raises(RuntimeError, match="must be set together"):
+        _load_bce_credentials(tmp_path / "credentials")

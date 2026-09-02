@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import configparser
 from dataclasses import asdict, dataclass
 import json
 import os
@@ -107,7 +108,7 @@ class BaiduBucketLinkClient:
         self._models = models
 
     @classmethod
-    def from_environment(cls, endpoint: str) -> BaiduBucketLinkClient:
+    def from_default_credentials(cls, endpoint: str) -> BaiduBucketLinkClient:
         try:
             from baiducloud_python_sdk_core.auth.bce_credentials import BceCredentials
             from baiducloud_python_sdk_core.bce_client_configuration import BceClientConfiguration
@@ -117,8 +118,7 @@ class BaiduBucketLinkClient:
             raise RuntimeError(
                 "BucketLink requires the 'bucketlink' optional dependency"
             ) from error
-        access_key = _secret("BCE_ACCESS_KEY_ID")
-        secret_key = _secret("BCE_SECRET_ACCESS_KEY")
+        access_key, secret_key = _load_bce_credentials()
         credentials = BceCredentials(access_key, secret_key)
         config = BceClientConfiguration(credentials=credentials, endpoint=endpoint)
         return cls(PfsClient(config), models)
@@ -272,8 +272,29 @@ def _integer(value: object, label: str) -> int:
     return value
 
 
-def _secret(name: str) -> str:
-    value = os.environ.get(name)
-    if not value:
-        raise RuntimeError(f"missing required environment variable: {name}")
-    return value
+def _load_bce_credentials(bcecmd_path: Path | None = None) -> tuple[str, str]:
+    access_key = os.environ.get("BCE_ACCESS_KEY_ID", "").strip()
+    secret_key = os.environ.get("BCE_SECRET_ACCESS_KEY", "").strip()
+    if access_key or secret_key:
+        if not access_key or not secret_key:
+            raise RuntimeError(
+                "BCE_ACCESS_KEY_ID and BCE_SECRET_ACCESS_KEY must be set together"
+            )
+        return access_key, secret_key
+
+    path = bcecmd_path or Path.home() / ".go-bcecli" / "credentials"
+    parser = configparser.ConfigParser(interpolation=None)
+    try:
+        loaded = parser.read(path)
+    except configparser.Error as error:
+        raise RuntimeError(f"invalid bcecmd credentials file: {path}") from error
+    if not loaded or not parser.has_section("Defaults"):
+        raise RuntimeError(
+            "missing BCE credentials: set BCE_ACCESS_KEY_ID and "
+            f"BCE_SECRET_ACCESS_KEY, or run 'bcecmd -c' to create {path}"
+        )
+    access_key = parser.get("Defaults", "Ak", fallback="").strip()
+    secret_key = parser.get("Defaults", "Sk", fallback="").strip()
+    if not access_key or not secret_key:
+        raise RuntimeError(f"bcecmd credentials file has no complete AK/SK pair: {path}")
+    return access_key, secret_key
