@@ -1,0 +1,29 @@
+schema_version = 3
+
+[source]
+root = "/mnt/bos/datainfra-demo"
+include_paths = [
+  "install_remote_batteries/2026-08-31",
+]
+block = ["test", "tests", "abort", "aborted", "fail", "log", "logs"]
+
+[runtime]
+pfs_root = "/mnt/pfs/swy"
+streaming_root = "/mnt/pfs/swy/dataset/1011/arx5/install_remote_batteries/streaming"
+stage_workers = 16
+conversion_workers = 64
+ready_low_bytes = 128_000_000_000
+ready_high_bytes = 256_000_000_000
+temporary_hard_max_bytes = 2_000_000_000_000
+max_staged_episodes = 128
+min_free_bytes = 5_000_000_000_000
+
+[output]
+lerobot_root = "/mnt/pfs/swy/dataset/1011/arx5/install_remote_batteries/lerobot"
+dataset_name = "install_remote_batteries_2026-08-31_full-v1"
+repo_id = "local/install_remote_batteries_2026-08-31_full-v1"
+
+[recipe]
+name = "pi05-equal-eef-v3"
+profile = "config/conversion.pi05-equal-eef-v3-svt-p8.toml"
+task_source = "metadata.task.description"
