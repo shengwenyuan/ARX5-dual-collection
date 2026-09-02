@@ -57,7 +57,6 @@ def _validate_task_scope(
         raise ValueError("source manifest contains duplicate segment ids")
 
     episode_tasks: dict[str, set[str]] = {}
-    session_tasks: dict[str, set[str]] = {}
     all_tasks: set[str] = set()
     for segment in segments:
         segment_id = str(segment["segment_id"])
@@ -77,15 +76,11 @@ def _validate_task_scope(
         if not isinstance(session_id, str) or not session_id:
             raise ValueError(f"source Session is missing for segment: {segment_id}")
         episode_tasks.setdefault(episode_id, set()).add(task)
-        session_tasks.setdefault(session_id, set()).add(task)
         all_tasks.add(task)
 
     for episode_id, tasks in episode_tasks.items():
         if len(tasks) != 1:
             raise ValueError(f"task mismatch within source Episode: {episode_id}")
-    for session_id, tasks in session_tasks.items():
-        if len(tasks) != 1:
-            raise ValueError(f"task mismatch within source Session: {session_id}")
     if not all_tasks:
         raise ValueError("mixed selection has no task")
     return frozenset(all_tasks)

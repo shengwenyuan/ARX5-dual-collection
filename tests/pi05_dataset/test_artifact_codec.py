@@ -59,6 +59,37 @@ class SelectionArtifactCodecTest(unittest.TestCase):
         self.assertEqual(source_row["collection_type"], "demonstration")
         self.assertEqual(source_row["source_session_id"], "episode-a")
 
+    def test_allows_multiple_tasks_within_source_session(self) -> None:
+        image = MessageRef("/camera", 1, 100, 101)
+        arm_ref = MessageRef("/arm", 2, 100, 102)
+        arm = ArmSample(arm_ref, (0.0,) * 6, 0.0)
+        state = (0.0,) * 14
+        sample = Pi05Sample(0, 100, 7, image, image, image, arm, arm, state, state)
+        segment = Pi05Segment(0, 0, 1, (sample,))
+        selection = DatasetSelection(
+            (
+                EpisodeSelection(
+                    "episode-a", "task A", (sample,), (segment,), source_session_id="shared"
+                ),
+                EpisodeSelection(
+                    "episode-b", "task B", (sample,), (segment,), source_session_id="shared"
+                ),
+            ),
+            (),
+        )
+
+        with tempfile.TemporaryDirectory() as temporary:
+            output = write_selection_artifacts(
+                Path(temporary),
+                selection,
+                Pi05Policy(),
+                GripperCalibration(-1, 0),
+                GripperCalibration(-1, 0),
+            )
+            sources = [json.loads(line) for line in (output / "source_manifest.jsonl").read_text().splitlines()]
+
+        self.assertEqual({row["source_session_id"] for row in sources}, {"shared"})
+
     def test_writes_equal_eef_v2_provenance(self) -> None:
         image = MessageRef("/camera", 1, 100, 101)
         arm_ref = MessageRef("/arm", 2, 100, 102)

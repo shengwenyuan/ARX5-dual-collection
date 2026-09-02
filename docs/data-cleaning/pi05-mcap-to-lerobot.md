@@ -322,7 +322,7 @@ collection 源码，也不得回写 MCAP 或派生数据。
 - `cleaning` 与 `pi05_dataset` 两层代码、四份 JSON schema、`arx5-dataset` CLI 和独立 dataset 镜像已落在 `main` 工作树。
 - w3 独立部署目录为 `/home/lenovo/swy/ARX5-dual-collection-dataset`；原始数据以只读方式挂载，未触碰采集容器和 feat 开发树。
 - `cups_overfit-02`～`cups_overfit-07` 共发现 58 条已提交 Episode；49 条 `success` 进入审计，9 条 `aborted` 未进入训练集。质量分档为 38A/11B，无 C。
-- task 必须原样保留，不做大小写归一化或语义改写。同一 source Episode 的所有 segment、同一采集 Session 的所有 source Episode 必须使用完全一致的 prompt；不同 Session 可以包含不同 task。
+- task 必须原样保留，不做大小写归一化或语义改写。同一 source Episode 的所有 segment 必须使用完全一致的 prompt；同一采集 Session 可以包含多个 task。
 - train/validation 继续按 `source_episode_id` 分组，禁止同一 source Episode 的 segment 跨集合泄漏。
 - 最终数据集已落到 `/home/lenovo/swy/ARX5-dual-collection-dev/reports/w3/2026-08-16/lerobot/local/stacking_five_paper_cups_pi05_v1`，包含 50 个 parquet 和 150 个 AV1 视频。
 - LeRobot 重开验证和固定 commit openpi loader 验证均通过；openpi 输入为三路 `224x224x3` RGB、32 维 padded state、`50x32` action chunk 和有效 prompt。

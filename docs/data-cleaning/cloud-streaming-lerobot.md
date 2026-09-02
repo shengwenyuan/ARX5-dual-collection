@@ -64,7 +64,7 @@ PFS 中转与产物根：/mnt/pfs/swy/
 5. 每个 Worker 只能写自己的临时目录和 Fragment；最终 LeRobot 由单一 Builder 写入。
 6. 原始云端 Episode 永远只读；转换失败不得修改、移动或删除源对象。
 7. 清洗、等 EEF 距离采样、DAgger authority 分类、task 和 gripper 契约完全复用现有实现。
-8. task 原样保留。同一 source Episode 与同一 source Session 的一致性规则不变。
+8. task 原样保留。同一 source Episode 内必须一致；同一 source Session 可以包含多个 task。
 9. train/validation 继续以 `source_episode_id` 为不可拆分组，禁止同源泄漏。
 10. 默认不计算内容 SHA。一次运行内的身份使用规范 source path、文件大小、mtime 和 recipe version。
 11. 白名单决定允许发现的目录边界；黑名单只在该边界内按目录名精确剪枝。
@@ -303,7 +303,7 @@ Builder 是单写者。它等待本次冻结批次的所有 Worker 到达终态�
 
 1. 按 `source_episode_id` 确定性排序。
 2. 校验所有 Fragment 的 fps、features、图像、state/action、filter、gripper 和 sampling contract 完全一致。
-3. 校验 source Episode 内 task 一致、source Session 内 task 一致，task 字符串原样保留。
+3. 校验 source Episode 内 task 一致；source Session 可以包含多个 task，task 字符串原样保留。
 4. 重建全局 episode/frame/video/task 索引，不复制或改写训练语义。
 5. 输出全局 source manifest，保留 Fragment 和派生 LeRobot episode 的映射。
 6. train/validation split 只按 source Episode 分组。
@@ -438,7 +438,7 @@ src/arx5_collection/dataset_cli.py
 - MountedEpisodeSource 的隐藏临时目录、复核、提交与清理行为正确。
 - spawn Worker 不共享 ROS/LeRobot writer 状态。
 - committed/excluded/discarded/failed 的同 run resume 行为幂等。
-- source Session/task 与 split group 规则保持现有语义。
+- source Episode/task 与 split group 规则保持现有语义；source Session 允许多 task。
 - Builder 拒绝任意 recipe/features/fps/gripper 漂移。
 - Builder 成功后删除 run staging/Fragments，并确认最终 manifest 与 discarded report 仍完整；失败时保留 run。
 
@@ -582,13 +582,13 @@ src/arx5_collection/dataset_cli.py
 - 每个 Fragment 先独立复核 `COMMITTED.json`、`fragment.json`、LeRobot `info/episodes/tasks/stats`、Parquet、视频、source manifest 和计数闭合。
 - 全局 LeRobot episode 顺序固定为 selection 顺序，再按 Fragment 内 local episode index 排序；全局 frame/index/task index 确定性重写。
 - Parquet 只重写索引列，不解码或重编码 RGB 视频；视频优先同文件系统 hard-link，无法 hard-link 时复制。最终 snapshot 不依赖 Fragment 生命周期。
-- task 字符串原样合并，允许 snapshot 包含多个 task；同一 source Episode 和同一 source Session 内仍必须唯一一致。`split_group` 必须保持 source Episode ID。
+- task 字符串原样合并，允许 snapshot 和同一 source Session 包含多个 task；同一 source Episode 内仍必须唯一一致。`split_group` 必须保持 source Episode ID。
 - 不同 station 必须使用同一 ARX5 夹爪契约；Builder 必须拒绝 gripper contract/normalization、state/action、采样、相机、fps、颜色、LeRobot/OpenPI commit 等训练契约漂移。
 - 输出在同级隐藏目录完整构建并通过现有 LeRobot validator 后一次 rename 发布；已存在目标拒绝覆盖。
 - 发布成功后才删除本 run 的 staging 与 Fragments；保留 `run.json`、selection/jobs manifest 及最终 source/discarded/snapshot 报告。失败时完整保留 run 供诊断和恢复。
 - 本单位验收使用两个真实 committed Fragment 组装一个 v2.1 snapshot，复核 LeRobot 与 OpenPI loader、task、source lineage、总 episode/frame 数和 Fragment 清理边界。
 - 实现采用文件级 v2.1 backend：Parquet 逐 Episode 重写 `episode_index/index/task_index`，视频优先 hard-link、跨文件系统才复制，不做二次视频编解码；输出始终以隐藏目录构建并原子发布。
-- 本地：`49` 个流式定向测试、全项目 `358 passed / 2 skipped`；覆盖确定性顺序、多 task、同 Session task 冲突、不同 station 标定共存、契约漂移、failed 阻断、既有输出保护和临时路径清理。
+- 本地：`49` 个流式定向测试、全项目 `358 passed / 2 skipped`；覆盖确定性顺序、同 Session 多 task、不同 station 标定共存、契约漂移、failed 阻断、既有输出保护和临时路径清理。
 - 云端：`pi05-cpu` 上 `49` 个定向测试通过。首轮 W3/W4 混合 smoke 正确把一条超出冻结 W3 夹爪标定的数据判为 `discarded/episode_data_contract`，并用另一条 W4 Fragment 成功组装 `1 episode / 2,223 frames`；discarded 汇总与 source lineage 均正确。
 - 最终双 Fragment smoke 使用两条 W4 Episode，源 MCAP 合计 `18,255,438,493 bytes`；并行转换耗时 `618.805 s`，两个 Fragment 分别为 `2,223` 与 `2,146` frames。Builder 耗时 `3.658 s`，输出 `2 episodes / 4,369 frames / 6 videos`。
 - 最终 snapshot 通过 LeRobot v2.1 独立加载，检查帧 `0/2184/4368`、`50 Hz`、action horizon `50` 和原样 task `folding the cloth`；两个 Parquet 的全局 Episode/frame/index/task index 连续，source Episode/session 与 `split_group` 闭合。

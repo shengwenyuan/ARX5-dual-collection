@@ -403,21 +403,16 @@ def _ordered_tasks(descriptors: tuple[FragmentDescriptor, ...]) -> tuple[str, ..
 
 def _validate_task_scope(descriptors: tuple[FragmentDescriptor, ...]) -> None:
     episode_tasks: dict[str, set[str]] = {}
-    session_tasks: dict[str, set[str]] = {}
     for descriptor in descriptors:
         for local_index, episode in enumerate(descriptor.episodes):
             tasks = {_string(value, "episode task") for value in episode["tasks"]}
             source = descriptor.sources[local_index]
             episode_id = _string(source.get("source_episode_id"), "source_episode_id")
-            session_id = _string(source.get("source_session_id"), "source_session_id")
+            _string(source.get("source_session_id"), "source_session_id")
             episode_tasks.setdefault(episode_id, set()).update(tasks)
-            session_tasks.setdefault(session_id, set()).update(tasks)
     for episode_id, tasks in episode_tasks.items():
         if len(tasks) != 1:
             raise ValueError(f"task mismatch within source Episode: {episode_id}")
-    for session_id, tasks in session_tasks.items():
-        if len(tasks) != 1:
-            raise ValueError(f"task mismatch within source Session: {session_id}")
 
 
 def _assemble_v21(

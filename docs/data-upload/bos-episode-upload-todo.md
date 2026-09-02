@@ -113,7 +113,7 @@ min(15, max(1, ceil(valid_episode_count * 0.10)))
 5. 完整因果帧组 coverage `>=95%`，即 cleaning grade A/B；grade C 拒绝。
 6. 等 EEF selector 至少产生一个有效训练 Segment，且能够满足 `action_horizon=50`。
 7. 临时 LeRobot Fragment 通过独立 reopen、shape、task、action、source lineage 和索引闭合校验。
-8. 同一 source Episode、同一 source Session 内 task 一致；不同 Episode/Session 和最终 snapshot 允许多 task。
+8. 同一 source Episode 内 task 一致；同一 source Session 和最终 snapshot 允许保留多个 task。
 
 任一样本失败即阻断整批上传并输出失败证据，等待人工处理；不提供 ENTER 批量迁移或删除，也不能把 90% 未抽样对象宣称为“已深检”。普通 `demonstration + success`、`dagger + success` 和 `dagger_fail` 都支持，并分别复用已有 selector；不得让不同 collection/outcome 共享错误的训练资格判断。
 

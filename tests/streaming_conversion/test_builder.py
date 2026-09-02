@@ -84,23 +84,24 @@ class LeRobotV21BuilderTest(unittest.TestCase):
             b"video-episode-a",
         )
 
-    def test_rejects_task_mismatch_within_source_session(self) -> None:
+    def test_allows_multiple_tasks_within_source_session(self) -> None:
         manifest = self._manifest(
             (("episode-a", "shared-session"), ("episode-b", "shared-session"))
         )
         self._commit(manifest, "episode-a", "shared-session", "task A", "w3")
         self._commit(manifest, "episode-b", "shared-session", "task B", "w4")
 
-        with self.assertRaisesRegex(ValueError, "source Session"):
-            build_lerobot_v21_snapshot(
+        with self._patched_backend():
+            result = build_lerobot_v21_snapshot(
                 manifest,
                 self.output,
                 self.recipe,
                 "local/fold",
             )
 
-        self.assertFalse(self.output.exists())
-        self.assertTrue((manifest.run_dir / "fragments").is_dir())
+        self.assertEqual(result.tasks, ("task A", "task B"))
+        self.assertEqual(result.episode_count, 2)
+        self.assertEqual(_read(self.output / "snapshot.json")["status"], "committed")
 
     def test_rejects_training_contract_drift(self) -> None:
         manifest = self._manifest(

@@ -187,7 +187,7 @@ class SelectionMixingTest(unittest.TestCase):
                     root / "mixed",
                 )
 
-    def test_rejects_task_drift_within_source_session(self) -> None:
+    def test_allows_multiple_tasks_within_source_session(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             demo = make_selection(
@@ -205,11 +205,13 @@ class SelectionMixingTest(unittest.TestCase):
                 session="w3/day/session-a",
             )
 
-            with self.assertRaisesRegex(ValueError, "task mismatch within source Session"):
-                mix_selections(
-                    {"demonstration": demo, "dagger": dagger},
-                    root / "mixed",
-                )
+            output = mix_selections(
+                {"demonstration": demo, "dagger": dagger},
+                root / "mixed",
+            )
+            report = read_json(output / "selection.json")
+
+        self.assertEqual(set(report["tasks"]), {"Task A", "Task B"})
 
 
 if __name__ == "__main__":

@@ -101,7 +101,7 @@ arx5-dataset mix-selections \
 - A 级 Episode 共 13 个 authority 事件、3 次介入，bag anchor spread 为 `78,465 ns`。独立 selection 得到 3 个 segment、994 个训练有效样本；独立 LeRobot 为 3 个 episode / 994 frames，并通过 π0.5 与 OpenPI loader。
 - 使用与 demonstration 完全一致的 v2 配方后，两条 DAgger Episode 的 5 段 correction 均进入完整版 selection。混合结果为 54 个 segment、29,769 个样本索引、27,816 个训练有效样本；来源为 49 条 demonstration Episode 与 2 条 DAgger Episode，不复制数据。
 - selection 混合器已实测拒绝夹爪 tolerance 漂移，也会拒绝 filter、state/action、sampling contract 不一致和重复 sample/segment。
-- task prompt 按局部来源约束：同一 source Episode 内的 segment 必须一致，同一采集 Session 内的多条 Episode 必须一致；不同 Session 可以保留不同 task。
+- task prompt 按 Episode 约束：同一 source Episode 内的 segment 必须一致；同一采集 Session 内的不同 Episode 可以保留不同 task。
 - prompt 字符串原样进入 LeRobot，不做大小写归一化或语义改写。train/validation 仍以 `source_episode_id` 为不可拆分组，避免同源泄漏。
 - 完整混合 LeRobot 已发布到 W3 `/home/lenovo/swy/reports/derived/stacking_five_paper_cups_v2_dagger_mixed_20260820`：54 episodes、27,816 frames、162 个视频、54 个 Parquet，大小约 300 MB；5 个 DAgger correction 对应 LeRobot episode 49–53。
 - 完整数据已通过 π0.5 loader 与固定 OpenPI transform：三路 `224×224×3` RGB、32 维 state、`50×32` action、69 个有效 prompt token。
