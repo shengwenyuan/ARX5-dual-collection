@@ -20,8 +20,10 @@ class TTY(StringIO):
 class SuccessfulClient:
     def __init__(self, target: Path) -> None:
         self.target = target
+        self.created_names: list[str] = []
 
     def create(self, spec, name):
+        self.created_names.append(name)
         episode = self.target / "episode-a"
         episode.mkdir()
         (episode / "episode.mcap").write_bytes(b"mcap")
@@ -50,6 +52,7 @@ class SuccessfulClient:
 
 class DaggerFailClient(SuccessfulClient):
     def create(self, spec, name):
+        self.created_names.append(name)
         episode = self.target / "dagger_fail" / "episode-a"
         episode.mkdir(parents=True)
         (episode / "episode.mcap").write_bytes(b"mcap")
@@ -133,6 +136,7 @@ def test_config_rejects_a_user_materialization_switch(tmp_path: Path) -> None:
 def test_successful_transfer_enters_existing_conversion_boundary(tmp_path: Path) -> None:
     config_path, target = write_config(tmp_path)
     sentinel = object()
+    client = SuccessfulClient(target)
     with patch(
         "arx5_collection.bucketlink_conversion.execute_streaming_config",
         return_value=sentinel,
@@ -141,10 +145,11 @@ def test_successful_transfer_enters_existing_conversion_boundary(tmp_path: Path)
             BucketLinkRunRequest(config_path, tmp_path / "lerobot/output", "run-1", None),
             TTY("\n"),
             TTY(),
-            client=SuccessfulClient(target),
+            client=client,
             report_reader=lambda _: "totalCount: 2\nskippedCount: 0\nfailedCount: 0\n",
         )
     assert result is sentinel
+    assert client.created_names == ["arx5-run-1"]
     assert execute.call_args.args[0].source.materialization == "direct"
     assert (target / "episode-a/episode.mcap").is_file()
 

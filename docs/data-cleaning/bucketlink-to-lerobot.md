@@ -131,6 +131,7 @@ Episode conversion:
 ```
 
 - 同一个 run-id 冻结 BucketLink 请求、batch 与 Episode lineage。
+- 云端 `bucketLinkName` 固定为 `arx5-<run-id>`，保证以字母开头；本地 run-id 不变。
 - 进程重启后查询已有 `bucketLinkId`，ready batch 不重复传输，已提交 Fragment 不重复转换。
 - transfer failed 时不启动该 batch 的转换，并保留 PFS 现场。
 - conversion failed 时保留对应 landing 数据和 Fragment 诊断。

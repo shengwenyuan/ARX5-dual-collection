@@ -41,6 +41,7 @@ def execute_bucketlink_conversion(
     sleep: Callable[[float], None] = time.sleep,
 ) -> StreamingApplicationResult:
     run_id = _run_id(request)
+    bucketlink_name = _bucketlink_name(run_id)
     spec, conversion = load_bucketlink_config(request.config_path)
     run_dir = conversion.runtime.streaming_root / run_id
     journal = conversion.runtime.streaming_root / ".bucketlink" / f"{run_id}.json"
@@ -65,7 +66,7 @@ def execute_bucketlink_conversion(
     api = client or BaiduBucketLinkClient.from_default_credentials(spec.endpoint)
     status = wait_for_bucket_link(
         spec,
-        run_id,
+        bucketlink_name,
         journal,
         api,
         sleep=sleep,
@@ -173,6 +174,13 @@ def _run_id(request: BucketLinkRunRequest) -> str:
     return value
 
 
+def _bucketlink_name(run_id: str) -> str:
+    name = f"arx5-{run_id}"
+    if len(name) > 128:
+        raise ValueError("run identity is too long for the BucketLink name")
+    return name
+
+
 def _render_transfer_alignment(
     spec: BucketLinkSpec,
     config: StreamingConversionConfig,
@@ -182,6 +190,7 @@ def _render_transfer_alignment(
     output_stream.write(
         "ARX5 BucketLink transfer alignment\n"
         f"run_id: {run_id}\n"
+        f"bucketlink_name: {_bucketlink_name(run_id)}\n"
         f"source: bos://{spec.bucket}/{spec.bucket_prefix}\n"
         f"destination: {spec.pfs_path}\n"
         f"mounted_source: {config.source.root / config.source.include_paths[0]}\n"
