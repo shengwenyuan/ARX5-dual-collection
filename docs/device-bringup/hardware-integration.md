@@ -70,7 +70,7 @@
 ## 部署与回滚
 
 - 当前开发副本部署在 `w3-arx5:/home/lenovo/swy/ARX5-dual-collection-dev`，不修改已有 ARX5 目录。
-- 使用 `docker/compose.bringup.yaml` 构建和启动单个 bring-up 容器；容器内管理 `slcand`，停止容器时自动回收 CAN 接口。
+- 使用 `config/runner/compose.bringup.yaml` 构建和启动单个 bring-up 容器；容器内管理 `slcand`，停止容器时自动回收 CAN 接口。
 - 容器启动时检查并按需将 `usbfs_memory_mb` 提高到 `256`；无法满足时立即退出，不写入主机持久配置。
 - 使用独立容器名和项目目录，不覆盖主机已有 Vendor SDK 与用户文件。
 - 只停止和替换本项目创建的容器；删除或修改既有系统服务前必须重新对齐。

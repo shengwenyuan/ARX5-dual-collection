@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-from arx5_collection.episode.ports import RecordingBackend, StreamMonitor
-from arx5_collection.production.ports import SessionArmController, SessionStreamMonitor
-from arx5_collection.ros2_adapters import (
+from arx5_collection.collection.episode.ports import RecordingBackend, StreamMonitor
+from arx5_collection.collection.runtime.ports import (
+    SessionArmController,
+    SessionStreamMonitor,
+)
+from arx5_collection.adapters.ros2 import (
     RosDualArmResetController,
     RosStreamMonitor,
     RosbagRecordingBackend,

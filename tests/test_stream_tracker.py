@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 
-PACKAGE_ROOT = Path(__file__).parents[1] / "ros2_ws/src/arx5_monitoring"
+PACKAGE_ROOT = Path(__file__).parents[1] / "src/ros2/arx5_monitoring"
 sys.path.insert(0, str(PACKAGE_ROOT))
 
 from arx5_monitoring.tracker import StreamTracker  # noqa: E402

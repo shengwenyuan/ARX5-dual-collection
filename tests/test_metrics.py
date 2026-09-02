@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from arx5_collection.metrics import (
+from arx5_collection.common.metrics import (
     finite_scalar,
     finite_vector,
     split_arm_feedback,

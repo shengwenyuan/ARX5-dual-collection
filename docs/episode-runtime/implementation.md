@@ -45,7 +45,7 @@ SDK 调研只影响数据源适配器，不得阻塞 Episode Runtime 主线。
 
 - `main` 负责 SDK、Docker、ROS 2 Source、固定 Topic、消息定义、频率监督和 MCAP Adapter。
 - Episode Runtime 开发分支只负责状态机、Hook、Store、metadata 和 CLI。
-- `main` 不修改 `src/arx5_collection/episode/`；Episode Runtime 分支不修改 SDK、Docker 或 ROS 2 Source。
+- `main` 不修改 `src/arx5_collection/collection/episode/`；Episode Runtime 分支不修改 SDK、Docker 或 ROS 2 Source。
 - Hook 合入后，`main` 在 Episode 包之外实现 `RecordingBackend`、`StreamMonitor` 的 ROS 2 Adapter，不实现或修改 Episode 生命周期。
 
 ### 状态语义
@@ -107,7 +107,7 @@ episodes/
 - `station_config`
 - `streams: list[StreamSpec]`
 
-`task_description` 是采集入口的必填参数。静态 task 配置只包含 `task_id` 与 stream contract；metadata 原样保存入口字符串。upload 只做路由与一致性校验，streaming conversion 和 LeRobot recomposition 均不推断或改写。
+`task_description` 是采集入口的必填参数。静态 task 配置只包含 `task_id` 与 stream contract；metadata 原样保存入口字符串。upload 只做路由与一致性校验，dataset pipeline 和 LeRobot recomposition 均不推断或改写。
 
 ### `StreamSpec`
 
@@ -139,7 +139,7 @@ episodes/
 ## 目录设计
 
 ```text
-src/arx5_collection/episode/
+src/arx5_collection/collection/episode/
   models.py
   ports.py
   runtime.py
@@ -149,10 +149,10 @@ src/arx5_collection/episode/
   adapters/
     keyboard.py
 
-schemas/
+config/specs/schemas/
   episode-metadata-v1.json
 
-tests/episode/
+tests/collection/episode/
   fakes.py
   test_runtime.py
   test_store.py
@@ -259,6 +259,6 @@ main 负责验证 `rosbag2_py + rosbag2_storage_mcap` 与 ROS Stream Monitor：
 - Episode Runtime 开发分支职责内的状态机、Hook、Store、metadata、Keyboard 与 CLI Core 已实现并逐模块验收。
 - 2026-08-16：同步最新 main 后完成全仓 51 个单测与 8 条安装后链路回归；低频 warning 与目录提交失败路径补充通过。
 - 2026-08-16：main 已完成真实 ROS Adapter。Jazzy 容器内连续 10 次录制均生成单一可读 MCAP，50 Hz 数据审计无 warning；停止 telemetry 后 2.107 秒内返回必需流失败，异常 MCAP 正常关闭。
-- Adapter 与冻结 Port 运行时一致，未修改 `src/arx5_collection/episode/`。
+- Adapter 与冻结 Port 运行时一致，未修改 `src/arx5_collection/collection/episode/`。
 - 2026-08-16：控制面与 ROS Adapter 本地合流完成；合并树全仓 82 个测试与 8 条安装后 Episode 链路全部通过。
 - 计划状态保持 `implemented`；`verified` 等待生产组合入口、Docker 整链与真机 90～150 秒验收。

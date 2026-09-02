@@ -28,7 +28,7 @@
 外部入口暂定为：
 
 ```bash
-arx5-dataset stream-to-lerobot \
+arx5-dataset build \
   --config <cloud-conversion.toml> \
   [--output /absolute/lerobot/path]
 ```
@@ -385,7 +385,7 @@ repo_id = "<owner>/<dataset_name>"
 
 [recipe]
 name = "pi05-equal-eef-v3"
-profile = "config/conversion.pi05-equal-eef-v3.toml"
+profile = "../specs/recipes/pi05-equal-eef-v3.toml"
 task_source = "metadata.task.description"
 ```
 
@@ -397,31 +397,49 @@ schema v3 的 low/high 只控制 conversion 前方的 ready buffer；`temporary_
 
 训练 task 逐条原样读取 Episode 的 `metadata.task.description`。目录名和 streaming profile 均不得推断、归一化、翻译或替换任务语义。
 
-未提供 `--output` 时，默认输出为 `<lerobot_root>/<owner>/<dataset_name>_<YYYY-MM-DD>`，有效 repo ID 同步冻结为 `<owner>/<dataset_name>_<YYYY-MM-DD>`，可由 `HF_LEROBOT_HOME=<lerobot_root>` 的训练入口直接定位。`--output` 必须是绝对路径；覆盖时使用其 basename 作为有效 dataset 名。默认路径或覆盖路径已存在时直接拒绝，不自动覆盖、合并或添加随机后缀。recipe `profile` 的相对路径以执行命令时的主仓库根目录为基准解析，因此命令必须从对应仓库根目录运行。
+未提供 `--output` 时，默认输出为 `<lerobot_root>/<owner>/<dataset_name>_<YYYY-MM-DD>`，有效 repo ID 同步冻结为 `<owner>/<dataset_name>_<YYYY-MM-DD>`，可由 `HF_LEROBOT_HOME=<lerobot_root>` 的训练入口直接定位。`--output` 必须是绝对路径；覆盖时使用其 basename 作为有效 dataset 名。默认路径或覆盖路径已存在时直接拒绝，不自动覆盖、合并或添加随机后缀。recipe `profile` 的相对路径以 dataset pipeline config 所在目录为基准解析。
 
 ## 代码边界
 
-计划新增：
+当前实现：
 
 ```text
-src/arx5_collection/streaming_conversion/
-  models.py          # EpisodeCandidate、Job、Receipt、Result、FragmentManifest
-  config.py          # TOML profile 与资源限额
-  source.py          # EpisodeSource Port、MountedEpisodeSource
-  discovery.py       # 白名单、block、Episode 边界和重复身份检查
-  alignment.py       # 只读摘要、ENTER 闸门、selection manifest 冻结
-  worker.py          # convert_episode_fragment()
-  fragment.py        # Fragment 验证和原子提交
-  coordinator.py     # spawn pool、背压、resume、唯一 manifest writer
-  builder.py         # 当前 run 的 committed Fragments -> 完整 LeRobot
+src/arx5_collection/dataset_pipeline/
+  application.py
+  cli.py
+  configuration/
+    run.py
+    recipe.py
+  execution/
+    confirmation.py
+    coordinator.py
+    episode_pipeline.py
+    models.py
+    unit_runtime.py
+    worker.py
+  source/
+    discovery.py
+    models.py
+    reader.py
+    staging.py
+  persistence/
+    artifacts.py
+    atomic.py
+    fragment.py
+    manifest.py
+  mining_stage/
+    episode_sanitycheck/
+    action_mining/
+    dataset_generator/
 
-src/arx5_collection/dataset_cli.py
-  # 只新增 stream-to-lerobot 参数解析和 application wiring
+config/specs/
+  recipes/
+  schemas/
 ```
 
-不得创建一个同时包含挂载访问、MCAP、selector、LeRobot 和进程池逻辑的“大类”。Source 层只认识 Episode 文件，转换层只认识暂存 Episode 目录，Builder 只认识当前 run 的 committed Fragment。
+包根目录只保留公共入口。`configuration` 解析运行配置和 recipe，`execution` 编排三阶段 Unit，`source` 负责 Episode 发现、读取与暂存，`persistence` 负责运行状态和派生产物，三个业务 Stage 统一位于 `mining_stage`。不得创建一个同时包含挂载访问、MCAP、selector、LeRobot 和进程池逻辑的“大类”。Source 层只认识 Episode 文件，转换层只认识暂存 Episode 目录，Dataset Generator 只认识当前 run 的 committed Fragment。
 
-流式 discovery 可以迁移或复制 `tools/summarize_episode_duration.py` 的简短遍历逻辑，但由流式模块独立维护；两个入口距离较远，不为消除少量重复而强行增加公共抽象。两处都保持 `metadata.json + episode.mcap` Episode 边界和目录名精确 block 语义。
+Episode 时长遍历统一由 `arx5_collection.collection.episode.duration` 提供，BOS 和诊断脚本复用同一实现。流式 discovery 仍独立维护自己的冻结集合语义，两者都保持 `metadata.json + episode.mcap` Episode 边界和目录名精确 block 语义。
 
 ## 测试与验收
 
@@ -479,7 +497,7 @@ src/arx5_collection/dataset_cli.py
 5. 实现 MountedEpisodeSource、单 Worker、PFS staging 和 Fragment 原子提交。
 6. 引入 spawn ProcessPool、背压和 resume manifest。
 7. 验证官方 LeRobot v2.1 格式，确定 pinned merge API 或项目自有 v2.1 Builder backend。
-8. 实现批次 Builder 与 end-to-end `stream-to-lerobot`。
+8. 实现批次 Builder 与 end-to-end `build`。
 9. 依次完成本地 fixture、`pi05-cpu` 3 Episode、百 Episode和千 Episode验收。
 10. 验证成功清理、失败恢复与同日输出路径冲突保护。
 11. 验收结论回写本文件，不在通过前替换现有批量转换入口。
@@ -529,8 +547,11 @@ src/arx5_collection/dataset_cli.py
 
 本单位先冻结 Worker 将要复用的转换参数，不实现 Worker、Fragment 或 Builder：
 
-- `pi05-equal-eef-v3` conversion recipe 显式记录 cleaning、等 EEF 采样、`arx5-gripper-v1` 与 LeRobot v2.1 backend；station 仅保留来源身份。
-- 流式 profile 的 `recipe.name` 必须与 conversion recipe 一致；`recipe.task_source` 固定为 `metadata.task.description`。
+- `pi05-equal-eef-v3` dataset pipeline recipe 显式记录 cleaning、等 EEF 采样、`arx5-gripper-v1` 与 LeRobot v2.1 backend；station 仅保留来源身份。
+- 共享 recipe 位于 `config/specs/recipes/`，streaming profile 使用相对 `config/dataset_pipeline` 文件的路径；`builtin:<name>` 也只解析到该外层目录，不包含源码内置副本。
+- `stages.<stage>.units` 是 unit 启用、顺序和参数的唯一事实来源；代码 registry 只声明 unit 实现能力，不维护必选清单或默认执行序列。
+- Recipe 缺少某个 consumer 所需的上游产物时直接失败，不自动插入 unit、不回退旧实现。
+- 流式 profile 的 `recipe.name` 必须与 dataset pipeline recipe 一致；`recipe.task_source` 固定为 `metadata.task.description`。
 - recipe loader 使用严格 schema 和字段集合，拒绝未知字段、缺字段和隐式版本升级。
 - Worker 从 Episode metadata 读取 `station.id` 作为来源信息；W3/W4 和未来 station 均使用设备固定的 `arx5-gripper-v1`。
 - DAgger selector 接受 `outcome=success`，以及已被 authority classifier 判定有效的 `outcome=fail`；两者都只选择完整闭合的 expert correction。
@@ -543,7 +564,7 @@ src/arx5_collection/dataset_cli.py
 
 本单位实现 Worker 的唯一业务函数，不实现进程池、调度循环或最终 Builder：
 
-- 输入固定为一个已验证 `StageReceipt`、一个 pinned conversion recipe、原样 task、Fragment 目标与合法 repo ID。
+- 输入固定为一个已验证 `StageReceipt`、一个 pinned dataset pipeline recipe、原样 task、Fragment 目标与合法 repo ID。
 - 函数只组合现有 `clean_episode`、DAgger authority classifier、普通/DAgger equal-EEF selector、v2.1 exporter 和 validator；不复制任何 MCAP、配组、action、gripper、图像或 authority 算法。
 - demonstration 使用普通 selector；DAgger success/fail 使用 DAgger selector；DAgger fail 还必须来自 `dagger_fail/` 标记路径。普通 fail/aborted 与 DAgger aborted 返回 `excluded`，不创建空 Fragment。
 - 所有工作先发生在 Fragment 目标同级隐藏目录。只有 selection 非空、v2.1 export 和 validator 全部通过后，才写 `fragment.json`、最后写 `COMMITTED.json` 并一次 rename 发布。
@@ -599,14 +620,14 @@ src/arx5_collection/dataset_cli.py
 
 本单位只连接已经验收的组件，不向 CLI 搬运发现、Worker、Builder 或状态机业务逻辑：
 
-- 新命令为 `arx5-dataset stream-to-lerobot --config <profile>`；可选 `--output <absolute-path>` 与 `--run-id <id>` 只覆盖运行身份和最终位置。
+- 新命令为 `arx5-dataset build --config <profile>`；可选 `--output <absolute-path>` 与 `--run-id <id>` 只覆盖运行身份和最终位置。
 - 恢复使用 `--resume <run-id>`，只读取该 run 已冻结的 selection；不重新 discovery、不再次等待 ENTER。`--retry-failed` 只能与 resume 同用，并显式把本 run 全部 failed job 提升到新 attempt。
 - 新 run 固定顺序为：加载并交叉校验 streaming/recipe profile → 只读 discovery → 输出 alignment → ENTER → 原子创建 manifest → Coordinator → Builder → 输出单个结构化摘要。
 - resume 必须校验 config 的 source/streaming root、workers、recipe name/profile/task 与 `run.json` 一致；`--output` 不得改写既有 run 的冻结目标。
-- CLI handler 只负责 argparse、标准输入输出和取消退出码；应用编排位于独立 `streaming_conversion/application.py`。
+- CLI handler 只负责 argparse、标准输入输出和取消退出码；应用编排位于独立 `dataset_pipeline/application.py`。
 - 本地使用依赖注入测试 ENTER 前无副作用、new run、resume、显式 retry 和参数冲突；云端使用两条小批 Episode 完成命令级端到端，仍只读 BOS。
 - 默认输出与训练路径统一为 `<lerobot_root>/<owner>/<dataset_name>_<date>`，有效 repo ID 同名写入 run schema `2`。绝对 output override 使用其 basename，避免目录名与 LeRobot repo ID 分离。
-- 提供 `config/streaming.fold-cloth.example.toml`；用户只需复制后编辑白名单、block 与 workers。recipe 相对路径以执行命令时的主仓库根目录解析。
+- 从 `config/dataset_pipeline/streaming.*.toml` 中复制最接近的现有方案；用户只需编辑白名单、block 与 workers。recipe 相对路径以该 config 文件目录解析。
 - 本地：`59` 个 streaming/CLI 测试及全项目 `365 passed / 2 skipped`；覆盖 ENTER 前无副作用、自动日期 repo、显式 output/run-id、resume 不重新 discovery、failed 显式 retry、冻结配置漂移、路径逃逸和 CLI 参数互斥。
 - 云端：`pi05-cpu` 上 `59` 个定向测试通过。真实 CLI 展示并确认 `2 Episodes / 9,247,178,168 MCAP bytes / 2 workers` 后才创建 run；立即输出冻结 run/output/repo ID。
 - 命令级结果为 `1 committed + 1 quality exclusion -> 1 LeRobot episode / 2,223 frames`；最终 repo ID 为 `local/unit8_cli_smoke_2026-08-26`，validation 报告引用最终路径，run schema `2` 与 source/session lineage 正确，staging/Fragments 均已释放。
@@ -629,15 +650,15 @@ src/arx5_collection/dataset_cli.py
 ```bash
 cd /root/workspace/ARX5-dual-collection
 source /opt/ros/jazzy/setup.bash
-source ros2_ws/install/setup.bash
+source /opt/collection_ws/install/setup.bash
 export PYTHONPATH="$PWD/src:${PYTHONPATH:-}"
 
-cp config/streaming.fold-cloth.example.toml /tmp/fold-cloth.toml
+cp config/dataset_pipeline/streaming.fold-cloth-2026-08-28-full-v1.toml /tmp/fold-cloth.toml
 # 编辑 include_paths / block / schema v2 runtime 参数
-arx5-dataset stream-to-lerobot --config /tmp/fold-cloth.toml
+arx5-dataset build --config /tmp/fold-cloth.toml
 
 # 中断恢复；只有确需重试 failed 时才追加 --retry-failed
-arx5-dataset stream-to-lerobot \
+arx5-dataset build \
   --config /tmp/fold-cloth.toml \
   --resume <run-id>
 ```

@@ -1,0 +1,3 @@
+schema_version = 1
+authority_topic = "/dagger/authority"
+authority_message_type = "arx5_collection_interfaces/msg/AuthorityEvent"

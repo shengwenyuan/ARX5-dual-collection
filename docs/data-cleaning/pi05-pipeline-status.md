@@ -69,51 +69,51 @@
 
 行为保持型结构重构已经完成：集中 Artifact TypedDict 与 `MessageRef` codec；拆分 selection pipeline 和 artifact codec；集中 OpenPI 模型契约；CLI 使用显式 handler；统一目录发布的原子可见语义。
 
-当前实现入口为 `pi05_dataset.eef_selection.build_equal_eef_samples` 和 CLI `select-pi05-eef`。v1 的固定 50 Hz `select-pi05` 保留，不改变已有复现路径。
+当前实现入口为 `arx5_collection.dataset_pipeline.mining_stage.action_mining.equal_eef_action_sampler.build_equal_eef_samples` 和 CLI `select-pi05-eef`。v1 的固定 50 Hz `select-pi05` 保留，不改变已有复现路径。
 
 ## 功能状态表
 
 | 层级 | 功能 | 状态 | 当前规则/输出 | 主要实现入口 | 规则来源 |
 |---|---|---:|---|---|---|
-| 输入发现 | 发现已原子提交的 Episode | enabled | 必须同时存在 `episode.mcap` 与 `metadata.json`；Episode ID 不允许重复 | `pi05_dataset.discovery.discover_episode_dirs` | 项目数据契约 |
-| DAgger 分类 | authority 与 metadata 双记录校验 | verified | 固定五类半开区间；只有完整 expert correction 可训练 | `dagger_dataset.classifier.classify_authority` | `dagger-authority-v1` |
-| DAgger 选择 | correction 独立运行 v2 selector | verified | 无 pre/post roll；不跨 intervention；保留 source manifest | `dagger_dataset.selection.select_equal_eef_dagger_dataset` | DAgger 数据契约 |
-| 数据混合 | demonstration + correction selection | verified | 不复制样本；权重只记录、尚未应用 | `pi05_dataset.mixing.mix_selections` | 当前首版决策 |
-| MCAP Reader | 必需流和消息类型校验 | enabled | 三相机 RGB/Depth 六路 + 双臂状态两路，共八路 | `cleaning.reader.read_episode_scan` | 项目适配 |
-| MCAP Reader | Header 与 bag time 留档 | enabled | 选择逻辑使用 `header_stamp_ns`；`bag_timestamp_ns` 仅用于来源引用和一致性校验 | `cleaning.models.MessageRef` | 当前 v1 决策 |
-| 数值检查 | ArmState 有限值和维度检查 | enabled | 六关节；含 NaN/Inf 的状态不进入可用 ArmSample | `cleaning.reader.read_episode_scan`、`cleaning.models.ArmSample` | 项目质量门槛 |
-| 时间审计 | 单流 Header 时间线统计 | enabled | count、首末时间、最大正 gap、重复和逆序 | `cleaning.timeline.audit_timeline` | 项目质量门槛 |
-| 相机配对 | 同机 RGB/Depth 配对 | enabled | `header_stamp_ns` 必须完全相同；不插值、不补帧 | `cleaning.pairing._pair_same_camera` | 项目适配 |
-| 相机配组 | 三相机完整帧组 | enabled | overview 为锚点；左右腕相机最近帧；容差 `±16.7 ms` | `cleaning.pairing._nearest_pair`、`build_frame_groups` | 项目适配 |
-| 状态配组 | observation 对应双臂状态 | enabled | 选择 Header cutoff 前最新状态；最大 age `2 ms` | `cleaning.pairing._latest_arm` | 项目适配 |
-| 质量报告 | A/B/C 分级 | enabled | A：coverage≥99%；B：coverage≥95%；否则 C；时间异常可降为 B | `cleaning.pipeline.inspect_episode` | 项目质量策略 |
-| 通用索引 | 清洗产物原子写入 | enabled | 每个源 Episode 输出 `quality.json + frame_index.jsonl`；不修改 MCAP | `cleaning.store.write_cleaning_artifacts` | 项目数据契约 |
-| 训练资格 | outcome 和质量筛选 | enabled | 只训练 `success`；排除 C；A/B 可进入 | `pi05_dataset.selection_pipeline.select_dataset` | OpenPI/DROID 方向 + 项目门槛 |
+| 输入发现 | 发现已原子提交的 Episode | enabled | 必须同时存在 `episode.mcap` 与 `metadata.json`；Episode ID 不允许重复 | `arx5_collection.dataset_pipeline.mining_stage.dataset_generator.lerobot_fragment_generator.discovery.discover_episode_dirs` | 项目数据契约 |
+| DAgger 分类 | authority 与 metadata 双记录校验 | verified | 固定五类半开区间；只有完整 expert correction 可训练 | `arx5_collection.dataset_pipeline.mining_stage.action_mining.dagger_authority.classifier.classify_authority` | `dagger-authority-v1` |
+| DAgger 选择 | correction 独立运行 v2 selector | verified | 无 pre/post roll；不跨 intervention；保留 source manifest | `arx5_collection.dataset_pipeline.mining_stage.action_mining.dagger_authority.run` | DAgger 数据契约 |
+| 数据混合 | demonstration + correction selection | verified | 不复制样本；权重只记录、尚未应用 | `arx5_collection.dataset_pipeline.mining_stage.dataset_generator.lerobot_dataset_merge.run` | 当前首版决策 |
+| MCAP Reader | 必需流和消息类型校验 | enabled | 三相机 RGB/Depth 六路 + 双臂状态两路，共八路 | `arx5_collection.dataset_pipeline.source.reader.read_episode_scan` | 项目适配 |
+| MCAP Reader | Header 与 bag time 留档 | enabled | 选择逻辑使用 `header_stamp_ns`；`bag_timestamp_ns` 仅用于来源引用和一致性校验 | `arx5_collection.dataset_pipeline.source.models.MessageRef` | 当前 v1 决策 |
+| 数值检查 | ArmState 有限值和维度检查 | enabled | 六关节；含 NaN/Inf 的状态不进入可用 ArmSample | `arx5_collection.dataset_pipeline.source.reader.read_episode_scan`、`arx5_collection.dataset_pipeline.source.models.ArmSample` | 项目质量门槛 |
+| 时间审计 | 单流 Header 时间线统计 | enabled | count、首末时间、最大正 gap、重复和逆序 | `arx5_collection.dataset_pipeline.mining_stage.episode_sanitycheck.timeline_check.audit_timeline` | 项目质量门槛 |
+| 相机配对 | 同机 RGB/Depth 配对 | enabled | `header_stamp_ns` 必须完全相同；不插值、不补帧 | `arx5_collection.dataset_pipeline.mining_stage.episode_sanitycheck.frame_alignment._pair_same_camera` | 项目适配 |
+| 相机配组 | 三相机完整帧组 | enabled | overview 为锚点；左右腕相机最近帧；容差 `±16.7 ms` | `arx5_collection.dataset_pipeline.mining_stage.episode_sanitycheck.frame_alignment._nearest_pair`、`build_frame_groups` | 项目适配 |
+| 状态配组 | observation 对应双臂状态 | enabled | 选择 Header cutoff 前最新状态；最大 age `2 ms` | `arx5_collection.dataset_pipeline.mining_stage.episode_sanitycheck.frame_alignment._latest_arm` | 项目适配 |
+| 质量报告 | A/B/C 分级 | enabled | A：coverage≥99%；B：coverage≥95%；否则 C；时间异常可降为 B | `arx5_collection.dataset_pipeline.mining_stage.episode_sanitycheck.alignment_report.run` | 项目质量策略 |
+| 通用索引 | 清洗产物原子写入 | enabled | 每个源 Episode 输出 `quality.json + frame_index.jsonl`；不修改 MCAP | `arx5_collection.dataset_pipeline.mining_stage.episode_sanitycheck.alignment_report.write_cleaning_artifacts` | 项目数据契约 |
+| 训练资格 | outcome 和质量筛选 | enabled | 只训练 `success`；排除 C；A/B 可进入 | `arx5_collection.dataset_pipeline.mining_stage.action_mining.episode_filter.run` | OpenPI/DROID 方向 + 项目门槛 |
 | 训练资格 | Episode 长度限制 | enabled | 最大 `180 s` | `Pi05Policy.max_episode_duration_s` | 项目参数 |
-| 50 Hz sample | Header-based 因果采样 | enabled | 每 20 ms 选择 `observation_cutoff_ns <= tick` 的最新帧组 | `pi05_dataset.selection.build_samples` | π0.5 频率适配 + 项目时序策略 |
+| 50 Hz sample | Header-based 因果采样 | enabled | 每 20 ms 选择 `observation_cutoff_ns <= tick` 的最新帧组 | `arx5_collection.dataset_pipeline.mining_stage.action_mining.motion_segmenter.build_samples` | π0.5 频率适配 + 项目时序策略 |
 | 50 Hz sample | 图像 age 限制 | enabled | 最大 `40 ms`；约 30 Hz 图像可被相邻 50 Hz tick 复用 | `Pi05Policy.image_max_age_ns` | 项目参数 |
-| 50 Hz sample | 双臂状态选择 | enabled | tick 前最新状态；最大 Header age `2 ms`；不插值 | `pi05_dataset.selection._latest_arm` | 项目参数 |
-| 等 EEF 位移 sample | 双臂空间触发 | pending | `max(left,right) >= 5 mm`；端点欧氏距离；真实 Header tick | `pi05_dataset.eef_selection.build_equal_eef_samples` | 已实现、待正式数据验收 |
+| 50 Hz sample | 双臂状态选择 | enabled | tick 前最新状态；最大 Header age `2 ms`；不插值 | `arx5_collection.dataset_pipeline.mining_stage.action_mining.motion_segmenter._latest_arm` | 项目参数 |
+| 等 EEF 位移 sample | 双臂空间触发 | pending | `max(left,right) >= 5 mm`；端点欧氏距离；真实 Header tick | `arx5_collection.dataset_pipeline.mining_stage.action_mining.equal_eef_action_sampler.build_equal_eef_samples` | 已实现、待正式数据验收 |
 | 等 EEF 位移 sample | 夹爪/时间触发 | pending | 归一化夹爪变化 `>=0.02`；最大间隔 `100 ms` | `EqualEefPolicy` | 已实现、待正式数据验收 |
-| 等 EEF 位移 sample | 完整帧组反向关联 | pending | 最新 `observation_cutoff_ns <= tick_ns`；image age `<=40 ms` | `eef_selection._latest_frame_group` | 已实现、待正式数据验收 |
-| 状态构造 | 14 维 joint state | enabled | `[left J1..J6, left gripper, right J1..J6, right gripper]` | `pi05_dataset.actions.make_state` | OpenPI ARX/Aloha 适配 |
-| 夹爪构造 | raw 到 `[0,1]` | enabled | `arx5-gripper-v1`：`-3.4=open, 0=closed`；容差内 clamp，明显越界报错 | `arx5_collection.gripper` | OpenPI 表达 + ARX5 设备契约 |
-| 动作构造 | measured-position proxy | enabled | 当前无 command Topic，使用 `action[t] = state[t]` | `pi05_dataset.selection.build_samples` | 项目示教适配 |
-| Idle 清洗 | 长 idle 删除 | enabled | 相邻 14 维 action 每维变化均 `<1e-3` 视为 idle；连续至少 24 帧删除 | `pi05_dataset.selection.select_nonidle_segments` | OpenPI DROID 时间尺度适配 |
+| 等 EEF 位移 sample | 完整帧组反向关联 | pending | 最新 `observation_cutoff_ns <= tick_ns`；image age `<=40 ms` | `arx5_collection.dataset_pipeline.mining_stage.action_mining.equal_eef_action_sampler._latest_frame_group` | 已实现、待正式数据验收 |
+| 状态构造 | 14 维 joint state | enabled | `[left J1..J6, left gripper, right J1..J6, right gripper]` | `arx5_collection.dataset_pipeline.mining_stage.action_mining.utils.make_state` | OpenPI ARX/Aloha 适配 |
+| 夹爪构造 | raw 到 `[0,1]` | enabled | `arx5-gripper-v1`：`-3.4=open, 0=closed`；容差内 clamp，明显越界报错 | `arx5_collection.common.gripper` | OpenPI 表达 + ARX5 设备契约 |
+| 动作构造 | measured-position proxy | enabled | 当前无 command Topic，使用 `action[t] = state[t]` | `arx5_collection.dataset_pipeline.mining_stage.action_mining.motion_segmenter.build_samples` | 项目示教适配 |
+| Idle 清洗 | 长 idle 删除 | enabled | 相邻 14 维 action 每维变化均 `<1e-3` 视为 idle；连续至少 24 帧删除 | `arx5_collection.dataset_pipeline.mining_stage.action_mining.motion_segmenter.select_nonidle_segments` | OpenPI DROID 时间尺度适配 |
 | 片段筛选 | 短运动和尾部裁剪 | enabled | 运动段至少 54 帧；每段末尾裁 34 帧 | `select_nonidle_segments` | OpenPI DROID 时间尺度适配 |
-| 片段索引 | 来源与训练资格记录 | enabled | 输出 `sample_index.jsonl`、`segments.jsonl`、`selection.json` | `pi05_dataset.artifact_codec.write_selection_artifacts` | 项目可追溯契约 |
-| RGB 读取 | RGB8 + 历史 YUYV | enabled | 新 RGB8 原样读取；历史 YUYV 以 BT.601 limited-range 解码；导出 `640x360` RGB | `pi05_dataset.images.decode_color_message`、`extract_selected_rgb` | 项目相机适配 |
-| LeRobot | 三相机 video dataset | verified | `cam_high`、左右 wrist、14 维 state/action、task、50 Hz | `pi05_dataset.lerobot_contract`、`exporter.export_lerobot` | LeRobot 交付契约 |
-| LeRobot | segment 到 episode | verified | 每个连续有效 segment 单独调用一次 `save_episode()` | `pi05_dataset.exporter.export_lerobot` | 保持时间连续性 |
+| 片段索引 | 来源与训练资格记录 | enabled | 输出 `sample_index.jsonl`、`segments.jsonl`、`selection.json` | `arx5_collection.dataset_pipeline.mining_stage.action_mining.trajectory_labeler.write_selection_artifacts` | 项目可追溯契约 |
+| RGB 读取 | RGB8 + 历史 YUYV | enabled | 新 RGB8 原样读取；历史 YUYV 以 BT.601 limited-range 解码；导出 `640x360` RGB | `arx5_collection.dataset_pipeline.mining_stage.dataset_generator.lerobot_fragment_generator.images.decode_color_message`、`extract_selected_rgb` | 项目相机适配 |
+| LeRobot | 三相机 video dataset | verified | `cam_high`、左右 wrist、14 维 state/action、task、50 Hz | `arx5_collection.dataset_pipeline.mining_stage.dataset_generator.utils`、`lerobot_fragment_generator.run` | LeRobot 交付契约 |
+| LeRobot | segment 到 episode | verified | 每个连续有效 segment 单独调用一次 `save_episode()` | `arx5_collection.dataset_pipeline.mining_stage.dataset_generator.lerobot_fragment_generator.run` | 保持时间连续性 |
 | 模型交接 | immutable snapshot | enabled | 只交付 LeRobot dataset 与 conversion report | `validate-pi05` | `pi05_jax_safeinfer` 消费 |
 
 ## 契约与模块边界
 
 | 边界 | 内容 | 实现 |
 |---|---|---|
-| 数据 Artifact 契约 | JSON/JSONL 字段、`MessageRef` codec、TypedDict、schema version | `arx5_collection.artifacts`、`pi05_dataset.artifact_codec`、`schemas/` |
-| Selection pipeline | success/质量筛选、采样、状态构造、idle 和 segment | `pi05_dataset.selection`、`selection_pipeline` |
-| LeRobot 数据契约 | 相机 key、joint 顺序、名义 fps、action horizon、固定 LeRobot 版本 | `pi05_dataset.lerobot_contract` |
+| 数据 Artifact 契约 | JSON/JSONL 字段、`MessageRef` codec、TypedDict、schema version | `arx5_collection.dataset_pipeline.persistence.artifacts`、`action_mining.trajectory_labeler`、`dataset_pipeline/schemas` |
+| Selection pipeline | success/质量筛选、采样、状态构造、idle 和 segment | `arx5_collection.dataset_pipeline.mining_stage.action_mining.motion_segmenter`、`action_mining.registry` |
+| LeRobot 数据契约 | 相机 key、joint 顺序、名义 fps、action horizon、固定 LeRobot 版本 | `arx5_collection.dataset_pipeline.mining_stage.dataset_generator.utils` |
 
 `manifest.py` 仅保留兼容导出，不再包含 pipeline 或 codec 实现。CLI 子命令通过 `set_defaults(handler=...)` 显式分发，`main()` 不包含业务分支。
 

@@ -2,13 +2,13 @@ from pathlib import Path
 
 import pytest
 
-from arx5_collection.bos2pfs import BucketLinkCreated
-from arx5_collection.bos2pfs import BucketLinkSpec
-from arx5_collection.bos2pfs import BucketLinkStatus
-from arx5_collection.bos2pfs import _load_bce_credentials
-from arx5_collection.bos2pfs import mounted_report_path
-from arx5_collection.bos2pfs import validate_report
-from arx5_collection.bos2pfs import wait_for_bucket_link
+from arx5_collection.adapters.bos.bucketlink import BucketLinkCreated
+from arx5_collection.adapters.bos.bucketlink import BucketLinkSpec
+from arx5_collection.adapters.bos.bucketlink import BucketLinkStatus
+from arx5_collection.adapters.bos.bucketlink import _load_bce_credentials
+from arx5_collection.adapters.bos.bucketlink import mounted_report_path
+from arx5_collection.adapters.bos.bucketlink import validate_report
+from arx5_collection.adapters.bos.bucketlink import wait_for_bucket_link
 
 
 class FakeClient:
@@ -38,7 +38,9 @@ def spec(tmp_path: Path) -> BucketLinkSpec:
     )
 
 
-def test_wait_persists_identity_and_resumes_without_duplicate_create(tmp_path: Path) -> None:
+def test_wait_persists_identity_and_resumes_without_duplicate_create(
+    tmp_path: Path,
+) -> None:
     journal = tmp_path / "state.json"
     first = FakeClient(
         [
@@ -52,7 +54,9 @@ def test_wait_persists_identity_and_resumes_without_duplicate_create(tmp_path: P
             ),
         ]
     )
-    result = wait_for_bucket_link(spec(tmp_path), "run-1", journal, first, sleep=lambda _: None)
+    result = wait_for_bucket_link(
+        spec(tmp_path), "run-1", journal, first, sleep=lambda _: None
+    )
     assert result.status == 2
     assert first.created == 1
 
@@ -82,7 +86,11 @@ def test_failed_transfer_and_report_never_pass_the_gate(tmp_path: Path) -> None:
     client = FakeClient([BucketLinkStatus(3, error="permission denied")])
     with pytest.raises(RuntimeError, match="permission denied"):
         wait_for_bucket_link(
-            spec(tmp_path), "run-1", tmp_path / "state.json", client, sleep=lambda _: None
+            spec(tmp_path),
+            "run-1",
+            tmp_path / "state.json",
+            client,
+            sleep=lambda _: None,
         )
     with pytest.raises(RuntimeError, match="2 failed files"):
         validate_report("totalCount: 3\nskippedCount: 0\nfailedCount: 2\n")
@@ -102,7 +110,11 @@ def test_success_rejects_server_side_request_drift(tmp_path: Path) -> None:
     )
     with pytest.raises(RuntimeError, match="source differs"):
         wait_for_bucket_link(
-            spec(tmp_path), "run-1", tmp_path / "state.json", client, sleep=lambda _: None
+            spec(tmp_path),
+            "run-1",
+            tmp_path / "state.json",
+            client,
+            sleep=lambda _: None,
         )
 
 

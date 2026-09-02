@@ -60,7 +60,7 @@ RUN mkdir -p /opt/vendor/librealsense \
     && cmake --build /opt/vendor/librealsense/build --parallel \
     && cmake --install /opt/vendor/librealsense/build
 
-COPY docker/vendor/v2_joint_control.yaml /tmp/v2_joint_control.yaml
+COPY config/environment/v2_joint_control.yaml /tmp/v2_joint_control.yaml
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends git \
@@ -85,7 +85,7 @@ RUN apt-get update \
     && cd /opt/arx_ws \
     && colcon build --merge-install --cmake-args -DCMAKE_BUILD_TYPE=Release
 
-COPY ros2_ws/src/ /opt/collection_ws/src/
+COPY src/ros2/ /opt/collection_ws/src/
 
 RUN source "/opt/ros/${ROS_DISTRO}/setup.bash" \
     && source /opt/arx_ws/install/setup.bash \
@@ -131,7 +131,8 @@ ENV AMENT_PREFIX_PATH="/opt/collection_ws/install:/opt/arx_ws/install" \
     PATH="/opt/collection_ws/install/bin:/opt/arx_ws/install/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
     PYTHONPATH="/opt/collection_ws/install/lib/python3.12/site-packages:/opt/arx_ws/install/lib/python3.12/site-packages:/opt/arx5-runtime/src:/usr/local/OFF" \
     RMW_IMPLEMENTATION="rmw_fastrtps_cpp" \
-    FASTDDS_DEFAULT_PROFILES_FILE="/opt/arx5-dual-collection/config/fastdds-shm.xml"
+    FASTDDS_DEFAULT_PROFILES_FILE="/opt/arx5-dual-collection/config/environment/fastdds-shm.xml" \
+    ARX5_CONFIG_ROOT="/opt/arx5-dual-collection/config"
 
 WORKDIR /workspace
 
@@ -144,7 +145,7 @@ LABEL org.opencontainers.image.revision="${SOURCE_REVISION}" \
 
 COPY src/ /opt/arx5-runtime/src/
 COPY pyproject.toml /opt/arx5-runtime/pyproject.toml
-COPY config/fastdds-shm.xml /opt/arx5-dual-collection/config/fastdds-shm.xml
+COPY config/ /opt/arx5-dual-collection/config/
 COPY scripts/ /opt/arx5-dual-collection/scripts/
 
 RUN python3 -m pip install \
@@ -154,7 +155,7 @@ RUN python3 -m pip install \
         /opt/arx5-runtime
 
 FROM runtime-base AS bringup
-ENTRYPOINT ["/opt/arx5-dual-collection/scripts/can_daemon.sh"]
+ENTRYPOINT ["/opt/arx5-dual-collection/scripts/adapters/can_daemon.sh"]
 
 FROM runtime-base AS production
 ENTRYPOINT ["/ros_entrypoint.sh"]

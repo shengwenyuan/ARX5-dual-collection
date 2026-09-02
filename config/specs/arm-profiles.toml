@@ -1,0 +1,15 @@
+schema_version = 1
+
+[profiles.teaching]
+controller_launch = "/opt/arx_ws/install/share/arx_x5_controller/launch/x5_v2/v2_collect.launch.py"
+left_controller_name = "arm_master_l"
+right_controller_name = "arm_master_r"
+left_input_topic = "/arm_master_l_status"
+right_input_topic = "/arm_master_r_status"
+
+[profiles.dagger]
+controller_launch = "/opt/arx_ws/install/share/arx_x5_controller/launch/x5_v2/v2_joint_control.launch.py"
+left_controller_name = "arm_slave_l"
+right_controller_name = "arm_slave_r"
+left_input_topic = "/arm_slave_l_status"
+right_input_topic = "/arm_slave_r_status"

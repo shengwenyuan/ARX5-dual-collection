@@ -7,7 +7,7 @@
 
 ## 决策
 
-新增独立入口：
+独立入口：
 
 ```bash
 arx5-dataset bucketlink-to-lerobot \
@@ -16,9 +16,7 @@ arx5-dataset bucketlink-to-lerobot \
   --run-id <run-id>
 ```
 
-新入口从当前主线转换流程派生，但不修改、删除或迁移旧
-`stream-to-lerobot`。首轮开发只建设新路径；旧实现是否过期和是否删除，留到新路径完成
-mini、正式全量和产物等价验收之后再判断。
+该入口复用 `arx5-dataset build` 的转换流程，只增加 BucketLink 传输和校验边界。
 
 转换核心不复制一份：Episode 清洗、MCAP reader、并行 conversion worker、Fragment、
 Builder、LeRobot validation 和 snapshot 继续复用现有模块。新入口只替换 BOS staging 的实现和
@@ -28,7 +26,7 @@ Builder、LeRobot validation 和 snapshot 继续复用现有模块。新入口�
 
 ```text
 一个 <task>/<date> BOS prefix
-  -> bos2pfs.py 创建并监督一个 BucketLink 导入任务
+  -> adapters/bos/bucketlink.py 创建并监督一个 BucketLink 导入任务
   -> 任务报告通过完整性校验
   -> 本 batch 进入现有 direct conversion worker pool
   -> 其他 batch 可由独立入口继续传输
@@ -54,9 +52,9 @@ pool 同时争抢同一台 CPU 设备。
 
 配置模型允许未来更换为其他受控的 PFS 临时根目录，不把当前挂载路径写成永久产品约束。
 
-## `bos2pfs.py` 边界
+## BucketLink adapter 边界
 
-新增单一 API 文件 `src/arx5_collection/bos2pfs.py`，职责限定为：
+`src/arx5_collection/adapters/bos/bucketlink.py` 的职责限定为：
 
 1. 使用官方 `baiducloud-python-sdk-pfs==0.0.4` 初始化 `PfsClient`。
 2. 创建 `CreateL2BucketLink` 导入任务并取得 `bucketLinkId`。
@@ -70,8 +68,8 @@ AK/SK 不进入 TOML、日志、异常文本或 Git。完整的 `BCE_ACCESS_KEY_
 `~/.go-bcecli/credentials`。只设置一个环境变量时拒绝运行，避免跨账号混用。任务报告
 默认从 `/mnt/bos/<bucket>/...` 取得，也可用 `ARX5_BOS_MOUNT_ROOT` 调整挂载根。
 
-`bos2pfs.py` 不负责 MCAP 解码、Episode 清洗、LeRobot 写入和最终 PFS 清理。这些仍由
-application/coordinator 层编排。
+该 adapter 不负责 MCAP 解码、Episode 清洗、LeRobot 写入和最终 PFS 清理。这些由
+`dataset_pipeline/execution/bucketlink.py` 和 application/coordinator 层编排。
 
 ## 安全并行边界
 
@@ -182,7 +180,7 @@ repo_id = "local/uniqlo_2026-09-01"
 
 [recipe]
 name = "pi05-equal-eef-v3"
-profile = "config/conversion.pi05-equal-eef-v3-svt-p8.toml"
+profile = "../specs/recipes/pi05-equal-eef-v3-svt-p8.toml"
 task_source = "metadata.task.description"
 ```
 

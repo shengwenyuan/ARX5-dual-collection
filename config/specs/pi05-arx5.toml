@@ -1,0 +1,23 @@
+schema_version = 1
+contract_id = "arx5-gripper-v1"
+
+[gripper]
+open_value = -3.4
+closed_value = 0.0
+open_tolerance = 0.05
+closed_tolerance = 0.10
+
+[dataset]
+fps = 50
+action_horizon = 50
+sequential_execution_steps = 10
+control_rate_hz = 25.0
+model_action_dimension = 32
+image_width = 640
+image_height = 360
+camera_keys = ["cam_high", "cam_left_wrist", "cam_right_wrist"]
+motor_names = ["left_j1", "left_j2", "left_j3", "left_j4", "left_j5", "left_j6", "left_gripper", "right_j1", "right_j2", "right_j3", "right_j4", "right_j5", "right_j6", "right_gripper"]
+openpi_commit = "15a9616a00943ada6c20a0f158e3adb39df2ccac"
+lerobot_commit = "0cf864870cf29f4738d3ade893e6fd13fbd7cdb5"
+lerobot_v3_version = "0.6.1"
+lerobot_v3_commit = "7e241bd630a3719a56157a497ce5d08f244784f1"

@@ -1,0 +1,80 @@
+schema_version = 1
+
+[paths]
+station_config = "/var/lib/arx5-collection/station.json"
+station_log_dir = "/tmp/arx5-station-configure"
+device_root = "/dev"
+hidraw_sysfs_root = "/sys/class/hidraw"
+usb_sysfs_root = "/sys/bus/usb/devices"
+usbfs_parameter = "/sys/module/usbcore/parameters/usbfs_memory_mb"
+mcap_cli = "/usr/local/bin/mcap"
+can_state_dir = "/run/arx5-dual-collection"
+snapshot_arena_template = "/dev/shm/arx5-vla-snapshot-{ros_domain_id}"
+snapshot_socket_template = "/tmp/arx5-vla-snapshot-{ros_domain_id}.sock"
+
+[system]
+usbfs_memory_mb = 256
+can_startup_timeout_s = 3.0
+can_speed = "s8"
+mcap_cli_version = "0.3.0"
+
+[station]
+sdk_type = 2
+arm_roles = ["left", "right"]
+camera_roles = ["left", "right", "overview"]
+camera_binding_order = ["left", "overview", "right"]
+trigger_roles = ["activate", "abort"]
+provisional_can_interfaces = ["can1", "can3"]
+movement_threshold_rad = 0.05
+movement_timeout_s = 15.0
+pedal_timeout_s = 30.0
+
+[camera]
+width = 848
+height = 480
+fps = 30
+color_format = "rgb8"
+depth_format = "z16"
+frame_timeout_ms = 5000
+reliability = "reliable"
+camera_history_size = 4
+arm_history_size = 128
+
+[session]
+min_free_gib = 80
+readiness_timeout_s = 30.0
+fail_directory = "fail"
+dagger_fail_directory = "dagger_fail"
+compression_enabled = true
+poll_interval_s = 0.1
+
+[monitor]
+display_period_s = 2.0
+dagger_display_period_s = 10.0
+startup_grace_s = 3.0
+heartbeat_timeout_s = 2.5
+data_silence_timeout_s = 2.0
+warning_ratio = 0.9
+
+[recording]
+start_timeout_s = 5.0
+stop_timeout_s = 15.0
+warning_ratio = 0.9
+
+[process]
+interrupt_timeout_s = 10.0
+terminate_timeout_s = 3.0
+kill_timeout_s = 1.0
+
+[reset]
+home = [0.0, 0.948, 0.858, -0.573, 0.0, 0.0]
+timeout_s = 45.0
+position_tolerance_rad = 0.03
+velocity_tolerance_rad_s = 0.05
+stable_s = 0.5
+
+[trigger]
+keyboard_activate = " "
+keyboard_abort = "a"
+keyboard_ownership = "t"
+pedal_debounce_s = 0.2

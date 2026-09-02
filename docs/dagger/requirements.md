@@ -55,7 +55,7 @@ HUMAN_ACTIVE -> RESUME_REQUESTED
 ## Server / Client
 
 ```text
-compose.dagger.yaml
+config/runner/compose.dagger.yaml
 ├─ policy-server
 │  ├─ openpi / JAX / CUDA / checkpoint
 │  ├─ PI 风格 request/response

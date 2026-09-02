@@ -1,0 +1,5 @@
+schema_version = 1
+task_id = "fold-cloth-rgb-only"
+task_description = "folding the cloth"
+upload_directory = "fold_cloth"
+capture_profile = "rgb_only"

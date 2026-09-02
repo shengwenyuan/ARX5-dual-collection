@@ -1,0 +1,31 @@
+schema_version = 3
+
+[source]
+root = "/mnt/bos/datainfra-demo"
+include_paths = [
+  "organize_screwdriver_bits/2026-08-28",
+  "organize_screwdriver_bits/2026-08-29",
+  "organize_screwdriver_bits/2026-08-31",
+]
+block = ["test", "tests", "abort", "aborted", "fail", "log", "logs"]
+
+[runtime]
+pfs_root = "/mnt/pfs/swy"
+streaming_root = "/mnt/pfs/swy/dataset/1011/arx5/organize_screwdriver_bits/streaming"
+stage_workers = 16
+conversion_workers = 64
+ready_low_bytes = 128_000_000_000
+ready_high_bytes = 256_000_000_000
+temporary_hard_max_bytes = 2_000_000_000_000
+max_staged_episodes = 128
+min_free_bytes = 5_000_000_000_000
+
+[output]
+lerobot_root = "/mnt/pfs/swy/dataset/1011/arx5/organize_screwdriver_bits/lerobot"
+dataset_name = "organize_screwdriver_bits_2026-08-28_2026-08-29_2026-08-31"
+repo_id = "local/organize_screwdriver_bits_2026-08-28_2026-08-29_2026-08-31"
+
+[recipe]
+name = "pi05-equal-eef-v3"
+profile = "../specs/recipes/pi05-equal-eef-v3-svt-p8.toml"
+task_source = "metadata.task.description"

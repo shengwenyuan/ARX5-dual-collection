@@ -1,16 +1,13 @@
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 
 import pytest
 
 
-TOOLS_ROOT = Path(__file__).resolve().parents[1] / "tools"
-sys.path.insert(0, str(TOOLS_ROOT))
-
-from summarize_episode_duration import format_duration, summarize  # noqa: E402
+from arx5_collection.collection.episode.duration import format_duration
+from arx5_collection.collection.episode.duration import summarize
 
 
 def write_episode(root: Path, name: str, outcome: str, duration_s: float) -> None:

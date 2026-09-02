@@ -1,0 +1,4 @@
+schema_version = 1
+stream_status_topic = "/monitoring/stream_status"
+stream_status_message_type = "arx5_collection_interfaces/msg/StreamStatus"
+stream_status_period_s = 1.0

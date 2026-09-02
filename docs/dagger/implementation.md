@@ -85,7 +85,7 @@ D1a 的本地纯逻辑与 Application 组装测试已通过。W3 无硬件集成
 
 首次真机启动在 Episode 前置 GO_HOME 阶段停止。服务在 10 ms 内返回 accepted，但双臂没有到达 Vendor home；确认 CAN、Canonical telemetry 和服务发现均正常。根因是官方固定版本 `c783287` 的 `v2_collect.yaml` 配置了 Vendor home，而 `v2_joint_control.yaml` 的两个 slave 节点没有 `go_home_position`。
 
-修复使用独立、可审计的 `docker/vendor/v2_joint_control.yaml` 覆盖 Vendor DAgger 配置，左右 slave 与 teaching profile 使用同一组 home 参数；C++ 服务补丁保持不变，不修改 reset 时序、收敛阈值或超时。候选镜像 `arx5-dual-collection:dagger-d1a-homefix-20260819` 已通过 SDK 安装配置检查和 18 项 D1a/profile/reset 容器回归，镜像 ID 为 `sha256:d7100ee4efc77a9f062c3ca862599ff947f501a05078dd9289d0cbec7900f82e`。
+修复使用独立、可审计的 `config/environment/v2_joint_control.yaml` 覆盖 Vendor DAgger 配置，左右 slave 与 teaching profile 使用同一组 home 参数；C++ 服务补丁保持不变，不修改 reset 时序、收敛阈值或超时。候选镜像 `arx5-dual-collection:dagger-d1a-homefix-20260819` 已通过 SDK 安装配置检查和 18 项 D1a/profile/reset 容器回归，镜像 ID 为 `sha256:d7100ee4efc77a9f062c3ca862599ff947f501a05078dd9289d0cbec7900f82e`。
 
 ## 2026-08-19 D1a 单 Episode 验收
 

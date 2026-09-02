@@ -10,7 +10,7 @@
 
 ## 与现有 Streaming 链路的隔离边界
 
-本功能只新增独立 composition package、配置 schema、CLI handler 和 backend，不修改现有 `stream-to-lerobot` 的 discovery、alignment、run manifest、prefetch coordinator、Fragment、Builder、recipe 或 validator 调用路径。已有 MCAP → LeRobot 命令、配置及 resume 语义必须保持逐项不变。
+本功能只新增独立 composition package、配置 schema、CLI handler 和 backend，不修改现有 `build` 的 discovery、alignment、run manifest、prefetch coordinator、Fragment、Builder、recipe 或 validator 调用路径。已有 MCAP → LeRobot 命令、配置及 resume 语义必须保持逐项不变。
 
 首版 v2.1 composer 可以复用通用 artifacts/atomic helper，但不抽取或改写正在生产使用的 streaming Builder 私有实现。待 composer 经真实数据集验证后，若确有必要共享底层函数，必须另立纯重构提交，并以 streaming Builder 产物等价回归作为合入门槛。
 
@@ -54,7 +54,7 @@ dataset codebase_version: v2.1
 project backend: lerobot-v2.1
 ```
 
-v2.1 是 Episode-based 布局：每个 Episode 独立 Parquet、每个相机每个 Episode 独立 MP4，元数据为 JSONL。现有 `streaming_conversion.builder` 已验证 Parquet 重编号、task 合并、视频 hardlink/copy、原子发布和 validator；本轮只将它作为行为参考，不抽取或改写其生产实现。
+v2.1 是 Episode-based 布局：每个 Episode 独立 Parquet、每个相机每个 Episode 独立 MP4，元数据为 JSONL。现有 `dataset_pipeline.mining_stage.dataset_generator.lerobot_dataset_merge` 已验证 Parquet 重编号、task 合并、视频 hardlink/copy、原子发布和 validator；本轮只将它作为行为参考，不抽取或改写其生产实现。
 
 ### LeRobot v3.0
 
@@ -86,7 +86,7 @@ v2.1 是 Episode-based 布局：每个 Episode 独立 Parquet、每个相机每�
 
 ```bash
 arx5-dataset compose-lerobot \
-  --config config/composition.<name>.toml
+  --config config/dataset_pipeline/composition.<name>.toml
 ```
 
 入口流程固定为：
@@ -229,7 +229,7 @@ main project / pinned v2.1 runtime
   -> write result JSON
 ```
 
-建议新增独立、锁定的 v3 runtime project，例如 `tools/lerobot_v3_runtime/`，由部署脚本建立专用 venv。主 CLI 只接受该 worker 的显式路径或已验证的 deployment profile；不在运行时联网安装依赖。
+建议新增独立、锁定的 v3 runtime project，例如 `scripts/dataset_pipeline/lerobot_v3_runtime/`，由部署脚本建立专用 venv。主 CLI 只接受该 worker 的显式路径或已验证的 deployment profile；不在运行时联网安装依赖。
 
 ### v3 source 与输出矩阵
 
@@ -353,8 +353,8 @@ v2.1 backend 首批构建：
 ## 本轮实现与本机验收
 
 - 新入口：`arx5-dataset compose-lerobot --config <composition.toml>`。
-- 新实现位于 `arx5_collection.lerobot_recomposition`，现有
-  `streaming_conversion` package 未修改。
+- 新实现位于 `arx5_collection.dataset_pipeline.mining_stage.dataset_generator.recomposition`，与
+  三阶段 pipeline 共用 `dataset_generator` 领域，但作为 Dataset 到 Dataset 的独立工作流运行。
 - v2.1：真实 Arrow schema 保留与索引重写、精确 allowlist、task/provenance 重映射、
   MP4 hardlink/copy、原子发布和失败 staging 保留均通过 fixture。
 - v3.0：独立 worker、固定 runtime、v2.1 临时副本迁移、官方 aggregate、完整 shard gate、

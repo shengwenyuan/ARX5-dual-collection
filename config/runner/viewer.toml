@@ -1,0 +1,11 @@
+schema_version = 1
+dataset = "/mnt/cfs/data/swy/folding_the_cloth_20260821_20260822_v1"
+host = "127.0.0.1"
+port = 8080
+thumbnail_width = 640
+jpeg_quality = 3
+
+[camera_labels]
+"observation.images.cam_high" = "Overview"
+"observation.images.cam_left_wrist" = "Left wrist"
+"observation.images.cam_right_wrist" = "Right wrist"

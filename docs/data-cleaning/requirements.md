@@ -121,17 +121,16 @@ D405 不支持多机硬件同步，因此这里的“对齐”只能表达真实
 ## 建议模块边界
 
 ```text
-src/arx5_collection/cleaning/
-  models.py       # Audit、Issue、Grade、FrameGroup 契约
-  reader.py       # MCAP 顺序读取与最小消息引用
-  timeline.py     # 单 Stream 时间线与 gap/duplicate 检查
-  pairing.py      # 同机 RGB-D、三相机与双臂真实样本关联
-  policy.py       # 阈值、Issue 与 A/B/C 分档
-  store.py        # 独立派生产物原子提交
-  cli.py          # 批量入口，仅解析参数和展示结果
+src/arx5_collection/dataset_pipeline/
+  source/
+    models.py
+    reader.py
+  mining_stage/
+    episode_sanitycheck/
+  cli.py
 ```
 
-清洗部署冻结为独立离线执行，不把批处理逻辑塞进长生命周期采集 Session。建议入口为 `arx5-dataset clean --input-root ... --output-root ...`，使用非 privileged 离线容器。采集与清洗可使用同一 Python package，但部署和进程所有权分离。
+Episode 检查与对齐统一由 `dataset_pipeline.mining_stage` 的 `episode_sanitycheck` Stage 独立离线执行，不把批处理逻辑塞进长生命周期采集 Session。入口为 `arx5-dataset build --config ...`，使用非 privileged 离线容器。采集与挖掘使用同一 Python package，但部署和进程所有权分离。
 
 ## 首版测试
 

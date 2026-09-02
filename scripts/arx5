@@ -9,8 +9,9 @@ import sys
 
 
 ROOT = Path(__file__).resolve().parents[1]
-STATION_DIR = Path("/var/lib/arx5-collection")
-DATASET_IMAGE = "arx5-dual-collection:dataset"
+STATION_DIR = Path(os.environ.get("ARX5_STATION_DIR", "/var/lib/arx5-collection"))
+DATASET_IMAGE = os.environ.get("ARX5_DATASET_IMAGE", "arx5-dual-collection:dataset")
+DEFAULT_COLLECTION_CONFIG = ROOT / "config/collection/fold-cloth-rgbd.toml"
 
 
 def required(name: str) -> str:
@@ -20,19 +21,30 @@ def required(name: str) -> str:
     return value
 
 
-def collect(rgb_only: bool = False) -> int:
+def collection_config(path: Path | None = None) -> Path:
+    configured = os.environ.get("ARX5_COLLECTION_CONFIG")
+    if path is not None:
+        result = path
+    elif configured:
+        result = Path(configured)
+    else:
+        result = DEFAULT_COLLECTION_CONFIG
+    result = result.resolve()
+    if not result.is_file():
+        raise ValueError(f"collection config does not exist: {result}")
+    return result
+
+
+def collect(config: Path | None = None) -> int:
     required("ARX5_OUTPUT_ROOT")
-    required("ARX5_TASK_DESCRIPTION")
     environment = os.environ.copy()
-    environment.pop("ARX5_TASK_CONFIG", None)
-    if rgb_only:
-        environment["ARX5_TASK_CONFIG"] = "/workspace/config/task.rgb-only.json"
+    environment["ARX5_COLLECTION_CONFIG"] = str(collection_config(config))
     return subprocess.call(
         [
             "docker",
             "compose",
             "-f",
-            str(ROOT / "docker/compose.production.yaml"),
+            str(ROOT / "config/runner/compose.production.yaml"),
             "run",
             "--rm",
             "collector",
@@ -42,14 +54,10 @@ def collect(rgb_only: bool = False) -> int:
     )
 
 
-def dagger(mode: str, rgb_only: bool = False) -> int:
-    required("ARX5_OUTPUT_ROOT")
-    required("ARX5_TASK_DESCRIPTION")
+def dagger(mode: str, config: Path | None = None) -> int:
     environment = {**os.environ, "ARX5_DAGGER_MODE": mode}
-    if rgb_only:
-        environment["ARX5_TASK_CONFIG"] = str(
-            ROOT / "config/task.rgb-only.json"
-        )
+    if config is not None:
+        environment["ARX5_COLLECTION_CONFIG"] = str(collection_config(config))
     return subprocess.call(
         [
             "docker",
@@ -57,7 +65,7 @@ def dagger(mode: str, rgb_only: bool = False) -> int:
             "--env-file",
             str(STATION_DIR / "dagger.env"),
             "-f",
-            str(ROOT / "docker/compose.dagger.yaml"),
+            str(ROOT / "config/runner/compose.dagger.yaml"),
             "up",
             "--no-build",
             "--abort-on-container-exit",
@@ -70,10 +78,12 @@ def dagger(mode: str, rgb_only: bool = False) -> int:
     )
 
 
-def upload(full_check: str, dagger: bool = False) -> int:
+def upload(full_check: str, config: Path | None = None) -> int:
     source = required("ARX5_OUTPUT_ROOT")
-    task = required("ARX5_TASK_DESCRIPTION")
-    temporary = Path.home() / "swy/bos-upload-tmp"
+    config_path = collection_config(config)
+    temporary = Path(
+        os.environ.get("ARX5_UPLOAD_TMP_ROOT", Path.home() / "swy/bos-upload-tmp")
+    )
     temporary.mkdir(parents=True, exist_ok=True)
     interactive = ["-i", "-t"] if sys.stdin.isatty() else ["-i"]
     return subprocess.call(
@@ -89,6 +99,8 @@ def upload(full_check: str, dagger: bool = False) -> int:
             "-v",
             f"{source}:{source}",
             "-v",
+            f"{config_path}:/config/collection.toml:ro",
+            "-v",
             f"{STATION_DIR}:{STATION_DIR}:ro",
             "-v",
             "/usr/local/bin/bcecmd:/usr/local/bin/bcecmd:ro",
@@ -96,14 +108,17 @@ def upload(full_check: str, dagger: bool = False) -> int:
             f"{Path.home() / '.go-bcecli'}:/root/.go-bcecli",
             "-v",
             f"{temporary}:/tmp",
+            "-e",
+            "ARX5_CONFIG_ROOT=/workspace/config",
+            "-e",
+            "ARX5_ENVIRONMENT_CONFIG=/workspace/config/environment/default.toml",
             DATASET_IMAGE,
             "python3",
-            "/workspace/tools/bos_upload_episodes.py",
+            "/workspace/scripts/adapters/bos_upload_episodes.py",
             "--source",
             source,
-            "--task-description",
-            task,
-            *(["--dagger"] if dagger else []),
+            "--collection-config",
+            "/config/collection.toml",
             "--full-check",
             full_check,
         ]
@@ -117,18 +132,16 @@ def main() -> int:
         "collect", help="start a production collection Session"
     )
     collect_parser.add_argument(
-        "--rgb-only",
-        action="store_true",
-        help="temporarily omit aligned depth from the recorded MCAP",
+        "--collection-config",
+        type=Path,
     )
     dagger_parser = commands.add_parser("dagger", help="start a DAgger Session")
     dagger_parser.add_argument(
         "--mode", choices=("takeover", "shadow"), default="takeover"
     )
     dagger_parser.add_argument(
-        "--rgb-only",
-        action="store_true",
-        help="temporarily omit aligned depth from the recorded MCAP",
+        "--collection-config",
+        type=Path,
     )
     upload_parser = commands.add_parser(
         "upload", help="validate and upload the Session"
@@ -136,14 +149,17 @@ def main() -> int:
     upload_parser.add_argument(
         "--full-check", choices=("true", "false"), default="true"
     )
-    upload_parser.add_argument("--dagger", action="store_true")
+    upload_parser.add_argument(
+        "--collection-config",
+        type=Path,
+    )
     args = parser.parse_args()
     try:
         if args.command == "collect":
-            return collect(args.rgb_only)
+            return collect(args.collection_config)
         if args.command == "dagger":
-            return dagger(args.mode, args.rgb_only)
-        return upload(args.full_check, args.dagger)
+            return dagger(args.mode, args.collection_config)
+        return upload(args.full_check, args.collection_config)
     except ValueError as error:
         parser.error(str(error))
 

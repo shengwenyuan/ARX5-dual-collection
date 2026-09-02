@@ -1,12 +1,15 @@
 from pathlib import Path
+import sys
 
 import pytest
 
-from tools.validate_collector_image_consistency import ImageIdentity
-from tools.validate_collector_image_consistency import require_consistent
-
 
 ROOT = Path(__file__).resolve().parents[1]
+SCRIPTS_ROOT = ROOT / "scripts" / "collection"
+sys.path.insert(0, str(SCRIPTS_ROOT))
+
+from validate_collector_image_consistency import ImageIdentity
+from validate_collector_image_consistency import require_consistent
 
 
 def identity(image: str, revision: str, digest: str = "a" * 64) -> ImageIdentity:

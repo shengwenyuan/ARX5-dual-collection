@@ -22,7 +22,7 @@
 
 ```text
 arx5-collect devices --station-config ...
-arx5-collect run --station-config ... --task-config ... --output-root ...
+arx5-collect run --station-config ... --collection-config ... --output-root ...
 ```
 
 - 一个 Python 可执行程序承载所有生产子命令；不要求操作者启动多条 Shell 或多个窗口。
@@ -80,7 +80,7 @@ preflight
 ## 生产模块
 
 ```text
-src/arx5_collection/production/
+src/arx5_collection/collection/runtime/
   cli.py              # 唯一 console entry 与子命令
   config.py           # Station/Task 严格解析与八路契约
   devices.py          # ARX5 + RealSense 统一身份核对

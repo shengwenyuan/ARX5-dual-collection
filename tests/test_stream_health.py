@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from arx5_collection.episode.models import StreamSpec
-from arx5_collection.ros2_adapters.health import StatusSample, StreamHealthTracker
+from arx5_collection.collection.episode.models import StreamSpec
+from arx5_collection.adapters.ros2.health import StatusSample, StreamHealthTracker
 
 
 STREAMS = (

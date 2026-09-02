@@ -259,9 +259,9 @@ openpi loader 再从相邻 50 Hz frame 的 `action` 字段构造未来 50 步 ac
 
 依赖也按层隔离：
 
-- `cleaning` 只依赖项目数据契约和离线 MCAP/ROS 消息解码能力。
-- LeRobot、视频编码和 openpi 兼容代码只允许进入 `pi05_dataset` 可选依赖与离线环境，不进入采集镜像的必需运行路径。
-- 共享逻辑使用纯数据对象和显式 Port；不得通过导入 `production` 或 `episode.runtime` 复用副作用代码。
+- `episode_sanitycheck` 只依赖项目数据契约和离线 MCAP/ROS 消息解码能力，并在基础检查后完成帧对齐与质量报告。
+- LeRobot、视频编码和 OpenPI 兼容代码只允许进入 `dataset_generator` 可选依赖与离线环境，不进入采集镜像的必需运行路径。
+- 共享逻辑使用纯数据对象和显式 Port；不得通过导入 `collection.runtime` 或 `collection.episode.runtime` 复用副作用代码。
 - 未来其他训练链路复用 `quality.json + frame_index.jsonl`，新增自己的 selector、sample index、action adapter 和 exporter，不复制 MCAP 审计与时间配组实现。
 - 某条下游 pipeline 的筛选策略、依赖或失败不得改变原 Episode，也不得阻塞采集主线发布。
 
@@ -272,38 +272,32 @@ openpi loader 再从相邻 50 Hz frame 的 `action` 字段构造未来 50 步 ac
 计划在 `main` 新增：
 
 ```text
-src/arx5_collection/cleaning/
-  models.py       # Issue、Quality、FrameGroup、Policy 契约
-  reader.py       # MCAP 顺序读取与 ROS 消息解码
-  timeline.py     # 单流时间审计与公共区间
-  pairing.py      # RGB-D、三相机和双臂因果关联
-  policy.py       # 仅结构与时间质量 A/B/C
-  store.py        # 派生索引和报告原子提交
+src/arx5_collection/dataset_pipeline/
+  configuration/
+  execution/
+  source/
+  persistence/
+  mining_stage/
+    episode_sanitycheck/
+    action_mining/
+    dataset_generator/
+  cli.py
 
-src/arx5_collection/pi05_dataset/
-  config.py       # fps、字段、单位、图像和版本配置
-  selection.py    # success、idle、keep range 与 sample index
-  actions.py      # 14 维 state/action 与 delta mask 契约
-  images.py       # YUYV -> RGB、缩放和颜色检查
-  exporter.py     # segment -> LeRobotDataset
-  validate.py     # 数据集结构和统计验证
-  manifest.py     # source lineage 与 conversion report
+config/specs/
+  recipes/
+  schemas/
 
-src/arx5_collection/dataset_cli.py
-schemas/quality-v1.json
-schemas/frame-index-v1.json
-schemas/pi05-segment-v1.json
-schemas/pi05-conversion-v1.json
-tests/cleaning/
-tests/pi05_dataset/
+tests/dataset_pipeline/mining_stage/episode_sanitycheck/
+tests/dataset_pipeline/mining_stage/action_mining/
+tests/dataset_pipeline/mining_stage/dataset_generator/
 ```
 
 CLI 计划：
 
 ```text
-arx5-dataset clean --input-root ... --derived-root ... --policy ...
-arx5-dataset to-lerobot --derived-root ... --dataset-id ... --repo-id ...
-arx5-dataset validate-pi05 --dataset-id ... --openpi-root ...
+arx5-dataset build --config ...
+arx5-dataset classify-dagger --episode-dir ...
+arx5-dataset compose-lerobot --config ...
 ```
 
 清洗与转换可以与采集代码位于同一 Python distribution，但模块依赖保持单向，并作为独立离线进程部署；不放入采集 Session，不连接设备、不启动 CAN/相机或 ROS Source。
@@ -319,7 +313,7 @@ collection 源码，也不得回写 MCAP 或派生数据。
 
 ### 当前实现进度（2026-08-17）
 
-- `cleaning` 与 `pi05_dataset` 两层代码、四份 JSON schema、`arx5-dataset` CLI 和独立 dataset 镜像已落在 `main` 工作树。
+- 三阶段 `dataset_pipeline`、JSON Schema、`arx5-dataset` CLI 和独立 dataset 镜像已落在 `main` 工作树。
 - w3 独立部署目录为 `/home/lenovo/swy/ARX5-dual-collection-dataset`；原始数据以只读方式挂载，未触碰采集容器和 feat 开发树。
 - `cups_overfit-02`～`cups_overfit-07` 共发现 58 条已提交 Episode；49 条 `success` 进入审计，9 条 `aborted` 未进入训练集。质量分档为 38A/11B，无 C。
 - task 必须原样保留，不做大小写归一化或语义改写。同一 source Episode 的所有 segment 必须使用完全一致的 prompt；同一采集 Session 可以包含多个 task。

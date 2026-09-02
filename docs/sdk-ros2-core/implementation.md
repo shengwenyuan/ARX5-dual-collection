@@ -28,7 +28,7 @@
 - 键盘、任务输入和 CLI。
 - Fake Adapter 与无硬件测试。
 
-`main` 不修改 `src/arx5_collection/episode/`；外层分支不修改 Vendor SDK、Docker bring-up、ROS 2 Source 和真机配置。合并前不得在两边复制同一功能。
+`main` 不修改 `src/arx5_collection/collection/episode/`；外层分支不修改 Vendor SDK、Docker bring-up、ROS 2 Source 和真机配置。合并前不得在两边复制同一功能。
 
 ## 冻结约束
 

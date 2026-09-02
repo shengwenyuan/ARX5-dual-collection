@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import struct
 
-from arx5_collection.episode.models import StreamSpec
-from arx5_collection.ros2_adapters.mcap_metrics import audit_mcap
+from arx5_collection.collection.episode.models import StreamSpec
+from arx5_collection.adapters.ros2.mcap_metrics import audit_mcap
 
 
 def payload(stamp_ns: int) -> bytes:

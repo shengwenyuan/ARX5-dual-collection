@@ -6,11 +6,13 @@ build-backend = "setuptools.build_meta"
 name = "arx5-dual-collection"
 version = "0.1.0"
 requires-python = ">=3.10"
+dependencies = ["PyYAML>=6,<7"]
 
 [project.scripts]
-arx5-collect = "arx5_collection.production.cli:main"
-arx5-dataset = "arx5_collection.dataset_cli:main"
-arx5-viewer = "arx5_collection.viewer:main"
+arx5-collect = "arx5_collection.collection.runtime.cli:main"
+arx5-dataset = "arx5_collection.dataset_pipeline.cli:main"
+arx5-viewer = "arx5_collection.adapters.viewer.cli:main"
+arx5-config = "arx5_collection.configuration_cli:main"
 
 [project.optional-dependencies]
 test = ["jsonschema>=4.26,<5", "pytest>=8,<9"]
@@ -24,9 +26,13 @@ dataset-v3 = [
 ]
 viewer = ["pyarrow>=17,<22"]
 bucketlink = ["baiducloud-python-sdk-pfs==0.0.4"]
+real-export-test = ["mcap==1.3.0", "mcap-ros2-support==0.5.7"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+exclude = ["ros2*"]
 
 [tool.setuptools.package-data]
-arx5_collection = ["viewer_static/*"]
+arx5_collection = [
+  "adapters/viewer/static/*",
+]

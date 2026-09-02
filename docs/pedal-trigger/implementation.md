@@ -76,10 +76,10 @@ Session startup
 ## 模块边界
 
 ```text
-src/arx5_collection/episode/adapters/
+src/arx5_collection/collection/episode/adapters/
   pedal.py                 # hidraw 解析、两个 fd、防抖、ABORT 优先
 
-src/arx5_collection/production/
+src/arx5_collection/collection/runtime/
   triggers.py              # AutoTriggerFactory 与启动检查/回退原因
   config.py                # station schema v2 TriggerConfig
 

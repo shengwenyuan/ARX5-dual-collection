@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 
-PACKAGE_ROOT = Path(__file__).parents[1] / "ros2_ws/src/arx5_arm_adapter"
+PACKAGE_ROOT = Path(__file__).parents[1] / "src/ros2/arx5_arm_adapter"
 sys.path.insert(0, str(PACKAGE_ROOT))
 
 from arx5_arm_adapter.mapping import map_robot_status_values  # noqa: E402

@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 PACKAGE_ROOT = (
-    Path(__file__).resolve().parents[1] / "ros2_ws" / "src" / "arx5_camera_source"
+    Path(__file__).resolve().parents[1] / "src" / "ros2" / "arx5_camera_source"
 )
 sys.path.insert(0, str(PACKAGE_ROOT))
 
@@ -40,7 +40,7 @@ class CameraConfigTest(unittest.TestCase):
         specs = load_station_cameras(path)
         self.assertEqual([spec.role for spec in specs], ["left", "right", "overview"])
         self.assertEqual([spec.serial for spec in specs], ["100", "200", "300"])
-        self.assertEqual(specs[0].namespace, "/sensors/camera_left")
+        self.assertEqual(specs[0].role, "left")
 
     def test_rejects_missing_or_unresolved_role(self) -> None:
         with self.assertRaises(ValueError):
@@ -51,9 +51,7 @@ class CameraConfigTest(unittest.TestCase):
             )
 
     def test_rejects_duplicate_serial(self) -> None:
-        path = self.write_config(
-            {"left": "100", "right": "100", "overview": "300"}
-        )
+        path = self.write_config({"left": "100", "right": "100", "overview": "300"})
         with self.assertRaises(ValueError):
             load_station_cameras(path)
 

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from arx5_collection.episode.models import StreamMetrics, StreamSpec
-from arx5_collection.ros2_adapters.monitor import RosStreamMonitor
+from arx5_collection.collection.episode.models import StreamMetrics, StreamSpec
+from arx5_collection.adapters.ros2.monitor import RosStreamMonitor
 
 
 STREAM = StreamSpec("camera_left_color", "/camera/left", True, 30.0)

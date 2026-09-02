@@ -48,9 +48,11 @@ COPY docker/openpi_rtc/pi0_rtc_config.py /opt/openpi/src/openpi/models/pi0_rtc_c
 RUN git -C /opt/openpi apply /tmp/openpi-rtc-gemma.patch
 
 COPY src/arx5_collection/ /opt/arx5-policy/arx5_collection/
+COPY config/ /opt/arx5-policy/config/
 
 ENV PYTHONPATH="/opt/arx5-policy:/opt/openpi/src:/opt/openpi/packages/openpi-client/src" \
-    XLA_PYTHON_CLIENT_MEM_FRACTION="0.9"
+    XLA_PYTHON_CLIENT_MEM_FRACTION="0.9" \
+    ARX5_CONFIG_ROOT="/opt/arx5-policy/config"
 
-ENTRYPOINT ["/.venv/bin/python", "-m", "arx5_collection.dagger.policy_server"]
+ENTRYPOINT ["/.venv/bin/python", "-m", "arx5_collection.collection.dagger.policy_server"]
 CMD ["--config", "/config/policy.toml"]

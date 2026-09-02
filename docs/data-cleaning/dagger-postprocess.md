@@ -74,7 +74,8 @@ DAgger selector 对每个完整 correction 独立运行原有 v2 等 EEF 距离�
 ```bash
 arx5-dataset classify-dagger \
   --input-root <raw-dagger-root> \
-  --audit-root <audit-root>
+  --audit-root <audit-root> \
+  --recipe config/specs/recipes/pi05-equal-eef-v3.toml
 
 arx5-dataset select-pi05-eef-dagger \
   --input-root <raw-dagger-root> \

@@ -37,10 +37,10 @@ SPACE
 ## 模块边界
 
 ```text
-src/arx5_collection/reset/
+src/arx5_collection/collection/reset/
   coordinator.py                  # 归位状态与 Controller 调用
 
-src/arx5_collection/ros2_adapters/reset.py
+src/arx5_collection/adapters/ros2/reset.py
                                   # 双臂服务、状态收敛、恢复重力补偿
 
 docker/patches/arx-x5-go-home-services.patch
@@ -55,7 +55,7 @@ ProductionSession.create_runtime
 - CLI 只渲染复位状态，不承载运动步骤。
 - Episode Runtime 不 import Vendor SDK。
 - 复位逻辑与离线数据清洗无关。
-- 标准入口保持 `ARX5_OUTPUT_ROOT=/absolute/path/reports/<date>/<task> docker compose -f docker/compose.production.yaml run --rm collector`；日志自动进入任务目录下的 `logs/`。
+- 标准入口保持 `ARX5_OUTPUT_ROOT=/absolute/path/reports/<date>/<task> docker compose -f config/runner/compose.production.yaml run --rm collector`；日志自动进入任务目录下的 `logs/`。
 
 ## 验收
 

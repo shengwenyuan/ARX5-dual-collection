@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from arx5_collection.viewer import DatasetIndex
+from arx5_collection.adapters.viewer.cli import DatasetIndex
 
 
 class DatasetIndexTest(unittest.TestCase):
@@ -28,9 +28,13 @@ class DatasetIndexTest(unittest.TestCase):
         }
         (self.root / "meta/info.json").write_text(json.dumps(info))
         (self.root / "meta/episodes.jsonl").write_text(
-            json.dumps({"episode_index": 0, "tasks": ["fold cloth"], "length": 100}) + "\n"
+            json.dumps({"episode_index": 0, "tasks": ["fold cloth"], "length": 100})
+            + "\n"
         )
-        self.video = self.root / "videos/chunk-000/observation.images.cam_high/episode_000000.mp4"
+        self.video = (
+            self.root
+            / "videos/chunk-000/observation.images.cam_high/episode_000000.mp4"
+        )
         self.video.write_bytes(b"video")
 
     def tearDown(self) -> None:
@@ -47,7 +51,9 @@ class DatasetIndexTest(unittest.TestCase):
         self.assertEqual(episode["action_horizon"], 50)
         self.assertEqual(episode["video"]["key"], "observation.images.cam_high")
         self.assertFalse(episode["provenance"]["available"])
-        self.assertEqual(dataset.video_path(0, "observation.images.cam_high"), self.video)
+        self.assertEqual(
+            dataset.video_path(0, "observation.images.cam_high"), self.video
+        )
 
     def test_rejects_inconsistent_episode_count(self) -> None:
         info_path = self.root / "meta/info.json"
@@ -57,7 +63,9 @@ class DatasetIndexTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "disagree"):
             DatasetIndex.read(self.root)
 
-    @unittest.skipUnless(importlib.util.find_spec("pyarrow"), "pyarrow is not installed")
+    @unittest.skipUnless(
+        importlib.util.find_spec("pyarrow"), "pyarrow is not installed"
+    )
     def test_builds_and_pads_action_chunk(self) -> None:
         import pyarrow as arrow
         import pyarrow.parquet as parquet
@@ -81,7 +89,9 @@ class DatasetIndexTest(unittest.TestCase):
         self.assertEqual(chunk["actions"][0], chunk["actions"][-1])
 
         timeline = DatasetIndex.read(self.root).sample_timeline_payload(0)
-        self.assertEqual(timeline["point_format"], ["dataset_index", "frame_index", "timestamp"])
+        self.assertEqual(
+            timeline["point_format"], ["dataset_index", "frame_index", "timestamp"]
+        )
         self.assertEqual(timeline["points"][50], [50, 50, 1.0])
 
 

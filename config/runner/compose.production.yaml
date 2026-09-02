@@ -1,0 +1,35 @@
+name: arx5-dual-production
+
+services:
+  collector:
+    build:
+      context: ../..
+      dockerfile: docker/Dockerfile.bringup
+      target: production
+      args:
+        SOURCE_REVISION: "${ARX5_SOURCE_REVISION:-unknown}"
+    image: ${ARX5_COLLECTOR_IMAGE:-arx5-dual-collection:production}
+    privileged: true
+    network_mode: host
+    shm_size: "${ARX5_SHM_SIZE:-1gb}"
+    stdin_open: true
+    tty: true
+    stop_grace_period: "${ARX5_STOP_GRACE_PERIOD:-45s}"
+    environment:
+      ARX5_CONFIG_ROOT: /config/arx5
+      ARX5_ENVIRONMENT_CONFIG: "${ARX5_ENVIRONMENT_CONFIG_CONTAINER:-/config/arx5/environment/default.toml}"
+      FASTDDS_DEFAULT_PROFILES_FILE: /config/arx5/environment/fastdds-shm.xml
+    volumes:
+      - /run/udev:/run/udev:ro
+      - ${ARX5_STATION_DIR:-/var/lib/arx5-collection}:/var/lib/arx5-collection
+      - ../..:/workspace:ro
+      - ${ARX5_CONFIG_ROOT_HOST:-..}:/config/arx5:ro
+      - ${ARX5_COLLECTION_CONFIG:-../collection/fold-cloth-rgbd.toml}:/config/collection.toml:ro
+      - ${ARX5_REPORTS_ROOT:-/home/lenovo/swy/reports}:${ARX5_REPORTS_ROOT:-/home/lenovo/swy/reports}
+    command:
+      - arx5-collect
+      - run
+      - --collection-config
+      - /config/collection.toml
+      - --output-root
+      - "${ARX5_OUTPUT_ROOT:-}"

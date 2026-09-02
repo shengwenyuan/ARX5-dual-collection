@@ -2,7 +2,7 @@
 
 - Status: `implemented / local verified / live BOS pending`
 - Date: `2026-08-26`
-- Target: `tools/bos_upload_episodes.py`
+- Target: `src/arx5_collection/adapters/bos/upload.py`
 - Scope: 本地 Episode 上传前审计、抽样验证、时长汇总、`bcecmd` 上传监督
 - Non-goal: 修改 Episode、清洗 MCAP、生成 LeRobot、管理 BOS 生命周期
 
@@ -102,7 +102,7 @@ min(15, max(1, ceil(valid_episode_count * 0.10)))
 
 深检不复制质量算法，直接复用当前 cleaning、等 EEF selector、LeRobot v2.1 exporter 和 validator，在临时目录执行完整转换并在结束后清理。
 
-所有深检阈值必须集中在独立、版本化的 `BosUploadValidationPolicy` 与 `config/bos-upload-validation.v1.toml` 中。CLI 只加载 policy；采样器、命令解析器和上传 supervisor 不得持有图像、时间、coverage 或 action 参数。未来调整超参数时新增或升级 policy，不修改执行编排。
+所有深检阈值必须集中在独立、版本化的 `BosUploadValidationPolicy` 与 `config/runner/bos-upload-validation-v1.toml` 中。CLI 只加载 policy；采样器、命令解析器和上传 supervisor 不得持有图像、时间、coverage 或 action 参数。未来调整超参数时新增或升级 policy，不修改执行编排。
 
 首版硬 gate：
 
@@ -119,13 +119,13 @@ min(15, max(1, ceil(valid_episode_count * 0.10)))
 
 ## 时长汇总与最终确认
 
-粗筛清零且深检通过后，工具按每条已解析 source root 调用现有：
+粗筛清零且深检通过后，上传实现按每条已解析 source root 调用：
 
 ```text
-tools/summarize_episode_duration.py --directory <source-root> --block abort
+arx5_collection.collection.episode.duration.summarize(source_root, ("abort",))
 ```
 
-不修改或复制该脚本的遍历与时长逻辑。上传工具解析其标准输出，回传每个来源及整批的 Episode 数、总秒数和 `HH:MM:SS.mmm`；统计 Episode 集合必须与本轮冻结上传集合完全一致，否则阻断。
+`scripts/collection/summarize_episode_duration.py` 仅保留独立命令入口，上传实现直接复用 package 内的遍历与时长逻辑，回传每个来源及整批的 Episode 数、总秒数和 `HH:MM:SS.mmm`；统计 Episode 集合必须与本轮冻结上传集合完全一致，否则阻断。
 
 最终确认页同时显示命令数、Episode 数、总 MCAP 字节、总时长、抽样结果、来源到 BOS 的映射和目标冲突结果。再次按 ENTER 后才启动 `bcecmd`。
 
@@ -159,12 +159,13 @@ tools/summarize_episode_duration.py --directory <source-root> --block abort
 ## 实现边界
 
 ```text
-tools/bos_upload_episodes.py          # 单一小工具入口与核心编排
-config/bos-upload-validation.v1.toml  # 粗筛、抽样、深检与重试参数
-tests/test_bos_upload_episodes.py     # 定向契约测试
+src/arx5_collection/adapters/bos/upload.py  # BOS 上传核心编排
+scripts/adapters/bos_upload_episodes.py     # 薄命令入口
+config/runner/bos-upload-validation-v1.toml
+tests/test_bos_upload_episodes.py
 ```
 
-实现没有搭建额外 package 层。`DeepGate` 独立封装可调深检规格；`coarse_issues()` 同时服务本地和 BOS inventory；MCAP 质量算法、LeRobot 转换和时长遍历继续调用既有实现。
+实现归属 `adapters.bos`。`DeepGate` 独立封装可调深检规格；`coarse_issues()` 同时服务本地和 BOS inventory；MCAP 质量算法、LeRobot 转换和时长遍历继续调用既有实现。
 
 ## 输入入口
 
@@ -174,7 +175,7 @@ tests/test_bos_upload_episodes.py     # 定向契约测试
 arx5 upload
 ```
 
-它读取 `ARX5_OUTPUT_ROOT`、`ARX5_TASK_DESCRIPTION` 和 `/var/lib/arx5-collection/station.json`。schema v4 的 `task_upload_routes` 将完整 prompt 映射为 BOS 目录段；日期严格取自 output root 的 `YYYY-MM-DD` 父目录。默认目标为 `bos:/datainfra-demo/<task_dir>/<date>/`，并固定 concurrency 16 与 `dest-not-exist`。
+它读取 `ARX5_OUTPUT_ROOT` 和 collection 配置。`task_description` 用于逐 Episode 一致性校验，`upload_directory` 用于 BOS 目录段；日期严格取自 output root 的 `YYYY-MM-DD` 父目录。目标 root、concurrency 与 sync type 来自 runner 上传策略。
 
 `--commands-file <path>` 和 stdin 多行粘贴继续进入原解析器，但只作为专家兼容入口。
 

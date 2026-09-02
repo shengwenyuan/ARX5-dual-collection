@@ -111,13 +111,13 @@ Policy Server 不感知 Client queue、剩余动作、已执行位置或 splice 
 
 Policy 与 Collector 保持两个职责独立的容器。Docker Compose 是 host 侧唯一进程编排入口；Collector 仍是采集 Session 主进程，不获取 Docker socket，也不在 `arx5-collect` 内实现容器管理。
 
-环境文件只记录镜像引用、Policy TOML、checkpoint root、Task JSON 和模式；参考 `config/dagger.compose.env.example`。正常运行必须传本次任务的绝对输出目录，Session 日志自动进入其 `logs/` 子目录：
+环境文件只记录镜像引用、Policy TOML、checkpoint root、Collection TOML 和模式；参考 `config/runner/dagger.env.example`。正常运行必须传本次任务的绝对输出目录，Session 日志自动进入其 `logs/` 子目录：
 
 ```bash
 ARX5_OUTPUT_ROOT=/home/lenovo/swy/reports/<date>/<task> \
 docker compose \
   --env-file /var/lib/arx5-collection/dagger.env \
-  -f docker/compose.dagger.yaml \
+  -f config/runner/compose.dagger.yaml \
   up --no-build --abort-on-container-exit --exit-code-from collector collector
 ```
 
@@ -125,7 +125,7 @@ docker compose \
 
 ## 与 `pi05-arx5-inference` 的关系
 
-当前生产入口不复用相邻仓库的 `run_policy_training_rtc_window.sh`，Policy 镜像也不 import 或挂载 `pi05_arx5_inference`。本仓库独立启动 `arx5_collection.dagger.policy_server`，再使用固定 OpenPI 基线、v3 模型扩展和同一 checkpoint 构造 Policy。
+当前生产入口不复用相邻仓库的 `run_policy_training_rtc_window.sh`，Policy 镜像也不 import 或挂载 `pi05_arx5_inference`。本仓库独立启动 `arx5_collection.collection.dagger.policy_server`，再使用固定 OpenPI 基线、v3 模型扩展和同一 checkpoint 构造 Policy。
 
 相邻仓库提供了早期双窗口运行效果与 training-time RTC 参考；本仓库保留模型语义，但重建了适合采集系统的边界：checkpoint SHA-256、typed profile、最小 `estimated_delay_steps + action_prefix` 请求、完整 correlation key、epoch 作废和 Session 统一编排。后续若抽取共享组件，应只共享稳定的模型 adapter/协议库，不复用工作站 shell 入口或机器人 Runtime。
 

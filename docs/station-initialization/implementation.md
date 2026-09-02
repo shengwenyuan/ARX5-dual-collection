@@ -32,12 +32,11 @@ arx5-collect station configure
 
 ## 最终 Station 配置
 
-schema v4 至少包含：
+新建的 schema v3 至少包含：
 
 ```text
 station_id
 ros_domain_id
-task_upload_routes
 sdk_type
 arms
   left  -> USB2CAN serial, can1
@@ -51,11 +50,11 @@ triggers
 
 - `station_id` 默认使用主机名并允许用户在提交前修改；它是外部命名，项目不解释其格式。
 - `ros_domain_id` 由用户显式输入，合法范围为 `0..232`，不从 `station_id` 推导，也不由项目跨工作站分配或查重。
-- schema v4 的 `task_upload_routes` 由人直接维护，使用完整 task description 作为 key、BOS 安全目录段作为 value；不提供修改 CLI。
-- 多工作站同步时只能更新 `schema_version` 与 `task_upload_routes`，禁止复制整份 station.json。
+- task description 与 BOS 安全目录段由 collection 配置统一维护，不再修改 station.json。
+- 多工作站之间不复制 station.json；每台工作站独立完成设备绑定。
 - 初始化在启动任何 ROS 进程前应用该 Domain ID；普通采集与 DAgger 随后只从 Station 配置继承。
-- schema v1/v2/v3 只允许读取和迁移；生产启动缺少 `ros_domain_id` 或 `task_upload_routes` 时明确失败。
-- `can1/can3` 是生成器内部固定策略，不要求用户理解或填写 CAN 接口编号。
+- schema v1/v2 可读取和迁移；生产启动缺少 `ros_domain_id` 时明确失败。旧 schema v4 仍可读取。
+- 默认 `can1/can3` 来自 environment 的 provisional CAN interface 配置。
 - 所有硬件序列号在各自类别内必须完整、非空、唯一，并与当前探测结果一致。
 - 运行期每次启动仍重新验证配置与实物，不因初始化成功而跳过设备检查。
 
@@ -114,7 +113,7 @@ triggers
 ## 模块边界
 
 ```text
-src/arx5_collection/station/
+src/arx5_collection/collection/station/
   models.py                # schema v3 与严格验证
   inventory.py             # udev、librealsense、hidraw 统一盘点
   arm_identifier.py        # 左臂移动信号与 USB2CAN 角色判断
@@ -122,7 +121,7 @@ src/arx5_collection/station/
   pedal_identifier.py      # 踩动顺序与事件身份捕获
   service.py               # 初始化事务、原子提交、回滚
 
-src/arx5_collection/production/
+src/arx5_collection/collection/runtime/
   cli.py                   # station configure 交互适配、run 默认路径
 ```
 
@@ -188,7 +187,7 @@ src/arx5_collection/production/
 - 2026-08-25：revision `d10ca4a` 的 production/DAgger Collector 已统一部署到 W3/W4；用户通过原子迁移入口将 W3 配置为 schema v3、`station_id=w3`、`ros_domain_id=53`，W4 配置为 schema v3、`station_id=w4`、`ros_domain_id=54`。两台 production Session 均已用新镜像启动；这些值仅是部署验收事实，不进入代码默认值或站点映射规则。
 - 双踏板 W3 验收已通过，Station Initialization 已开始实现。
 - 已实现 schema v2 原子 Store、统一 Inventory、踏板顺序绑定、D405 顺序绑定与真实 720p RGB-D 验证、左臂移动识别、统一 CLI 和运行期七设备身份复核。
-- 仓库真实 W3 配置已替换为无真实编号的 `station.example.json`；Compose 已移除 W3 容器名和报告路径，主机配置挂载允许 configure 原子写入。
+- 仓库真实 W3 配置已替换为无真实编号的 `config/environment/station.example.json`；Compose 已移除 W3 容器名和报告路径，主机配置挂载允许 configure 原子写入。
 - W3 实测发现 `/dev/ttyACM1` 是 `ARX_KEY` 而非 USB2CAN；统一发现规则固定校验 `ARX + USB2CAN + cdc_acm`，不按 ttyACM 编号猜测。
 - 本地相关测试 `152 passed`；W3 production image `arx5-dual-collection:station-init-20260817` 构建成功，容器内新增模块测试 `13 passed`。
 - W3 只读 Inventory 已确认：2 个 USB2CAN、3 个 D405、2 个稳定 hidraw 踏板，并已进入完整 configure 真机流程。

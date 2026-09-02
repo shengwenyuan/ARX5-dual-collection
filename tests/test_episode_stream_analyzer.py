@@ -7,8 +7,8 @@ from pathlib import Path
 import pytest
 
 
-TOOLS_ROOT = Path(__file__).resolve().parents[1] / "tools"
-sys.path.insert(0, str(TOOLS_ROOT))
+SCRIPTS_ROOT = Path(__file__).resolve().parents[1] / "scripts" / "collection"
+sys.path.insert(0, str(SCRIPTS_ROOT))
 
 from analyze_episode_streams import (  # noqa: E402
     ARM_STREAMS,

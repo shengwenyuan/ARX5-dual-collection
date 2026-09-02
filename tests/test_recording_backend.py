@@ -2,13 +2,11 @@ from __future__ import annotations
 
 import pytest
 
-from arx5_collection.episode.models import StreamSpec
-from arx5_collection.ros2_adapters.recording import RosbagRecordingBackend
+from arx5_collection.collection.episode.models import StreamSpec
+from arx5_collection.adapters.ros2.recording import RosbagRecordingBackend
 
 
-STREAMS = (
-    StreamSpec("left_arm_state", "/embodiments/left_arm/state", True, 1000.0),
-)
+STREAMS = (StreamSpec("left_arm_state", "/embodiments/left_arm/state", True, 1000.0),)
 
 
 class FakeRecorder:
@@ -24,7 +22,9 @@ class FakeRecorder:
     def record(self) -> None:
         self.calls.append("record")
         self.output_uri.mkdir()
-        (self.output_uri / "metadata.yaml").write_text("rosbag2_bagfile_information: {}")
+        (self.output_uri / "metadata.yaml").write_text(
+            "rosbag2_bagfile_information: {}"
+        )
         (self.output_uri / "episode_0.mcap").write_bytes(b"mcap")
         if self.extra_file:
             (self.output_uri / "unexpected.txt").write_text("unexpected")
