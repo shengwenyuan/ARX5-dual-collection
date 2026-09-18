@@ -11,6 +11,7 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 COPY docker/patches/librealsense-v2.54.2-gcc13-cstdint.patch /tmp/
 COPY docker/patches/arx-x5-go-home-services.patch /tmp/
 COPY docker/patches/arx-x5-policy-control-latch.patch /tmp/
+COPY docker/patches/arx-x5-calibration-control.patch /tmp/
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -77,6 +78,8 @@ RUN apt-get update \
         < /tmp/arx-x5-go-home-services.patch \
     && patch --directory /opt/vendor/ARX_X5 --strip 1 \
         < /tmp/arx-x5-policy-control-latch.patch \
+    && patch --directory /opt/vendor/ARX_X5 --strip 1 \
+        < /tmp/arx-x5-calibration-control.patch \
     && install -m 0644 /tmp/v2_joint_control.yaml \
         /opt/vendor/ARX_X5/ROS2/X5_ws/src/arx_x5_ros2/arx_x5_controller/config/v2_joint_control.yaml \
     && mkdir -p /opt/arx_ws/src \
@@ -144,6 +147,7 @@ LABEL org.opencontainers.image.revision="${SOURCE_REVISION}" \
 
 COPY src/ /opt/arx5-runtime/src/
 COPY pyproject.toml /opt/arx5-runtime/pyproject.toml
+COPY config/calibration/ /opt/arx5-runtime/config/calibration/
 COPY config/fastdds-shm.xml /opt/arx5-dual-collection/config/fastdds-shm.xml
 COPY scripts/ /opt/arx5-dual-collection/scripts/
 
@@ -192,3 +196,14 @@ RUN python3 -m pip install \
 
 ENTRYPOINT ["/ros_entrypoint.sh"]
 CMD ["arx5-collect", "--help"]
+
+FROM runtime-base AS calibration
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libgl1 libglib2.0-0 libxcb-xinerama0 libxkbcommon-x11-0 \
+        libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 libxcb-cursor0 \
+    && rm -rf /var/lib/apt/lists/* \
+    && python3 -m pip install --break-system-packages 'numpy>=2,<2.3' 'opencv-python==4.12.0.88'
+
+ENTRYPOINT ["/ros_entrypoint.sh"]
+CMD ["arx5-collect", "cali", "--help"]

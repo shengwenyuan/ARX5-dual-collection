@@ -5,6 +5,7 @@ import argparse
 import os
 from pathlib import Path
 import subprocess
+import socket
 import sys
 
 
@@ -69,9 +70,27 @@ def dagger(mode: str, rgb_only: bool = False) -> int:
     )
 
 
+def cali(arguments: list[str]) -> int:
+    # Forward all four role flags and stage options without changing their semantics.
+    environment = os.environ.copy()
+    environment["ARX5_CALI_HOSTNAME"] = socket.gethostname()
+    if not environment.get("XAUTHORITY"):
+        authority = Path.home() / ".Xauthority"
+        if authority.is_file():
+            environment["XAUTHORITY"] = str(authority)
+    return subprocess.call(
+        ["docker", "compose", "-f", str(ROOT / "docker/compose.calibration.yaml"),
+         "run", "--rm", "calibration", "arx5-collect", "cali", *arguments],
+        cwd=ROOT, env=environment,
+    )
+
+
 def main() -> int:
+    if len(sys.argv) > 1 and sys.argv[1] == "cali":
+        return cali(sys.argv[2:])
     parser = argparse.ArgumentParser(prog="arx5")
     commands = parser.add_subparsers(dest="command", required=True)
+    commands.add_parser("cali", help="four-route camera calibration; cali --help for stages")
     collect_parser = commands.add_parser(
         "collect", help="start a production collection Session"
     )

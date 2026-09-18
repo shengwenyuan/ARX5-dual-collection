@@ -43,3 +43,11 @@ PYTHONPATH=src python -m pytest -q tests
 ROS、SDK、相机及真实 MCAP 链路仍需在对应 Linux 容器中验收。代码修改不会自动更新已部署镜像。
 
 完整边界和本次迁移说明见 [采集仓库边界](docs/architecture/collection-scope.md)。
+
+## Camera calibration
+
+Four entries: `arx5 cali --left-wrist`, `--right-wrist`, `--overview-left`, or
+`--overview-right`. Choose gravity-compensation teaching (Space saves a pose),
+bounded JSON replay, or offline solving. The shared world is the overview RGB
+optical frame. See [calibration setup and workflow](docs/camera-calibration/plan.md)
+for the dedicated image build, display setup, data paths and hardware acceptance.

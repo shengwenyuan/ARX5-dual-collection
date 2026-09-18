@@ -92,6 +92,8 @@ def build_parser() -> argparse.ArgumentParser:
         "checkpoint-sha", help="compute the deterministic SHA-256 of a checkpoint tree"
     )
     checkpoint_sha.add_argument("checkpoint", type=Path)
+    from arx5_collection.calibration.cli import add_parser
+    add_parser(subcommands)
     return parser
 
 
@@ -113,6 +115,9 @@ def add_session_arguments(parser: argparse.ArgumentParser) -> None:
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
+        if args.command == "cali":
+            from arx5_collection.calibration.cli import run
+            return run(args)
         if args.command == "devices":
             return run_devices(args.station_config)
         if args.command == "station":

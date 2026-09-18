@@ -9,6 +9,7 @@ from arx5_collection.production.checks import CheckPhase, CheckResult
 from arx5_collection.production.config import ArmConfig, load_station_config
 from arx5_collection.production.processes import ProcessExit
 from arx5_collection.production.system import SystemBringup, Usb2CanResolver, UsbfsManager
+from arx5_collection.production.lease import HardwareLease
 
 
 ROOT = Path(__file__).parents[2]
@@ -107,6 +108,7 @@ class SystemBringupTest(unittest.TestCase):
                 station,
                 root / "logs",
                 usbfs=UsbfsManager(256, usbfs_path),
+                lease=HardwareLease(root / "hardware.lock"),
                 resolver=FakeResolver(),  # type: ignore[arg-type]
                 interface_factory=lambda arm, tty, logs: FakeInterface(arm, events),  # type: ignore[arg-type]
             )

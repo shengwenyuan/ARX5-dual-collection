@@ -11,6 +11,7 @@ from typing import Any
 from .checks import CheckPhase, CheckResult
 from .config import ArmConfig, StationConfig
 from .processes import ManagedProcess, ProcessExit, ProcessSpec
+from .lease import HardwareLease
 
 
 CommandRunner = Callable[..., subprocess.CompletedProcess[str]]
@@ -250,6 +251,7 @@ class SystemBringup:
         resolver: Usb2CanResolver | None = None,
         interface_factory: Callable[[ArmConfig, Path, Path], CanInterfaceManager]
         | None = None,
+        lease: HardwareLease | None = None,
     ) -> None:
         self.station = station
         self.log_dir = log_dir
@@ -259,12 +261,14 @@ class SystemBringup:
             lambda arm, tty, logs: CanInterfaceManager(arm, tty, logs)
         )
         self.interfaces: list[CanInterfaceManager] = []
+        self.lease = lease or HardwareLease()
 
     def start(self) -> tuple[CheckResult, ...]:
-        results = [self.usbfs.apply()]
-        if not results[-1].passed:
-            raise RuntimeError(results[-1].detail)
+        self.lease.acquire()
         try:
+            results = [self.usbfs.apply()]
+            if not results[-1].passed:
+                raise RuntimeError(results[-1].detail)
             for arm in self.station.arms:
                 tty_path = self.resolver.resolve(arm.usb_serial)
                 interface = self.interface_factory(arm, tty_path, self.log_dir)
@@ -298,6 +302,7 @@ class SystemBringup:
             not errors and restore.passed,
             "; ".join(errors) if errors else restore.detail,
         )
+        self.lease.release()
         return (restore, result)
 
 

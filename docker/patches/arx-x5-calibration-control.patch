@@ -1,0 +1,173 @@
+--- a/ROS2/X5_ws/src/arx_x5_ros2/arx_x5_controller/include/arx_x5_controller/X5Controller.hpp
++++ b/ROS2/X5_ws/src/arx_x5_ros2/arx_x5_controller/include/arx_x5_controller/X5Controller.hpp
+@@ -69,6 +69,14 @@
+   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr enable_policy_control_service_;
+ 
+   rclcpp::TimerBase::SharedPtr timer_;
++  void calibrationHold(const std::shared_ptr<std_srvs::srv::Trigger::Request>,
++                       std::shared_ptr<std_srvs::srv::Trigger::Response> response);
++  void calibrationCommand(const arx5_arm_msg::msg::RobotStatus & message);
++  void freezeCalibration();
++  bool calibration_mode_ = false;
++  std::chrono::steady_clock::time_point calibration_last_command_;
++  std::vector<double> calibration_target_;
++  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr calibration_hold_service_;
+   bool policy_control_required_ = false;
+   std::atomic<bool> manual_takeover_{true};
+   bool new_version_ = false;
+--- a/ROS2/X5_ws/src/arx_x5_ros2/arx_x5_controller/src/X5Controller.cpp
++++ b/ROS2/X5_ws/src/arx_x5_ros2/arx_x5_controller/src/X5Controller.cpp
+@@ -1,6 +1,8 @@
+ #include "arx_x5_controller/X5Controller.hpp"
+ #include <ament_index_cpp/get_package_share_directory.hpp>
+ #include <csignal>
++#include <algorithm>
++#include <cmath>
+ 
+ // using namespace std::chrono_literals;
+ 
+@@ -10,6 +12,9 @@
+   rclcpp::on_shutdown(std::bind(&X5Controller::cleanup, this));
+   std::string arm_control_type = this->declare_parameter("arm_control_type", "normal");
+   policy_control_required_ = arm_control_type == "remote_slave";
++  calibration_mode_ = this->declare_parameter("calibration_mode", false);
++  if (calibration_mode_ && !policy_control_required_)
++    throw std::runtime_error("calibration requires remote_slave mode");
+   std::string package_name = "arx_x5_controller";
+   std::string package_share_dir = ament_index_cpp::get_package_share_directory(package_name);
+   int end_type = this->declare_parameter("arm_end_type", 0);
+@@ -26,6 +31,8 @@
+   }
+   interfaces_ptr_ =
+       std::make_shared<InterfacesThread>(urdf_path, this->declare_parameter("arm_can_id", "can0"), end_type);
++  if (calibration_mode_)
++    interfaces_ptr_->setArmStatus(InterfacesThread::state::G_COMPENSATION);
+   // RCLCPP_INFO(this->get_logger(), "arm_control_type = %s",arm_control_type.c_str());
+   interfaces_ptr_->arx_x(500, 2000, 10);
+   interfaces_ptr_->setHomePositions(go_home_positions_);
+@@ -94,6 +101,11 @@
+   enable_policy_control_service_ = this->create_service<std_srvs::srv::Trigger>(
+       "~/enable_policy_control", std::bind(&X5Controller::enablePolicyControl,
+       this, std::placeholders::_1, std::placeholders::_2));
++  if (calibration_mode_) {
++    calibration_hold_service_ = this->create_service<std_srvs::srv::Trigger>(
++        "~/calibration_hold", std::bind(&X5Controller::calibrationHold,
++        this, std::placeholders::_1, std::placeholders::_2));
++  }
+   if (policy_control_required_) {
+     interfaces_ptr_->setArmStatus(InterfacesThread::state::G_COMPENSATION);
+     RCLCPP_WARN(this->get_logger(),
+@@ -102,6 +114,7 @@
+ }
+ 
+ void X5Controller::CmdCallback(const arx5_arm_msg::msg::RobotCmd::SharedPtr msg) {
++  if (calibration_mode_) return;
+   if (policy_control_required_ && manual_takeover_.load()) return;
+   double end_pos[6] = {
+       msg->end_pos[0], msg->end_pos[1], msg->end_pos[2], msg->end_pos[3], msg->end_pos[4], msg->end_pos[5]};
+@@ -124,6 +137,7 @@
+ }
+ 
+ void X5Controller::arxJoyCB(const std_msgs::msg::Int32MultiArray::SharedPtr msg) {
++  if (calibration_mode_) return;
+   if (msg->data[0] == 1)
+     interfaces_ptr_->setArmStatus(InterfacesThread::state::G_COMPENSATION);
+   if (msg->data[1] == 1)
+@@ -133,6 +147,11 @@
+ void X5Controller::goHome(
+     const std::shared_ptr<std_srvs::srv::Trigger::Request>,
+     std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
++  if (calibration_mode_) {
++    response->success = false;
++    response->message = "HOME disabled in calibration; preserve board grasp";
++    return;
++  }
+   if (policy_control_required_) manual_takeover_.store(true);
+   interfaces_ptr_->setCatch(-1.0);
+   interfaces_ptr_->setArmStatus(InterfacesThread::state::GO_HOME);
+@@ -166,12 +185,69 @@
+     response->message = "policy control is only available in remote_slave mode";
+     return;
+   }
++  if (calibration_mode_) {
++    freezeCalibration();
++    if (calibration_target_.size() != 6) {
++      response->success = false;
++      response->message = "joint readback unavailable";
++      return;
++    }
++    calibration_last_command_ = std::chrono::steady_clock::now();
++  }
+   manual_takeover_.store(false);
+   response->success = true;
+   response->message = "policy command callbacks enabled";
+ }
+ 
++void X5Controller::freezeCalibration() {
++  manual_takeover_.store(true);
++  const auto actual = interfaces_ptr_->getJointPositons();
++  calibration_target_.clear();
++  if (actual.size() < 6 || !std::all_of(actual.begin(), actual.begin() + 6,
++                                      [](double x) { return std::isfinite(x); })) return;
++  calibration_target_.assign(actual.begin(), actual.begin() + 6);
++  interfaces_ptr_->setJointPositions(calibration_target_);
++  interfaces_ptr_->setArmStatus(InterfacesThread::state::POSITION_CONTROL);
++  // Preserve SDK gripper target/torque; never turn measured position into a new grasp command.
++}
++
++void X5Controller::calibrationHold(
++    const std::shared_ptr<std_srvs::srv::Trigger::Request>,
++    std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
++  freezeCalibration();
++  response->success = calibration_target_.size() == 6;
++  response->message = "calibration commands latched off; position hold requested";
++}
++
++void X5Controller::calibrationCommand(const arx5_arm_msg::msg::RobotStatus & message) {
++  const auto now = std::chrono::steady_clock::now();
++  const double dt = std::chrono::duration<double>(now - calibration_last_command_).count();
++  const double source_age = (this->get_clock()->now() - rclcpp::Time(message.header.stamp)).seconds();
++  const double allowed_step = 0.20 * std::min(dt, 0.10) + 0.001;
++  if (calibration_target_.size() != 6 || dt > 0.25 || source_age < -0.02 || source_age > 0.10) {
++    freezeCalibration();
++    return;
++  }
++  for (int i = 0; i < 6; ++i) {
++    if (!std::isfinite(message.joint_pos[i]) ||
++        std::abs(message.joint_pos[i] - calibration_target_[i]) > allowed_step) {
++      freezeCalibration();
++      return;
++    }
++  }
++  calibration_target_.assign(message.joint_pos.begin(), message.joint_pos.begin() + 6);
++  calibration_last_command_ = now;
++  interfaces_ptr_->setJointPositions(calibration_target_);
++  interfaces_ptr_->setArmStatus(InterfacesThread::state::POSITION_CONTROL);
++}
++
+ void X5Controller::PubState() {
++  if (calibration_mode_ && !manual_takeover_.load() &&
++      std::chrono::duration<double>(std::chrono::steady_clock::now() -
++          calibration_last_command_).count() > 0.25) {
++    freezeCalibration();
++    RCLCPP_ERROR(this->get_logger(), "Calibration watchdog: hold; re-enable required");
++  }
+   auto message = arx5_arm_msg::msg::RobotStatus();
+   message.header.stamp = this->get_clock()->now();
+ 
+@@ -295,6 +371,7 @@
+ 
+ void X5Controller::FollowCmdCallback(const arx5_arm_msg::msg::RobotStatus::SharedPtr msg) {
+   if (policy_control_required_ && manual_takeover_.load()) return;
++  if (calibration_mode_) { calibrationCommand(*msg); return; }
+   std::vector<double> target_joint_position(6, 0.0);
+ 
+   for (int i = 0; i < 6; i++) {
+@@ -317,6 +394,7 @@
+ }
+ 
+ void X5Controller::JointControlCallback(const arm_control::msg::JointControl::SharedPtr msg) {
++  if (calibration_mode_) return;
+   if (policy_control_required_ && manual_takeover_.load()) return;
+   std::vector<double> target_joint_position(6,0.0);
+   for (int i = 0; i < 6; i++)

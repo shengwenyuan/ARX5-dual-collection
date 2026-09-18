@@ -1,0 +1,26 @@
+name: arx5-dual-calibration
+
+services:
+  calibration:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.bringup
+      target: calibration
+    image: ${ARX5_CALIBRATION_IMAGE:-arx5-dual-collection:calibration}
+    hostname: ${ARX5_CALI_HOSTNAME:-arx5-calibration}
+    privileged: true
+    network_mode: host
+    shm_size: "1gb"
+    stdin_open: true
+    tty: true
+    stop_grace_period: 120s
+    environment:
+      DISPLAY: ${DISPLAY:-}
+      XAUTHORITY: /tmp/calibration.xauthority
+      QT_X11_NO_MITSHM: "1"
+    volumes:
+      - /run/udev:/run/udev:ro
+      - /var/lib/arx5-collection:/var/lib/arx5-collection
+      - /tmp/.X11-unix:/tmp/.X11-unix:ro
+      - ${XAUTHORITY:-/dev/null}:/tmp/calibration.xauthority:ro
+      - ..:/workspace:ro
