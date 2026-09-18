@@ -75,9 +75,14 @@ def cali(arguments: list[str]) -> int:
     environment = os.environ.copy()
     environment["ARX5_CALI_HOSTNAME"] = socket.gethostname()
     if not environment.get("XAUTHORITY"):
-        authority = Path.home() / ".Xauthority"
-        if authority.is_file():
-            environment["XAUTHORITY"] = str(authority)
+        authorities = [Path.home() / ".Xauthority"]
+        if environment.get("DISPLAY", "").startswith(":"):
+            # Ubuntu GDM stores the current desktop cookie outside ~/.Xauthority.
+            authorities.insert(0, Path(f"/run/user/{os.getuid()}/gdm/Xauthority"))
+        for authority in authorities:
+            if authority.is_file():
+                environment["XAUTHORITY"] = str(authority)
+                break
     return subprocess.call(
         ["docker", "compose", "-f", str(ROOT / "docker/compose.calibration.yaml"),
          "run", "--rm", "calibration", "arx5-collect", "cali", *arguments],
