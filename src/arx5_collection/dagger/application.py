@@ -80,7 +80,6 @@ class DaggerSessionBuilder:
         additional_recording_topics: tuple[str, ...] = (),
     ) -> ProductionSession:
         station = load_configured_station(spec.station_config)
-        station.task_upload_directory(spec.task_description)
         backend = RosbagRecordingBackend(
             additional_topics=additional_recording_topics
         )

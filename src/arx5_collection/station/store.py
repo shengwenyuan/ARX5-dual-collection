@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from arx5_collection.production.config import (
+    STATION_SCHEMA_VERSION,
     StationConfig,
     load_station_config,
     validate_ros_domain_id,
@@ -19,7 +20,11 @@ DEFAULT_STATION_CONFIG = Path("/var/lib/arx5-collection/station.json")
 
 def station_config_payload(station: StationConfig) -> dict[str, Any]:
     payload: dict[str, Any] = {
-        "schema_version": station.schema_version,
+        "schema_version": (
+            STATION_SCHEMA_VERSION
+            if station.schema_version in {3, 4, STATION_SCHEMA_VERSION}
+            else station.schema_version
+        ),
         "station_id": station.station_id,
         "sdk_type": station.sdk_type,
         "arms": [
@@ -46,8 +51,6 @@ def station_config_payload(station: StationConfig) -> dict[str, Any]:
         }
     if station.ros_domain_id is not None:
         payload["ros_domain_id"] = station.ros_domain_id
-    if station.task_upload_routes is not None:
-        payload["task_upload_routes"] = station.task_upload_routes
     return payload
 
 
@@ -102,7 +105,7 @@ class StationConfigStore:
             )
         updated = replace(
             station,
-            schema_version=max(station.schema_version, 3),
+            schema_version=STATION_SCHEMA_VERSION,
             ros_domain_id=validate_ros_domain_id(ros_domain_id),
         )
         self.commit(updated)

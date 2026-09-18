@@ -28,7 +28,7 @@
 暂不实现：
 
 - UI 和人工 `fail` 标注。v0.1 正常结束记为 `success`，异常结束记为 `aborted`。
-- 云端任务平台、自动上传和复杂任务分发。任务先由本地定义传入。
+- 云端任务平台和复杂任务分发。任务由本地定义传入；上传与离线训练数据处理由外部系统负责。
 - DAgger 不并入 v0.1 普通人工采集；按 `docs/dagger/requirements.md` 通过独立入口、白名单和分阶段真机验收推进。
 - 时间偏差分析、补偿和在线同步算法。
 - 容器设备权限收敛与软件包发行。
@@ -143,17 +143,17 @@ Schema 必须可扩展，新增字段不得改变已有字段语义。
 - 模块语言遵循已冻结的语言与进程边界；迁移必须由真机测量结果驱动。
 - 模块间通过稳定接口解耦，降低驱动替换和局部重构压力。
 
-## 落盘后训练数据处理
+## 采集交付边界
 
-MCAP 落盘后的清洗与训练集转换属于当前需求，但与采集主线保持单向解耦：采集侧以原子提交 `episode.mcap + metadata.json` 为终点，后处理只读已提交 Episode，不连接设备、不进入 Session/Recorder/Monitor 生命周期，也不反向修改原始数据或采集语义。
+本仓库以本地原子提交 `episode.mcap + metadata.json` 为数据交付终点。保留 RGB-D / RGB-only、流监测、MCAP 完整性审计和 FINALIZING 阶段 Zstd 无损压缩。
 
-首条正式链路将通用质量审计和真实帧组索引进一步转换为稳定的 LeRobot 数据集。collection 只验收数据结构、时序、图像和 state/action 契约；OpenPI adapter、norm stats、训练与推理验收由独立的 `pi05_jax_safeinfer` 仓库负责。正式数据计划见 `docs/data-cleaning/pi05-mcap-to-lerobot.md`。
+离线清洗、训练资格筛选、数据集转换与重组、数据集 Viewer、BOS 上传及上传前后检查已从本仓库移除。后续系统自行读取已提交的 Episode，不参与采集 Session，也不反向修改原始数据。
 
-首个完整实例 `stacking_five_paper_cups_pi05_v1` 已由 49 条 success 源 Episode 构造为 50 个 LeRobot episode；该实例作为后续数据转换链路的参考实现。交付完成后，模型仓库只消费不可变 LeRobot snapshot 和 conversion report，不反向依赖 collection 源码。
+DAgger 保留在线策略推理、安全门、接管控制、`/dagger/authority` 事件和 metadata 控制区间。专家区间的筛选、训练样本生成及模型训练属于外部系统。
 
-架构上冻结“模型无关清洗层 + 模型专用 dataset pipeline”：前者输出可复用的 `quality.json + frame_index.jsonl`，后者独立负责各模型的训练资格、采样频率、action、归一化和导出。未来其他清洗或训练链路应复用同一上游契约，新增独立 adapter/pipeline，不复制采集逻辑，也不把模型依赖带入采集运行路径。
+站点配置新建/更新使用 schema v5；已有 v4 可直接读取，旧上传路由字段仅用于格式兼容，不参与采集校验。读取不会改写文件，v3/v4 在下次保存时转为 v5。任务描述由采集入口显式传入，原样写入 metadata。
 
-DAgger 原始 Episode 同样保持完整、连续和不可修改。主线 MCAP 继续以六路 RGB-D 和双臂 ArmState 为感知真值，不复制模型输入，也不记录普通推理使用的源消息。只有控制权变化通过稀疏 `/dagger/authority` 事件落入同一 MCAP；离线 pipeline 只生成区间、质量、训练资格与来源 manifest，不裁剪或覆盖原始数据，不推断模型开始出错的精确时刻。首版 correction 单独导出验证，之后在 selection 层与 demonstration 合并为一个 LeRobot；不增加 pre/post roll，也不修改 OpenPI loss mask。
+变更范围、配置兼容和验证见 [采集仓库边界](docs/architecture/collection-scope.md)。
 
 ## DAgger 控制边界
 
@@ -206,7 +206,7 @@ DAgger 原始 Episode 同样保持完整、连续和不可修改。主线 MCAP �
 - W4 已多次成功启动生产 Session。两条代表性 success Episode 为 27.54 秒/9.10 GB 与 46.13 秒/15.27 GB：八路完整，双臂约 1000 Hz，三相机约 30 Hz，单机 RGB/Aligned Depth 全部逐帧同时间戳配对，metadata 与 MCAP 计数一致。
 - 三颗 D405 仍是独立采样：本轮相机间最近帧中位偏差约 10～15 ms，并有孤立的约 66.7 ms 帧间隔；原始写入约 331 MB/s。系统保留真实数据，不插值、不伪造同步。
 - W3 统一 C++ D405 Source 已在 848×480@30 下完成 91.55 秒 DAgger Shadow 验收：八路完整、Shadow 274/274 成功、三相机 40 ms 配组 100%、无重复 Header；60 秒等效 MCAP 约 8.79 GB。
-- W3 已完成 RGB8 普通生产链路验收：同一 Session 内两条 success 与一条 aborted，三路 Color 均为 RGB8、三路 Depth 保持 16UC1，约 29.992 Hz；两条 success 同机 RGB/Depth 全部逐帧配对，三条 Episode 跨相机配组覆盖率 100%，最大跨度 6.51 ms。在线 YUYV 已删除，仅离线读取器兼容历史 MCAP。
+- W3 已完成 RGB8 普通生产链路验收：同一 Session 内两条 success 与一条 aborted，三路 Color 均为 RGB8、三路 Depth 保持 16UC1，约 29.992 Hz；两条 success 同机 RGB/Depth 全部逐帧配对，三条 Episode 跨相机配组覆盖率 100%，最大跨度 6.51 ms。在线 YUYV 已删除；历史 MCAP 的离线转换由外部系统负责。
 - Station 初始化与生产 success 路径已允许进入批量采集；90～150 秒完整八路 Episode、必需流故障注入和长期压力仍是最终稳定性验收项。
 
 ## 开发前置确认

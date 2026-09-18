@@ -19,7 +19,7 @@ from arx5_collection.station.store import StationConfigStore
 
 def station() -> StationConfig:
     return StationConfig(
-        schema_version=4,
+        schema_version=5,
         station_id="station-a",
         ros_domain_id=31,
         sdk_type=2,
@@ -36,7 +36,6 @@ def station() -> StationConfig:
             PedalConfig("activate", "8088", "0015", "pedal-one"),
             PedalConfig("abort", "8088", "0015", "pedal-two"),
         ),
-        task_upload_routes={"folding the cloth": "fold_cloth"},
     )
 
 
@@ -46,7 +45,7 @@ class StationConfigStoreTest(unittest.TestCase):
         self.addCleanup(directory.cleanup)
         self.path = Path(directory.name) / "state" / "station.json"
 
-    def test_writes_schema_v4_that_production_loader_reads(self) -> None:
+    def test_writes_schema_v5_that_production_loader_reads(self) -> None:
         StationConfigStore(self.path).commit(station())
 
         loaded = load_station_config(self.path)
@@ -83,7 +82,6 @@ class StationConfigStoreTest(unittest.TestCase):
                 "arms",
                 "cameras",
                 "triggers",
-                "task_upload_routes",
             },
         )
         self.assertNotIn("hidraw", self.path.read_text())
@@ -98,14 +96,32 @@ class StationConfigStoreTest(unittest.TestCase):
             arms=legacy.arms,
             cameras=legacy.cameras,
             triggers=legacy.triggers,
-            task_upload_routes=None,
         )
         StationConfigStore(self.path).commit(legacy)
 
         updated = StationConfigStore(self.path).set_ros_domain_id(42)
 
-        self.assertEqual(updated.schema_version, 3)
+        self.assertEqual(updated.schema_version, 5)
         self.assertEqual(updated.ros_domain_id, 42)
+        self.assertEqual(load_station_config(self.path), updated)
+
+    def test_saving_deployed_v4_drops_routes_and_preserves_devices(self) -> None:
+        StationConfigStore(self.path).commit(station())
+        payload = json.loads(self.path.read_text())
+        payload["schema_version"] = 4
+        payload["task_upload_routes"] = {"legacy task": "legacy_route"}
+        self.path.write_text(json.dumps(payload))
+        legacy = load_station_config(self.path)
+
+        updated = StationConfigStore(self.path).set_ros_domain_id(42)
+
+        saved = json.loads(self.path.read_text())
+        self.assertEqual(saved["schema_version"], 5)
+        self.assertNotIn("task_upload_routes", saved)
+        self.assertEqual(updated.arms, legacy.arms)
+        self.assertEqual(updated.cameras, legacy.cameras)
+        self.assertEqual(updated.triggers, legacy.triggers)
+        self.assertEqual(updated.station_id, legacy.station_id)
         self.assertEqual(load_station_config(self.path), updated)
 
 

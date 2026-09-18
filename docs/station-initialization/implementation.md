@@ -32,12 +32,11 @@ arx5-collect station configure
 
 ## 最终 Station 配置
 
-schema v4 至少包含：
+schema v5 包含：
 
 ```text
 station_id
 ros_domain_id
-task_upload_routes
 sdk_type
 arms
   left  -> USB2CAN serial, can1
@@ -51,10 +50,12 @@ triggers
 
 - `station_id` 默认使用主机名并允许用户在提交前修改；它是外部命名，项目不解释其格式。
 - `ros_domain_id` 由用户显式输入，合法范围为 `0..232`，不从 `station_id` 推导，也不由项目跨工作站分配或查重。
-- schema v4 的 `task_upload_routes` 由人直接维护，使用完整 task description 作为 key、BOS 安全目录段作为 value；不提供修改 CLI。
-- 多工作站同步时只能更新 `schema_version` 与 `task_upload_routes`，禁止复制整份 station.json。
+- schema v5 只保存设备身份与 ROS Domain ID；任务描述由采集入口传入，站点不维护任务上传路由。
+- 多工作站部署禁止复制整份 station.json；每台工作站保留自己的设备绑定与 ROS Domain ID。
 - 初始化在启动任何 ROS 进程前应用该 Domain ID；普通采集与 DAgger 随后只从 Station 配置继承。
-- schema v1/v2/v3 只允许读取和迁移；生产启动缺少 `ros_domain_id` 或 `task_upload_routes` 时明确失败。
+- schema v1/v2 保留读取支持，缺少 `ros_domain_id` 时仍拒绝生产启动；v2 可通过 `station set-ros-domain-id` 升级到 v5，v1 需重新 configure。
+- schema v3/v4 可直接用于生产。v4 的 `task_upload_routes` 仅接受为历史字段，其内容不参与校验；读取保持磁盘文件不变。
+- 新初始化生成 v5；v3/v4 配置在下次保存时转成 v5，并移除历史路由字段。更新仍采用原子写入，保留硬件绑定。
 - `can1/can3` 是生成器内部固定策略，不要求用户理解或填写 CAN 接口编号。
 - 所有硬件序列号在各自类别内必须完整、非空、唯一，并与当前探测结果一致。
 - 运行期每次启动仍重新验证配置与实物，不因初始化成功而跳过设备检查。
@@ -201,3 +202,5 @@ src/arx5_collection/production/
 - W4 `station configure` 已完成左臂移动识别、三颗 D405 真实 720p RGB-D 验证和双踏板顺序绑定；相机 left=`261122270159`、overview=`261022274835`、right=`261022277068`，踏板 activate=`BF6EABE6`、abort=`BF6EA0CA`，最终配置原子提交至 `/var/lib/arx5-collection/station.json`。
 - W4 容器重启后的 `arx5-collect devices` 七项全部 `matched=true`。
 - W4 已多次成功启动 production Session；两条代表性 success Episode 均完成双踏板控制、八路 MCAP、metadata、原子目录和统一退出，Station 初始化与生产消费链路验收通过。90～150 秒压力与必需流故障注入继续由生产编排计划跟踪。
+
+- 2026-09-18：剥离上传和离线数据处理；新站点使用 schema v5，保留 v4 只读兼容。配置读取不修改原文件，保存升级的设备身份保持性已通过本地回归；未修改生产站点。

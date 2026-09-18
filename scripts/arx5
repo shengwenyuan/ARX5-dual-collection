@@ -10,7 +10,6 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 STATION_DIR = Path("/var/lib/arx5-collection")
-DATASET_IMAGE = "arx5-dual-collection:dataset"
 
 
 def required(name: str) -> str:
@@ -70,46 +69,6 @@ def dagger(mode: str, rgb_only: bool = False) -> int:
     )
 
 
-def upload(full_check: str, dagger: bool = False) -> int:
-    source = required("ARX5_OUTPUT_ROOT")
-    task = required("ARX5_TASK_DESCRIPTION")
-    temporary = Path.home() / "swy/bos-upload-tmp"
-    temporary.mkdir(parents=True, exist_ok=True)
-    interactive = ["-i", "-t"] if sys.stdin.isatty() else ["-i"]
-    return subprocess.call(
-        [
-            "docker",
-            "run",
-            "--rm",
-            *interactive,
-            "--name",
-            "arx5-bos-upload",
-            "-v",
-            f"{ROOT}:/workspace:ro",
-            "-v",
-            f"{source}:{source}",
-            "-v",
-            f"{STATION_DIR}:{STATION_DIR}:ro",
-            "-v",
-            "/usr/local/bin/bcecmd:/usr/local/bin/bcecmd:ro",
-            "-v",
-            f"{Path.home() / '.go-bcecli'}:/root/.go-bcecli",
-            "-v",
-            f"{temporary}:/tmp",
-            DATASET_IMAGE,
-            "python3",
-            "/workspace/tools/bos_upload_episodes.py",
-            "--source",
-            source,
-            "--task-description",
-            task,
-            *(["--dagger"] if dagger else []),
-            "--full-check",
-            full_check,
-        ]
-    )
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(prog="arx5")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -130,20 +89,11 @@ def main() -> int:
         action="store_true",
         help="temporarily omit aligned depth from the recorded MCAP",
     )
-    upload_parser = commands.add_parser(
-        "upload", help="validate and upload the Session"
-    )
-    upload_parser.add_argument(
-        "--full-check", choices=("true", "false"), default="true"
-    )
-    upload_parser.add_argument("--dagger", action="store_true")
     args = parser.parse_args()
     try:
         if args.command == "collect":
             return collect(args.rgb_only)
-        if args.command == "dagger":
-            return dagger(args.mode, args.rgb_only)
-        return upload(args.full_check, args.dagger)
+        return dagger(args.mode, args.rgb_only)
     except ValueError as error:
         parser.error(str(error))
 

@@ -38,9 +38,7 @@ class ProductionConfigTest(unittest.TestCase):
         station = load_station_config(ROOT / "config" / "station.example.json")
         self.assertEqual(station.station_id, "station-example")
         self.assertEqual(station.ros_domain_id, 31)
-        self.assertEqual(
-            station.task_upload_directory("folding the cloth"), "fold_cloth"
-        )
+        self.assertEqual(station.schema_version, 5)
         self.assertEqual([arm.role for arm in station.arms], ["left", "right"])
         self.assertEqual(
             [camera.serial_number for camera in station.cameras],
@@ -58,7 +56,6 @@ class ProductionConfigTest(unittest.TestCase):
         payload = json.loads((ROOT / "config" / "station.example.json").read_text())
         payload["schema_version"] = 2
         payload.pop("ros_domain_id")
-        payload.pop("task_upload_routes")
         payload["triggers"] = trigger_payload()
         station = load_station_config(self.write_json(payload))
         assert station.triggers is not None
@@ -69,7 +66,6 @@ class ProductionConfigTest(unittest.TestCase):
         payload = json.loads((ROOT / "config" / "station.example.json").read_text())
         payload["schema_version"] = 2
         payload.pop("ros_domain_id")
-        payload.pop("task_upload_routes")
         payload["triggers"] = trigger_payload()
         payload["triggers"]["abort"]["serial_number"] = "pedal-one"
         with self.assertRaisesRegex(ValueError, "different serial numbers"):
@@ -79,7 +75,6 @@ class ProductionConfigTest(unittest.TestCase):
         payload = json.loads((ROOT / "config" / "station.example.json").read_text())
         payload["schema_version"] = 2
         payload.pop("ros_domain_id")
-        payload.pop("task_upload_routes")
         payload["triggers"] = trigger_payload()
         payload["triggers"]["activate"]["event_code"] = 57
         with self.assertRaisesRegex(ValueError, "keys must be exactly"):
@@ -93,24 +88,34 @@ class ProductionConfigTest(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "ros_domain_id"):
                     load_station_config(self.write_json(payload))
 
-    def test_station_v4_rejects_invalid_task_upload_directory(self) -> None:
+    def test_deployed_v4_station_loads_without_using_retired_routes(self) -> None:
         payload = json.loads((ROOT / "config" / "station.example.json").read_text())
-        for value in ("Fold Cloth", "fold/cloth", "../fold", ""):
-            with self.subTest(value=value):
-                payload["task_upload_routes"] = {"folding the cloth": value}
-                with self.assertRaisesRegex(ValueError, "task_upload_routes values"):
-                    load_station_config(self.write_json(payload))
+        payload["schema_version"] = 4
+        payload["task_upload_routes"] = {"old task": "old_route"}
+        path = self.write_json(payload)
+        original = path.read_bytes()
+        station = load_configured_station(path)
+        self.assertEqual(station.ros_domain_id, 31)
+        self.assertEqual(station.schema_version, 4)
+        self.assertEqual(path.read_bytes(), original)
+        self.assertFalse(hasattr(station, "task_upload_routes"))
 
-    def test_unknown_task_description_is_rejected_exactly(self) -> None:
-        station = load_station_config(ROOT / "config" / "station.example.json")
-        with self.assertRaisesRegex(ValueError, "not configured"):
-            station.task_upload_directory("Folding the cloth")
+    def test_production_accepts_v3_station_without_task_registry(self) -> None:
+        payload = json.loads((ROOT / "config" / "station.example.json").read_text())
+        payload["schema_version"] = 3
+        station = load_configured_station(self.write_json(payload))
+        self.assertEqual(station.ros_domain_id, 31)
+
+    def test_v5_rejects_retired_route_field(self) -> None:
+        payload = json.loads((ROOT / "config" / "station.example.json").read_text())
+        payload["task_upload_routes"] = {}
+        with self.assertRaisesRegex(ValueError, "keys must be exactly"):
+            load_station_config(self.write_json(payload))
 
     def test_production_rejects_legacy_station_without_ros_domain_id(self) -> None:
         payload = json.loads((ROOT / "config" / "station.example.json").read_text())
         payload["schema_version"] = 2
         payload.pop("ros_domain_id")
-        payload.pop("task_upload_routes")
         with self.assertRaisesRegex(ValueError, "station set-ros-domain-id"):
             load_configured_station(self.write_json(payload))
 

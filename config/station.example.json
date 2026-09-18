@@ -1,5 +1,5 @@
 {
-  "schema_version": 4,
+  "schema_version": 5,
   "station_id": "station-example",
   "ros_domain_id": 31,
   "sdk_type": 2,
@@ -16,9 +16,15 @@
     }
   ],
   "cameras": {
-    "left": {"serial_number": "camera-left-serial"},
-    "right": {"serial_number": "camera-right-serial"},
-    "overview": {"serial_number": "camera-overview-serial"}
+    "left": {
+      "serial_number": "camera-left-serial"
+    },
+    "right": {
+      "serial_number": "camera-right-serial"
+    },
+    "overview": {
+      "serial_number": "camera-overview-serial"
+    }
   },
   "triggers": {
     "activate": {
@@ -31,8 +37,5 @@
       "product_id": "0000",
       "serial_number": "pedal-abort-serial"
     }
-  },
-  "task_upload_routes": {
-    "folding the cloth": "fold_cloth"
   }
 }

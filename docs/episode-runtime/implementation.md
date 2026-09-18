@@ -107,7 +107,7 @@ episodes/
 - `station_config`
 - `streams: list[StreamSpec]`
 
-`task_description` 是采集入口的必填参数。静态 task 配置只包含 `task_id` 与 stream contract；metadata 原样保存入口字符串。upload 只做路由与一致性校验，streaming conversion 和 LeRobot recomposition 均不推断或改写。
+`task_description` 是采集入口的必填参数。静态 task 配置只包含 `task_id` 与 stream contract；metadata 原样保存入口字符串。本仓库不再提供上传、离线清洗或数据集转换；采集不要求任务描述预先注册到上传路由。
 
 ### `StreamSpec`
 
