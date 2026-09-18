@@ -113,6 +113,7 @@ class StableWindow:
         self.limits = limits
         self.since = None
         self.reference = None
+        self.wait_reason = "release both arms"
 
     def update(self, sample, now, reference=None):
         validate_sample(sample, now, self.limits)
@@ -120,11 +121,18 @@ class StableWindow:
             self.reference = {s: sample[s]["q"] for s in ("left", "right")}
         expected = reference if reference is not None else self.reference
         if not stationary(sample, expected, self.limits):
+            moving = [
+                side for side in ("left", "right")
+                if np.max(np.abs(vector(sample[side]["velocity"])))
+                > self.limits.still_velocity_rad_s
+            ]
+            self.wait_reason = "/".join(moving) + " speed" if moving else "position changed"
             self.since = None
             self.reference = {s: sample[s]["q"] for s in ("left", "right")}
             return False
         if self.since is None:
             self.since = now
+        self.wait_reason = "keep still"
         return now - self.since >= self.limits.stable_s
 
 
@@ -142,6 +150,7 @@ class TeachFeedback:
         except StaleArmFeedback as error:
             now = self.clock()
             self.gate.since = self.gate.reference = None
+            self.gate.wait_reason = "feedback unavailable"
             if self.unavailable_since is None:
                 self.unavailable_since = now
             if now - self.unavailable_since >= 2.0:

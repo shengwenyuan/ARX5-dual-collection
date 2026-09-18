@@ -178,3 +178,27 @@ def test_teach_never_swallows_controller_or_nonfinite_failure():
         feedback = TeachFeedback(SimpleNamespace(read=read), limits, StableWindow(limits))
         with pytest.raises(type(error), match=str(error)):
             feedback.read()
+
+
+def test_stationary_velocity_noise_can_settle_but_drift_and_motion_cannot():
+    limits = MotionLimits()
+    assert limits.still_velocity_rad_s == .04
+    gate = StableWindow(limits)
+    for i, speed in enumerate((.01, -.02, .03, -.03, .02, .03, .025, -.03)):
+        state = sample(now=10 + i * .1)
+        state["left"]["velocity"][2] = speed
+        state["right"]["velocity"][4] = -speed
+        settled = gate.update(state, 10 + i * .1)
+    assert settled
+    moving = sample(now=11.)
+    moving["right"]["velocity"][1] = .041
+    assert not gate.update(moving, 11.)
+    assert gate.since is None and gate.wait_reason == "right speed"
+    assert not gate.update(sample(now=11.1), 11.1)
+    drifted = sample(now=11.2)
+    drifted["left"]["q"][0] = .011
+    assert not gate.update(drifted, 11.2)
+    assert gate.since is None and gate.wait_reason == "position changed"
+    with pytest.raises(ValueError, match="tolerances"):
+        MotionLimits(still_velocity_rad_s=.041)
+    assert limits.velocity_rad_s == .1 and limits.acceleration_rad_s2 == .2

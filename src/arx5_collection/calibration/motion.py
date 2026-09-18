@@ -13,7 +13,9 @@ class MotionLimits:
     acceleration_rad_s2: float = 0.20
     rate_hz: float = 50.0
     arrival_rad: float = 0.01
-    still_velocity_rad_s: float = 0.01
+    # Allow the reported 0.01–0.03 rad/s stationary readback fluctuation.
+    # Position drift and continuous dwell are still required independently.
+    still_velocity_rad_s: float = 0.04
     stable_s: float = 0.6
     capture_s: float = 2.0
     feedback_age_s: float = 0.10
@@ -32,7 +34,7 @@ class MotionLimits:
             raise ValueError("invalid control rate or feedback freshness")
         if (
             self.arrival_rad > 0.02
-            or self.still_velocity_rad_s > 0.02
+            or self.still_velocity_rad_s > 0.04
             or self.following_error_rad > 0.10
         ):
             raise ValueError("motion tolerances too loose")

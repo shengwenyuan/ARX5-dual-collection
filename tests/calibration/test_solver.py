@@ -205,6 +205,8 @@ def test_clock_or_motion_mismatch_is_rejected_before_fit(tmp_path, kin):
         check_observation(route, obs)
     obs = deepcopy(run["observations"][0])
     obs["raw_states"][30]["velocity"][1] = 0.03
+    check_observation(route, obs)  # Stationary readback noise is allowed offline too.
+    obs["raw_states"][30]["velocity"][1] = route["motion"]["still_velocity_rad_s"] + 0.001
     with pytest.raises(ValueError, match="motion|Motion"):
         check_observation(route, obs)
 

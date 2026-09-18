@@ -54,9 +54,16 @@ def live_checks(frame, detection, board, state, kin, limits, gate, stable, now):
         speed = float(np.max(np.abs(arm["velocity"])))
         checks.append(Check(name + " speed", f"{speed:.3f} / max {limits.still_velocity_rad_s:g} rad/s", speed <= limits.still_velocity_rad_s))
     elapsed = 0 if gate.since is None else max(0, now - gate.since)
+    dwell = f"{min(elapsed, limits.stable_s):.1f} / {limits.stable_s:g} s"
+    if not stable:
+        dwell += " - " + getattr(gate, "wait_reason", "keep still")
+    settled_frame = (
+        stable and gate.since is not None
+        and frame.get("source_monotonic_s", 0) > gate.since + .1
+    )
     checks.extend([
-        Check("Stable dwell", f"{elapsed:.1f} / min {limits.stable_s:g} s", stable),
-        Check("Post-settle exposure", "ready" if gate.since is not None and frame.get("source_monotonic_s", 0) > gate.since + .1 else "waiting for settled frame", gate.since is not None and frame.get("source_monotonic_s", 0) > gate.since + .1),
+        Check("Stable dwell", dwell, stable),
+        Check("Post-settle exposure", "ready" if settled_frame else "finish stillness timer" if not stable else "waiting for next frame", settled_frame),
     ])
     return checks
 

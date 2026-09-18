@@ -40,3 +40,15 @@ def test_duplicate_and_parked_arm_checks_precede_keypress(route):
     assert checks[1].passed
     state["right"]["q"] = np.array(state["right"]["q"]) + .1
     assert not route_checks(route, state, MotionLimits())[1].passed
+
+
+def test_post_settle_row_explains_dependency_before_timer_passes(kin):
+    image = np.zeros((720,1280,3), np.uint8)
+    frame = {"image": image, "received_monotonic_s": 10., "received_wall_s": 10., "source_time_s": 9.99, "source_monotonic_s": 9.99, "clock": "global_time"}
+    state = {s: {"q": [0,.948,.858,-.573,0,0], "velocity": [.03]*6, "received_monotonic_s": 10.} for s in ("left","right")}
+    gate = SimpleNamespace(since=None, wait_reason="left speed")
+    checks = live_checks(frame, Detection(None,0,0,""), Board(8,11,5), state, kin, MotionLimits(), gate, False, 10.)
+    assert "left speed" in next(c.value for c in checks if c.label == "Stable dwell")
+    exposure = next(c for c in checks if c.label == "Post-settle exposure")
+    assert not exposure.passed and exposure.value == "finish stillness timer"
+    assert next(c for c in checks if c.label == "Left speed").passed
