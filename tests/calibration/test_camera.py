@@ -58,3 +58,21 @@ def test_stream_failure_retains_cause_and_writes_log(tmp_path):
     ):
         camera.latest()
     assert "USB transfer disconnected" in (tmp_path / "camera.log").read_text()
+
+
+def test_latest_yields_after_gui_stall_and_only_returns_fresh_frame(monkeypatch):
+    camera = hardware.Camera("fake")
+    camera.frame = {"received_monotonic_s": 8.0}
+    monkeypatch.setattr(hardware, "monotonic", lambda: 10.0)
+    fresh = {"received_monotonic_s": 9.99}
+    monkeypatch.setattr(hardware, "sleep", lambda _: setattr(camera, "frame", fresh))
+    assert camera.latest() is fresh
+
+
+def test_latest_still_fails_on_sustained_missing_frames(monkeypatch):
+    camera = hardware.Camera("fake")
+    ticks = iter([0.0, 0.0, 1.01])
+    monkeypatch.setattr(hardware, "monotonic", lambda: next(ticks))
+    monkeypatch.setattr(hardware, "sleep", lambda _: None)
+    with pytest.raises(RuntimeError, match="no fresh frame within 1 s"):
+        camera.latest()

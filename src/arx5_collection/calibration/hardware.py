@@ -171,13 +171,22 @@ class Camera:
                 self._log(traceback.format_exc())
 
     def latest(self):
-        if self.error:
-            raise RuntimeError(f"camera worker failed: {self.error}") from self.error
-        with self.lock:
-            frame = self.frame
-        if frame is None or monotonic() - frame["received_monotonic_s"] > 0.25:
-            raise RuntimeError("camera frame is stale")
-        return frame
+        # HighGUI can briefly hold the GIL while creating the first window.
+        # Yield so acquisition can recover; never return the old frame as fresh.
+        deadline = monotonic() + 1.0
+        while True:
+            if self.error:
+                raise RuntimeError(
+                    f"camera worker failed: {self.error}"
+                ) from self.error
+            with self.lock:
+                frame = self.frame
+            now = monotonic()
+            if frame is not None and now - frame["received_monotonic_s"] <= 0.25:
+                return frame
+            if now >= deadline:
+                raise RuntimeError("camera frame is stale (no fresh frame within 1 s)")
+            sleep(0.005)
 
     def close(self):
         self.stop_event.set()
