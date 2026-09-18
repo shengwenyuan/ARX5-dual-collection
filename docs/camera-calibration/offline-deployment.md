@@ -59,3 +59,28 @@ overview 路线：棋盘刚性固定在对应末端，拖动该臂让 overview �
 每次 Space 原子落盘；Enter 后才允许自动回放。再次 `--teach` 是新示教，
 旧文件进入 `routes/history`。后续依次用同一路线的 `--record`、`--solve`，
 自动回放默认速度上限 0.10 rad/s，且先要求人工放到首个记录姿态。
+
+## 2026-09-18 部署记录
+
+两机运行代码版本 `fc3b01a`。各机 production、dagger、calibration 三个标签共用
+同一个镜像；底层既有镜像不同，因此两机最终镜像 ID 不同：
+
+| 设备 | 镜像 ID 前缀 | 删除旧 release 目录 | 删除旧 collection 镜像标签 |
+| --- | --- | --- | --- |
+| w5-arx5 | d66058474628 | 8 | 18 |
+| w6-arx5 | 21c4e6409198 | 8 | 20 |
+
+两机各通过 165 项 calibration/production/DAgger 测试，实际桌面 OpenCV 开窗、
+站点配置解析、URDF 加载、ROS/RealSense 导入及控制器动态链接检查通过。
+未启动 CAN 控制器或执行机械臂运动。全仓库测试在本地此前为 327 passed / 1 skipped；
+设备运行镜像未额外安装全套开发测试依赖。
+
+旧 rtc 软链接已删除，w5 三个已停止的 MIX_WORK 服务中的仓库路径已改成唯一目录，
+仅 daemon-reload，没有启动服务。站点配置 SHA-256 前后相同，reports 数据不变。
+旧 config/plans 中的配置和笔记作为非执行资料保留。
+
+每台机的部署证据、旧标签/目录清单和离线输入归档在：
+`/var/lib/arx5-collection/deployments/20260918-fc3b01a/`。
+后续离线更新可在独立构建临时目录解压其中的 `offline-inputs.tgz`，并显式传
+`--build-arg BASE_IMAGE=arx5-dual-collection:production`；首次使用的
+`production-65bba3d` 旧标签已清理，不再依赖其标签存在。
