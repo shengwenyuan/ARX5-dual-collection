@@ -39,6 +39,10 @@ arx5 cali --left-wrist --teach
 4. 画面显示绿色候选后，按 **Space** 读取并保存当下双方实际六关节角与检测证据。未检测完整、模糊、板太小、反馈过期、未停稳或重复位姿会拒绝保存并给出原因。
 5. **Enter** 检查并完成合法 JSON；**Esc** 保存草稿退出。退出前保持重力补偿，提示手动将双臂归位。
 
+Space 是逻辑上的增量保存：把新位姿加入 `waypoints` 列表，再将完整 JSON 写入同目录临时文件，
+flush/fsync 后原子替换正式文件；不是向文件尾追加，也不是 JSONL。Enter 只完成合法性检查及状态更新。
+重新运行 `--teach` 会归档旧 JSON 并新建路线，不自动续写上一轮。
+
 辅助按键：`R` 切换角点编号方向，`V` 保存仅用于过渡的停稳姿态，`Backspace` 撤销最后一点。首版使用棋盘格检测，不默认继承 UR12e 的 AprilGrid。
 
 普通棋盘有对称歧义，须给一个外侧内角点做可辨认的物理 A 标记。按 Space 意味着用户已确认画面 A、+X/+Y 与同一物理编号一致；若检测编号反向，先按 R 调整。回放按该站示教图的角点位置匹配编号，明显偏离则拒绝。这个检查不能被解释为普通棋盘自动具备唯一 ID。
@@ -167,12 +171,33 @@ docker compose -f docker/compose.calibration.yaml build calibration
 | `calibration/routes.py`、`storage.py` | JSON、草稿、完整路线校验、原子保存 |
 | `calibration/board.py`、`workflow.py` | 实时标记、Space 保存、回放采集与退出 |
 | `calibration/motion.py`、`replay.py` | 平滑限速、反馈检查、独立控制循环 |
-| `calibration/hardware.py` | 专用 ROS 控制节点和所选 D405 pipeline |
+| `calibration/hardware.py` | 专用 ROS 控制节点、硬件生命周期和相机进程管理 |
+| `calibration/camera.py` | spawn 独立进程拥有 D405 pipeline；共享内存仅保留最新原生帧及配套时间戳 |
+| `calibration/profiles.py`、`timing.py` | 分辨率契约，以及预览／保存／离线重算共同的时间有效性规则 |
 | `calibration/geometry.py`、`solve.py` | URDF FK、两类手眼、overview 世界系、证据重算 |
 | `production/lease.py` | collect／DAgger／站点初始化／标定共享的硬件锁 |
 | `docker/patches/arx-x5-calibration-control.patch` | 标定专用保持、命令守卫、超时与夹爪隔离 |
 
-标定会话独占 CAN 和相机，使用单独的所选相机 RealSense pipeline；不会同时启动生产相机源，也不改变生产 8/5 路 MCAP 契约。相机保持原生 `848×480@30 RGB8`，保留工厂深度／RGB 内参、内部外参和 depth scale 元数据；RGB 标定不修改固件或 SDK depth alignment。
+标定会话独占 CAN 和相机，仅启动所选 D405 的 RealSense pipeline；不会同时启动生产相机源，也不改变生产 8/5 路 MCAP 契约。
+新示教默认原生 **1280×720@30 RGB8**，同步 depth 使用同尺寸 Z16，保留实际工厂深度／RGB 内参、内部外参和 depth scale 元数据。
+按序列号枚举并验证 RGB/depth 支持的 profile，启动后再次核对实际尺寸、格式和 FPS，不支持时明确失败，不静默降低分辨率。
+
+更高分辨率为同一小棋盘提供约 1.5 倍线性像素、2.26 倍总像素，有利于角点定位；
+检测、PNG 保存和内参拟合全用原生图像，窗口尺寸仅影响显示。它不替代足够的倾角、良好曝光和准确板尺寸，
+也不代表深度精度同步提升或绝对毫米精度已达到。
+参考 [D405 规格](https://www.realsenseai.com/product-family/d405-series/) 与
+[D400 数据手册](https://dev.realsenseai.com/download/42003/)。
+
+旧 `848×480@30` JSON 仍按原 profile 回放和离线验证；新 profile 不覆盖旧 profile，
+同一求解批次不接受两种分辨率混合。720p 内参不能直接用于生产 848p 图像：生产启用结果时需要对应成像模式的内参，
+不能默认按宽高比例缩放即可。当前结果仍不自动激活到生产。
+
+先在主进程创建并实际绘制会话窗口，再打开硬件。相机进程用 `spawn` 启动，独占 SDK；
+不继承 ROS/GUI 状态。图像和时间戳在同一把锁下写入一个固定大小的共享帧槽，没有无限排队。
+主进程只复制最近帧，因此开窗、角点计算或主进程短暂持有 GIL 不会暂停相机获取。
+取帧过程暂时没有图像时在有上限的等待内恢复，持续无帧、设备异常或子进程退出则明确报错。
+时钟未稳定的图像可用于观察，不能用于采样；真实错误在归位提示前显示并记录到 camera.log。
+退出及启动失败均关闭 pipeline、回收子进程和共享资源，不自动重启一个未知状态的会话。
 
 ## 8. 验收范围
 
@@ -184,4 +209,7 @@ docker compose -f docker/compose.calibration.yaml build calibration
 
 现场验收还包括：控制器启动与退出、重力补偿、夹持保持、显示与相机时钟、真实速度和停止效果、棋盘可见性、整条路径以及独立毫米误差。软件测试或合成数据通过不代表这些硬件项已验收。结果尚未自动激活到生产 episode；保存和离线验证是本轮交付边界。
 
-本轮软件验证（2026-09-18）：全仓 `pytest -q tests` 为 **327 passed, 1 skipped**；wheel 构建通过并包含 X5 URDF；compose 配置解析通过；控制补丁可应用到固定版本源码，新增 C++ 守卫方法通过独立编译测试。当前 Mac Docker daemon 未运行，未完成完整 ROS/SDK 容器构建，也未执行真机标定或运动。
+2026-09-18 已在两台设备离线构建 ROS/SDK 控制器与采集镜像。本轮新增进程隔离、GUI 初始化先于硬件、
+高低两种原生 profile、时间异常禁止保存、进程故障回收以及两种分辨率完整像素→内参→手眼→证据重算测试。
+w6 三路 1280×720 实测各 8 秒约 240 帧；主进程持有 GIL 1.5 秒期间，采集子进程仍各前进 45 帧。
+没有执行机械臂运动或实际完整标定，不能据此宣称绝对毫米精度。

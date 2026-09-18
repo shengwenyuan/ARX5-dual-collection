@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 import shutil
+from pathlib import Path
 
 import cv2
 import numpy as np
@@ -13,6 +13,7 @@ from .geometry import Kinematics, errors, handeye, inverse, rigid, transform
 from .motion import MotionLimits, stationary, validate_sample
 from .routes import route_hash, validate
 from .storage import bound_path, digest, file_digest, read_json, write_json
+from .timing import timing_error
 
 THRESHOLDS = {
     "translation_m": 0.002,
@@ -28,20 +29,10 @@ def check_observation(route, obs):
     begin, end = window["start"], window["end"]
     source = frame["source_monotonic_s"]
     if (
-        frame.get("clock_error")
+        timing_error(frame)
         or not np.isfinite([begin, end, source]).all()
         or end - begin < limits.capture_s
-        or frame["clock"] != "global_time"
         or not begin + 0.1 <= source <= end
-        or not -0.02 <= frame["received_wall_s"] - frame["source_time_s"] <= 0.20
-        or abs(
-            source
-            - (
-                frame["received_monotonic_s"]
-                - (frame["received_wall_s"] - frame["source_time_s"])
-            )
-        )
-        > 1e-6
     ):
         raise ValueError("invalid capture clock/window")
     actual = obs["actual"]

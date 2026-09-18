@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict
 from copy import deepcopy
+from dataclasses import asdict
+
 import numpy as np
 
 from .board import Board
 from .geometry import Kinematics, observable
 from .motion import MotionLimits, Segment, vector
+from .profiles import validate_profile
 from .storage import ROLES, digest, identifier
 
 
@@ -27,7 +29,7 @@ def new_route(role, station, board, kinematics, setup_id, profile):
         "joint_unit": "rad",
         "board": board.payload(),
         "kinematics": kinematics.payload(),
-        "profile": profile,
+        "profile": validate_profile(profile),
         "motion": asdict(MotionLimits()),
         "draft": True,
         "waypoints": [],
@@ -91,8 +93,7 @@ def validate(route, expected_role=None, replay=False):
         )
     ):
         raise ValueError("invalid X5 v2 station identity")
-    if route["profile"] != {"width": 848, "height": 480, "fps": 30, "format": "rgb8"}:
-        raise ValueError("first version requires RGB8 848x480@30")
+    validate_profile(route["profile"])
     Board(**route["board"])
     kin = Kinematics.from_payload(route["kinematics"])
     limits = MotionLimits(**route["motion"])

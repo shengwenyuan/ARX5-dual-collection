@@ -1,6 +1,6 @@
-from types import SimpleNamespace
-from time import monotonic
 from copy import deepcopy
+from time import monotonic
+from types import SimpleNamespace
 
 import cv2
 import numpy as np
@@ -39,10 +39,15 @@ def test_space_saves_live_joints_and_duplicate_is_rejected(
         }
 
     def frame():
+        now = monotonic()
         return {
             "image": image,
             "number": 1,
-            "source_monotonic_s": monotonic() - 0.01,
+            "source_monotonic_s": now - 0.01,
+            "source_time_s": now - 0.01,
+            "received_wall_s": now,
+            "received_monotonic_s": now,
+            "clock": "global_time",
             "clock_error": clock_error,
         }
 
@@ -96,6 +101,7 @@ def test_escape_during_replay_stops_without_advancing_and_preserves_partial(
     tmp_path, route, monkeypatch
 ):
     import pytest
+
     from arx5_collection.calibration.hardware import PROFILE
 
     q = route["waypoints"][0]["q"]

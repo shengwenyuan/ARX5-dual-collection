@@ -9,17 +9,38 @@ from time import monotonic, sleep
 import cv2
 import numpy as np
 
-from .board import Board, detect, overlay, next_orientation
+from .board import Board, detect, next_orientation, overlay
 from .geometry import Kinematics
 from .motion import MotionLimits, stationary
 from .replay import ReplayControl, StableWindow, preflight_start
-from .routes import finalize, validate, route_hash
+from .routes import finalize, route_hash, validate
 from .storage import archive_route, file_digest, identifier, write_json
+from .timing import capture_ready, timing_error
 
 
 def _window(name):
     cv2.namedWindow(name, cv2.WINDOW_NORMAL)
     cv2.resizeWindow(name, 1100, 680)
+
+
+def prepare_window(role, stage):
+    """Create and actually render the session window before opening hardware."""
+    name = f"ARX5 calibration | {role} | {stage.upper()}"
+    _window(name)
+    image = np.full((480, 848, 3), 40, np.uint8)
+    cv2.putText(
+        image,
+        "Starting camera...",
+        (30, 80),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        1,
+        (230, 230, 230),
+        2,
+    )
+    cv2.imshow(name, image)
+    if cv2.waitKey(30) & 0xFF == 27:
+        raise KeyboardInterrupt("operator cancelled before opening hardware")
+    return name
 
 
 def _key(name, image):
@@ -38,11 +59,14 @@ def park(hardware, held_board, prompt=input):
     prompt("已进入重力补偿。请手动将双臂归位并支撑妥当，完成后按 Enter 结束：")
 
 
-def teach(hardware, route, path: Path):
+def teach(hardware, route, path: Path, *, prepared_window=None):
     board = Board(**route["board"])
     kin = Kinematics.from_payload(route["kinematics"])
     limits = MotionLimits(**route["motion"])
-    window, gate = f"ARX5 calibration | {route['role']} | TEACH", StableWindow(limits)
+    window, gate = (
+        prepared_window or f"ARX5 calibration | {route['role']} | TEACH",
+        StableWindow(limits),
+    )
     message, reference = "Move by hand; release and wait for green", None
     archive_route(path)
     write_json(path, route)
@@ -55,7 +79,8 @@ def teach(hardware, route, path: Path):
     )
     evidence_dir = path.parent / "teaching" / route["route_id"]
     evidence_dir.mkdir(parents=True, exist_ok=False)
-    _window(window)
+    if prepared_window is None:
+        _window(window)
     last_frame = None
     detection = None
     try:
@@ -74,8 +99,8 @@ def teach(hardware, route, path: Path):
                     kin.validate(state[side]["q"])
             except ValueError as error:
                 joint_error = str(error)
-            clock_error = frame.get("clock_error", "")
-            fresh = not clock_error and monotonic() - frame["source_monotonic_s"] < 0.25
+            clock_error = timing_error(frame)
+            fresh = capture_ready(frame, monotonic())
             ready = (
                 detection.valid
                 and stable
@@ -105,9 +130,7 @@ def teach(hardware, route, path: Path):
                 pressed_reference = {
                     side: state[side]["q"] for side in ("left", "right")
                 }
-                fresh = (
-                    not clock_error and monotonic() - frame["source_monotonic_s"] < 0.25
-                )
+                fresh = capture_ready(frame, monotonic())
                 if (
                     joint_error
                     or not stable
@@ -171,7 +194,7 @@ def teach(hardware, route, path: Path):
         cv2.destroyWindow(window)
 
 
-def record(hardware, route, output: Path):
+def record(hardware, route, output: Path, *, prepared_window=None):
     validate(route, replay=True)
     limits, board = MotionLimits(**route["motion"]), Board(**route["board"])
     kin = Kinematics.from_payload(route["kinematics"])
@@ -191,8 +214,9 @@ def record(hardware, route, output: Path):
         "error": None,
     }
     write_json(output / "run.json", run)
-    window = f"ARX5 calibration | {route['role']} | RECORD"
-    _window(window)
+    window = prepared_window or f"ARX5 calibration | {route['role']} | RECORD"
+    if prepared_window is None:
+        _window(window)
     control = None
     try:
         actual = hardware.arms.read()
@@ -230,7 +254,7 @@ def record(hardware, route, output: Path):
                     )
                     seen = frame["number"]
                     within = (
-                        not frame.get("clock_error")
+                        capture_ready(frame, now)
                         and capture_started is not None
                         and capture_started + 0.1 <= frame["source_monotonic_s"] <= now
                         and now - frame["received_monotonic_s"] < 0.25

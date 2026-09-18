@@ -1,78 +1,116 @@
-from types import SimpleNamespace
+"""Process isolation, native profiles and immutable timing contracts."""
+
+import ctypes
+from time import monotonic, sleep, time
 
 import numpy as np
 import pytest
 
-from arx5_collection.calibration import hardware
+from arx5_collection.calibration.camera import Camera, frame_timing
+from arx5_collection.calibration.profiles import (
+    DEFAULT_PROFILE,
+    LEGACY_PROFILE,
+    validate_profile,
+)
+from arx5_collection.calibration.timing import capture_ready, timing_error
+
+
+class SyntheticSession:
+    def __init__(self, serial, profile):
+        self.profile = profile
+        self.number = 0
+        self.started = monotonic()
+
+    def open(self):
+        return {"profile": self.profile}
+
+    def read(self):
+        sleep(0.02)
+        self.number += 1
+        image = np.full(
+            (self.profile["height"], self.profile["width"], 3),
+            self.number % 251,
+            np.uint8,
+        )
+        return image, (self.number, time() - 0.01, time(), monotonic(), 1)
+
+    def close(self):
+        pass
+
+
+class FailedSession(SyntheticSession):
+    def read(self):
+        if monotonic() - self.started > 2.5:
+            raise RuntimeError("USB transfer disconnected")
+        return super().read()
+
+
+class WrongSizeSession(SyntheticSession):
+    def read(self):
+        image, stamp = super().read()
+        return image[:, :-1], stamp
 
 
 @pytest.mark.parametrize(
-    "domain,stamp", [("global", 1000030), ("device", 5000), ("global", float("nan"))]
+    "global_time,source", [(1, 1000.03), (0, 5), (1, float("nan"))]
 )
-def test_clock_settling_preserves_preview_but_marks_frame_invalid(
-    monkeypatch, domain, stamp
-):
-    camera = hardware.Camera("fake")
-    camera.rs = SimpleNamespace(timestamp_domain=SimpleNamespace(global_time="global"))
-    monkeypatch.setattr(hardware, "time", lambda: 1000.0)
-    ticks = iter([0, 3, 3, 3, 3, 3])
-    monkeypatch.setattr(hardware, "monotonic", lambda: next(ticks))
-    observed = []
-
-    def frame(number, domain, stamp):
-        return SimpleNamespace(
-            get_frame_number=lambda: number,
-            get_frame_timestamp_domain=lambda: domain,
-            get_timestamp=lambda: stamp,
-            get_data=lambda: np.full((2, 3, 3), 125, np.uint8),
-        )
-
-    frames = iter([frame(1, domain, stamp), frame(2, "global", 999990)])
-
-    def wait(_):
-        if camera.frame is not None:
-            observed.append(camera.frame)
-            camera.stop_event.set()
-        result = next(frames)
-        return SimpleNamespace(get_color_frame=lambda: result)
-
-    camera.pipeline = SimpleNamespace(wait_for_frames=wait)
-    camera._run()
-    assert camera.error is None
-    assert observed[0]["clock_error"]
-    assert observed[0]["image"].mean() == 125
-    assert camera.frame["clock_error"] == ""
-    assert camera.frame["source_monotonic_s"] == pytest.approx(2.99)
+def test_invalid_clock_can_preview_but_not_capture(global_time, source):
+    frame = frame_timing([10, source, 1000, 3, global_time])
+    assert timing_error(frame)
+    assert not capture_ready(frame, 3)
+    valid = frame_timing([11, 999.99, 1000, 3, 1])
+    assert not timing_error(valid)
+    assert capture_ready(valid, 3)
+    assert not capture_ready(valid, 3.3)
+    valid["source_monotonic_s"] += 0.1
+    assert timing_error(valid) == "inconsistent camera clock mapping"
 
 
-def test_stream_failure_retains_cause_and_writes_log(tmp_path):
-    camera = hardware.Camera("fake", tmp_path / "camera.log")
-
-    def failed(_):
-        raise RuntimeError("USB transfer disconnected")
-
-    camera.pipeline = SimpleNamespace(wait_for_frames=failed)
-    camera._run()
-    with pytest.raises(
-        RuntimeError, match="camera worker failed: USB transfer disconnected"
-    ):
-        camera.latest()
-    assert "USB transfer disconnected" in (tmp_path / "camera.log").read_text()
-
-
-def test_latest_yields_after_gui_stall_and_only_returns_fresh_frame(monkeypatch):
-    camera = hardware.Camera("fake")
-    camera.frame = {"received_monotonic_s": 8.0}
-    monkeypatch.setattr(hardware, "monotonic", lambda: 10.0)
-    fresh = {"received_monotonic_s": 9.99}
-    monkeypatch.setattr(hardware, "sleep", lambda _: setattr(camera, "frame", fresh))
-    assert camera.latest() is fresh
+@pytest.mark.parametrize("profile", [DEFAULT_PROFILE, LEGACY_PROFILE])
+def test_process_keeps_acquiring_while_parent_gil_is_blocked(profile):
+    camera = Camera("synthetic", profile=profile, session_factory=SyntheticSession)
+    camera.open()
+    child = camera.process
+    try:
+        before = camera.latest()
+        # Unlike time.sleep, PyDLL keeps the calling interpreter's GIL held.
+        ctypes.PyDLL(None).usleep(1_200_000)
+        after = camera.latest()
+        assert after["number"] > before["number"] + 20
+        assert after["image"].shape == (profile["height"], profile["width"], 3)
+        assert np.all(after["image"] == after["number"] % 251)
+        assert capture_ready(after, monotonic())
+        assert camera.metadata["profile"] == profile
+    finally:
+        camera.close()
+        camera.close()
+    assert child._closed and camera.process is None
 
 
-def test_latest_still_fails_on_sustained_missing_frames(monkeypatch):
-    camera = hardware.Camera("fake")
-    ticks = iter([0.0, 0.0, 1.01])
-    monkeypatch.setattr(hardware, "monotonic", lambda: next(ticks))
-    monkeypatch.setattr(hardware, "sleep", lambda _: None)
-    with pytest.raises(RuntimeError, match="no fresh frame within 1 s"):
-        camera.latest()
+def test_failure_cause_logged_and_no_process_leaked(tmp_path):
+    log = tmp_path / "camera.log"
+    camera = Camera("synthetic", log, session_factory=FailedSession)
+    camera.open()
+    try:
+        sleep(0.7)
+        with pytest.raises(RuntimeError, match="USB transfer disconnected"):
+            camera.latest()
+    finally:
+        camera.close()
+    assert "USB transfer disconnected" in log.read_text()
+    assert camera.process is None
+
+
+def test_bad_native_image_fails_before_hardware_start():
+    camera = Camera("synthetic", session_factory=WrongSizeSession)
+    with pytest.raises(RuntimeError, match="dimensions/format differ"):
+        camera.open()
+    assert camera.process is None
+
+
+def test_profile_is_explicit_and_not_mutable_alias():
+    p = validate_profile(DEFAULT_PROFILE)
+    p["width"] = 12
+    assert DEFAULT_PROFILE["width"] == 1280
+    with pytest.raises(ValueError, match="native RGB8"):
+        validate_profile({**DEFAULT_PROFILE, "width": 1920})

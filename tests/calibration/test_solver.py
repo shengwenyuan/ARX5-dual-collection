@@ -8,20 +8,27 @@ import pytest
 
 from arx5_collection.calibration.board import Board, detect
 from arx5_collection.calibration.geometry import inverse, rigid
-from arx5_collection.calibration.hardware import PROFILE
-from arx5_collection.calibration.routes import new_route, validate, route_hash
+from arx5_collection.calibration.profiles import (
+    DEFAULT_PROFILE,
+)
+from arx5_collection.calibration.profiles import (
+    LEGACY_PROFILE as PROFILE,
+)
+from arx5_collection.calibration.routes import new_route, route_hash, validate
 from arx5_collection.calibration.solve import (
-    solve_runs,
-    verify_result,
     check_observation,
     intrinsics,
+    solve_runs,
+    verify_result,
 )
-from arx5_collection.calibration.storage import write_json, file_digest
+from arx5_collection.calibration.storage import file_digest, write_json
 
 
-def render(board, z, k):
+def render(board, z, k, profile=PROFILE):
     scale = 3
-    image = np.full((480 * scale, 848 * scale, 3), 170, np.uint8)
+    image = np.full(
+        (profile["height"] * scale, profile["width"] * scale, 3), 170, np.uint8
+    )
     r = cv2.Rodrigues(z[:3, :3])[0]
     for y in range(-1, board.rows):
         for x in range(-1, board.columns):
@@ -39,7 +46,9 @@ def render(board, z, k):
                 np.rint(polygon * scale).astype(np.int32),
                 (245,) * 3 if (x + y) % 2 else (8,) * 3,
             )
-    return cv2.resize(image, (848, 480), interpolation=cv2.INTER_AREA)
+    return cv2.resize(
+        image, (profile["width"], profile["height"]), interpolation=cv2.INTER_AREA
+    )
 
 
 def raw_sample(q, time_s):
@@ -53,7 +62,7 @@ def raw_sample(q, time_s):
     }
 
 
-def build_run(root, kin):
+def build_run(root, kin, profile=PROFILE):
     board = Board(7, 5, 10)
     identity = {
         "station_id": "synthetic",
@@ -61,8 +70,10 @@ def build_run(root, kin):
         "arms": {"left": "l", "right": "r"},
         "cameras": {"left": "cl", "right": "cr", "overview": "co"},
     }
-    route = new_route("left-wrist", identity, board, kin, "test-only", PROFILE)
+    route = new_route("left-wrist", identity, board, kin, "test-only", profile)
     k = np.array([[650.0, 0, 424], [0, 660.0, 240], [0, 0, 1]])
+    k[0] *= profile["width"] / 848
+    k[1] *= profile["height"] / 480
     home = np.array([0, 0.948, 0.858, -0.573, 0, 0])
     x = rigid([0.12, -0.15, 0.08], [0.03, 0.02, 0.01])
     z0 = rigid([0.2, -0.15, 0.05], [-0.03, -0.02, 0.24])
@@ -79,13 +90,14 @@ def build_run(root, kin):
         corners = cv2.projectPoints(
             board.points(), cv2.Rodrigues(z[:3, :3])[0], z[:3, 3], k, None
         )[0].reshape(-1, 2)
+        normalized_corners = corners / [profile["width"] / 848, profile["height"] / 480]
         if (
-            (corners.min(axis=0) < [40, 40]).any()
-            or (corners.max(axis=0) > [808, 440]).any()
+            (normalized_corners.min(axis=0) < [40, 40]).any()
+            or (normalized_corners.max(axis=0) > [808, 440]).any()
             or z[2, 3] < 0.14
         ):
             continue
-        image = render(board, z, k)
+        image = render(board, z, k, profile)
         detection = detect(image, board, reference=corners)
         if not detection.valid:
             continue
@@ -147,7 +159,7 @@ def build_run(root, kin):
         "status": "completed",
         "role": "left-wrist",
         "route_sha256": route_hash(route),
-        "camera": {"serial": "cl", "profile": PROFILE},
+        "camera": {"serial": "cl", "profile": profile},
         "observations": observations,
     }
     write_json(root / "route.json", route)
@@ -155,8 +167,9 @@ def build_run(root, kin):
     return route, run, x
 
 
-def test_full_pixel_fk_pipeline_and_recomputable_evidence(tmp_path, kin):
-    route, run, truth = build_run(tmp_path / "run", kin)
+@pytest.mark.parametrize("profile", [PROFILE, DEFAULT_PROFILE])
+def test_full_pixel_fk_pipeline_and_recomputable_evidence(tmp_path, kin, profile):
+    route, run, truth = build_run(tmp_path / "run", kin, profile)
     index = []
     for observation in run["observations"]:
         path = tmp_path / "run" / "observations" / (observation["pose_id"] + ".json")

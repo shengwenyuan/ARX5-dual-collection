@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import json
 import os
-from pathlib import Path
 import sys
+from contextlib import ExitStack
+from pathlib import Path
 
 from .storage import DEFAULT_ROOT, ROLES, identifier, read_json, route_path, write_json
 
@@ -95,7 +96,7 @@ def run(args):
 
 def _run(args):
     # Imports remain lazy: collect/DAgger and cali --help need no numerical/GUI packages.
-    from .routes import new_route, validate, station_identity
+    from .routes import new_route, station_identity, validate
 
     stage = args.stage
     if stage is None:
@@ -149,11 +150,12 @@ def _run(args):
         return 0
     from arx5_collection.production.config import load_configured_station
     from arx5_collection.production.lifecycle import termination_as_interrupt
+
     from .board import Board
     from .geometry import Kinematics
-    from .hardware import Hardware, PROFILE
+    from .hardware import PROFILE, Hardware
     from .motion import MotionLimits
-    from .workflow import park, record, teach
+    from .workflow import park, prepare_window, record, teach
 
     station = load_configured_station(args.station_config)
     if station.sdk_type != 2:
@@ -193,18 +195,24 @@ def _run(args):
         raise RuntimeError(
             "OpenCV display unavailable: set DISPLAY/XAUTHORITY on the hardware host"
         )
-    cv2.namedWindow("ARX5 calibration startup", cv2.WINDOW_NORMAL)
-    cv2.destroyWindow("ARX5 calibration startup")
-    with (
-        termination_as_interrupt(),
-        Hardware(station, args.role, root / "logs" / session_id, limits) as hardware,
-    ):
+    with termination_as_interrupt(), ExitStack() as stack:
+        stack.callback(cv2.destroyAllWindows)
+        window = prepare_window(args.role, stage)
+        hardware = stack.enter_context(
+            Hardware(
+                station,
+                args.role,
+                root / "logs" / session_id,
+                limits,
+                profile=route["profile"],
+            )
+        )
         try:
             if stage == "teach":
-                teach(hardware, route, path)
+                teach(hardware, route, path, prepared_window=window)
             else:
                 output = root / "runs" / args.role / session_id
-                record(hardware, route, output)
+                record(hardware, route, output, prepared_window=window)
                 write_json(
                     root / "latest-runs" / f"{args.role}.json",
                     {
