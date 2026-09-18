@@ -131,3 +131,50 @@ def test_control_fault_holds_and_never_catches_up():
     assert isinstance(control.error, RuntimeError)
     assert arms.calls[-1] == "calibration_hold"
     assert "publish" not in arms.calls
+
+
+def test_teach_feedback_gap_resets_stability_and_recovers():
+    from types import SimpleNamespace
+    from arx5_collection.calibration.motion import StaleArmFeedback, validate_sample
+    from arx5_collection.calibration.replay import TeachFeedback
+    limits = MotionLimits()
+    clock = [10.]
+    state = [sample(now=10)]
+    gate = StableWindow(limits)
+    def read():
+        validate_sample(state[0], clock[0], limits)
+        return state[0]
+    feedback = TeachFeedback(SimpleNamespace(read=read), limits, gate, clock=lambda: clock[0])
+    assert not feedback.read()[1]
+    clock[0] = 10.7
+    state[0] = sample(now=10.7)
+    assert feedback.read()[1]
+    clock[0] = 10.9  # No new feedback: transient wait, not a successful stable sample.
+    assert not feedback.read()[1]
+    assert gate.since is None
+    clock[0] = 11.0
+    state[0] = sample(now=11.)
+    assert not feedback.read()[1]
+    clock[0] = 11.7
+    state[0] = sample(now=11.7)
+    assert feedback.read()[1]
+    clock[0] = 12.
+    assert not feedback.read()[1]
+    clock[0] = 14.1
+    with pytest.raises(RuntimeError, match="持续超时"):
+        feedback.read()
+    # Replay's validator still fails immediately on exactly the same stale state.
+    with pytest.raises(StaleArmFeedback):
+        gate.update(state[0], clock[0])
+
+
+def test_teach_never_swallows_controller_or_nonfinite_failure():
+    from types import SimpleNamespace
+    from arx5_collection.calibration.replay import TeachFeedback
+    limits = MotionLimits()
+    for error in (RuntimeError("arm feedback failed"), ValueError("nonfinite robot readback")):
+        def read():
+            raise error
+        feedback = TeachFeedback(SimpleNamespace(read=read), limits, StableWindow(limits))
+        with pytest.raises(type(error), match=str(error)):
+            feedback.read()

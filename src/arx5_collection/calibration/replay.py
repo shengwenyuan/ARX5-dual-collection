@@ -8,7 +8,7 @@ from time import monotonic, sleep
 
 import numpy as np
 
-from .motion import MotionLimits, Segment, stationary, validate_sample, vector
+from .motion import MotionLimits, Segment, StaleArmFeedback, stationary, validate_sample, vector
 
 
 class ReplayControl:
@@ -126,6 +126,29 @@ class StableWindow:
         if self.since is None:
             self.since = now
         return now - self.since >= self.limits.stable_s
+
+
+class TeachFeedback:
+    """Only teach tolerates brief gaps; any gap restarts the stable window."""
+
+    def __init__(self, arms, limits, gate, clock=monotonic):
+        self.arms, self.limits, self.gate, self.clock = arms, limits, gate, clock
+        self.unavailable_since = None
+
+    def read(self):
+        try:
+            state = self.arms.read()
+            stable = self.gate.update(state, self.clock())
+        except StaleArmFeedback as error:
+            now = self.clock()
+            self.gate.since = self.gate.reference = None
+            if self.unavailable_since is None:
+                self.unavailable_since = now
+            if now - self.unavailable_since >= 2.0:
+                raise RuntimeError("示教关节反馈持续超时超过 2 秒，采集已中断") from error
+            return error.sample, False
+        self.unavailable_since = None
+        return state, stable
 
 
 def preflight_start(route, actual, limits):

@@ -76,6 +76,14 @@ def vector(value, size=6):
     return a
 
 
+class StaleArmFeedback(RuntimeError):
+    """Recoverable reception gap in teach; still fatal to replay/control."""
+
+    def __init__(self, sample):
+        super().__init__("stale arm feedback")
+        self.sample = sample
+
+
 def validate_sample(sample: dict, now: float, limits: MotionLimits) -> None:
     for side in ("left", "right"):
         arm = sample[side]
@@ -83,9 +91,10 @@ def validate_sample(sample: dict, now: float, limits: MotionLimits) -> None:
         vector(arm["velocity"])
         if not math.isfinite(arm["gripper"]):
             raise ValueError("invalid gripper state")
-        age = now - arm["received_monotonic_s"]
+    for side in ("left", "right"):
+        age = now - sample[side]["received_monotonic_s"]
         if not math.isfinite(age) or age < 0 or age > limits.feedback_age_s:
-            raise RuntimeError("stale arm feedback")
+            raise StaleArmFeedback(sample)
 
 
 def stationary(sample, reference, limits):

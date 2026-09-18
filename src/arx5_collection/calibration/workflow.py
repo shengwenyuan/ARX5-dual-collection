@@ -9,34 +9,26 @@ from time import monotonic, sleep
 import cv2
 import numpy as np
 
-from .board import Board, detect, next_orientation, overlay
+from .board import Board, detect
 from .geometry import Kinematics
 from .motion import MotionLimits, stationary
-from .replay import ReplayControl, StableWindow, preflight_start
+from .replay import ReplayControl, StableWindow, TeachFeedback, preflight_start
+from .preview import ROLE_NAMES, WINDOW_CLOSED, live_checks, route_checks, render, startup_image
 from .routes import finalize, route_hash, validate
 from .storage import archive_route, file_digest, identifier, write_json
-from .timing import capture_ready, timing_error
+from .timing import capture_ready
 
 
 def _window(name):
     cv2.namedWindow(name, cv2.WINDOW_NORMAL)
-    cv2.resizeWindow(name, 1100, 680)
+    cv2.resizeWindow(name, 1500, 850)
 
 
 def prepare_window(role, stage):
     """Create and actually render the session window before opening hardware."""
-    name = f"ARX5 calibration | {role} | {stage.upper()}"
+    name = f"ARX5 calibration | {ROLE_NAMES[role]} | {stage.upper()}"
     _window(name)
-    image = np.full((480, 848, 3), 40, np.uint8)
-    cv2.putText(
-        image,
-        "Starting camera...",
-        (30, 80),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        1,
-        (230, 230, 230),
-        2,
-    )
+    image = startup_image()
     cv2.imshow(name, image)
     if cv2.waitKey(30) & 0xFF == 27:
         raise KeyboardInterrupt("operator cancelled before opening hardware")
@@ -46,8 +38,12 @@ def prepare_window(role, stage):
 def _key(name, image):
     cv2.imshow(name, image)
     key = cv2.waitKey(1) & 0xFF
-    if cv2.getWindowProperty(name, cv2.WND_PROP_VISIBLE) < 1:
-        return 27
+    try:
+        visible = cv2.getWindowProperty(name, cv2.WND_PROP_VISIBLE)
+    except cv2.error:
+        visible = -1
+    if visible < 1:
+        return WINDOW_CLOSED
     return key
 
 
@@ -63,98 +59,75 @@ def teach(hardware, route, path: Path, *, prepared_window=None):
     board = Board(**route["board"])
     kin = Kinematics.from_payload(route["kinematics"])
     limits = MotionLimits(**route["motion"])
-    window, gate = (
-        prepared_window or f"ARX5 calibration | {route['role']} | TEACH",
-        StableWindow(limits),
-    )
-    message, reference = "Move by hand; release and wait for green", None
+    window = prepared_window or f"ARX5 calibration | {route['role']} | TEACH"
+    gate = StableWindow(limits)
+    feedback = TeachFeedback(hardware.arms, limits, gate, clock=monotonic)
+    message, reference = "Move by hand, release and wait for each check", None
     archive_route(path)
     write_json(path, route)
     hardware.arms.call("gravity_compensation")
-    print(
-        "重力补偿示教：Space 保存；V 保存过渡点；R 翻转角点编号；Backspace 撤销；Enter 完成；Esc 保存草稿退出。"
-    )
-    print(
-        "请在板上标记固定物理内角点 A。每次 Space 前确认画面的 A 对准该点；编号反向时按 R。"
-    )
+    print("重力补偿示教：Space 保存；Backspace 删除上一条；关闭窗口完成。")
+    print("首次按屏幕 A 标记物理角点；之后每次 Space 确认 A 仍对应同一点。")
     evidence_dir = path.parent / "teaching" / route["route_id"]
     evidence_dir.mkdir(parents=True, exist_ok=False)
     if prepared_window is None:
         _window(window)
-    last_frame = None
-    detection = None
+    last_frame, detection = None, None
     try:
         while True:
             hardware.supervisor.require_running()
-            frame, state = hardware.camera.latest(), hardware.arms.read()
+            frame = hardware.camera.latest()
             if frame["number"] != last_frame:
                 detection = detect(frame["image"], board, reference=reference)
                 if detection.corners is not None:
                     reference = detection.corners
                 last_frame = frame["number"]
-            stable = gate.update(state, monotonic())
-            joint_error = ""
-            try:
-                for side in ("left", "right"):
-                    kin.validate(state[side]["q"])
-            except ValueError as error:
-                joint_error = str(error)
-            clock_error = timing_error(frame)
-            fresh = capture_ready(frame, monotonic())
-            ready = (
-                detection.valid
-                and stable
-                and fresh
-                and not joint_error
-                and gate.since is not None
-                and frame["source_monotonic_s"] > gate.since + 0.1
-            )
+            # Read AFTER the potentially slow detector, never age a pre-detection snapshot.
+            hardware.supervisor.require_running()
+            state, stable = feedback.read()
+            checks = live_checks(frame, detection, board, state, kin, limits, gate, stable, monotonic())
+            checks += route_checks(route, state, limits)
+            ready = all(check.passed for check in checks)
             n = sum(p["kind"] == "capture" for p in route["waypoints"])
-            lines = [
-                f"{route['role']} | captured {n} | {'READY' if ready else clock_error or joint_error or detection.reason or 'hold still'}",
-                "SPACE save | R flip A | V transit | Backspace undo | Enter finish | Esc draft",
-                f"coverage {detection.coverage:.1%} | sharpness {detection.sharpness:.0f}",
+            footer = [
+                "SPACE save | BACKSPACE delete last",
+                "Close window to finish; confirm physical A before saving",
                 message,
             ]
-            key = _key(window, overlay(frame["image"], board, detection, lines, ready))
-            if key == ord("r") and detection.corners is not None:
-                reference = next_orientation(detection.corners, board)
-                detection.corners = reference
-            elif key in (8, 127) and route["waypoints"]:
-                route["waypoints"].pop()
-                write_json(path, route)
-                message = "Last waypoint removed"
-            elif key in (32, ord("v")):
-                capture = key == 32
-                pressed_state = hardware.arms.read()
-                pressed_reference = {
-                    side: state[side]["q"] for side in ("left", "right")
-                }
-                fresh = capture_ready(frame, monotonic())
-                if (
-                    joint_error
-                    or not stable
-                    or not stationary(pressed_state, pressed_reference, limits)
-                    or (capture and (not ready or not fresh))
-                ):
-                    message = "Not saved: " + (
-                        clock_error
-                        or detection.reason
-                        or "wait for fresh, stationary view"
-                    )
+            key = _key(window, render(
+                frame["image"], board, detection,
+                f"{ROLE_NAMES[route['role']]} | saved {n} | {'READY' if ready else 'WAIT'}",
+                checks, footer,
+            ))
+            if key in (8, 127):
+                if route["waypoints"]:
+                    route["waypoints"].pop()
+                    write_json(path, route)
+                    message = "Last pose deleted"
+                else:
+                    message = "No saved pose to delete"
+            elif key == 32:
+                # GUI rendering can also take time. Re-read and revalidate at the keypress.
+                hardware.supervisor.require_running()
+                pressed_state, pressed_stable = feedback.read()
+                pressed_checks = live_checks(frame, detection, board, pressed_state, kin, limits, gate, pressed_stable, monotonic())
+                pressed_checks += route_checks(route, pressed_state, limits)
+                failed = [check.label for check in pressed_checks if not check.passed]
+                if not stationary(pressed_state, {s: state[s]["q"] for s in ("left", "right")}, limits):
+                    failed.append("pose changed at keypress")
+                if not ready or failed:
+                    message = "Not saved: " + ", ".join((failed or [c.label for c in checks if not c.passed])[:3])
                     continue
                 state = pressed_state
                 p = {
                     "pose_id": identifier(),
                     "q": {s: list(state[s]["q"]) for s in ("left", "right")},
-                    "kind": "capture" if capture else "via",
-                    "split": ("validation" if (n + 1) % 5 == 0 else "training")
-                    if capture
-                    else None,
+                    "kind": "capture",
+                    "split": "validation" if (n + 1) % 5 == 0 else "training",
                     "teaching": {
                         "actual": state,
-                        "origin_confirmed": capture,
-                        "corners": detection.payload()["corners"] if capture else None,
+                        "origin_confirmed": True,
+                        "corners": detection.payload()["corners"],
                     },
                 }
                 candidate = deepcopy(route)
@@ -162,36 +135,36 @@ def teach(hardware, route, path: Path, *, prepared_window=None):
                 try:
                     validate(candidate)
                 except ValueError as error:
-                    message = f"Not saved: {error}"
+                    print(f"位姿校验未通过：{error}")
+                    message = "Not saved: route check failed; see terminal"
                     continue
                 image_path = evidence_dir / f"{p['pose_id']}.png"
                 if not cv2.imwrite(str(image_path), frame["image"]):
                     raise OSError("cannot save teaching preview")
-                p["teaching"].update(
-                    {
-                        "image": str(image_path.relative_to(path.parent)),
-                        "image_sha256": file_digest(image_path),
-                        "frame": {k: v for k, v in frame.items() if k != "image"},
-                    }
-                )
+                p["teaching"].update({
+                    "image": str(image_path.relative_to(path.parent)),
+                    "image_sha256": file_digest(image_path),
+                    "frame": {k: v for k, v in frame.items() if k != "image"},
+                })
                 route["waypoints"].append(p)
                 write_json(path, route)
-                message = f"Saved {p['kind']} ({p['split'] or 'transit'})"
-            elif key in (10, 13):
+                message = f"Saved pose {n + 1} ({p['split']})"
+            elif key == WINDOW_CLOSED:
                 try:
                     completed = finalize(route)
                 except ValueError as error:
-                    message = str(error)
-                    continue
+                    print(f"草稿已保存（尚不可回放）：{path}；{error}")
+                    return route
                 write_json(path, completed)
                 print(f"合法位姿 JSON 已保存：{path}")
                 return completed
-            elif key == 27:
-                print(f"草稿已保存（尚不可回放）：{path}")
-                return route
             sleep(0.005)
     finally:
-        cv2.destroyWindow(window)
+        # HighGUI may already have destroyed the window via its close button.
+        try:
+            cv2.destroyWindow(window)
+        except cv2.error:
+            pass
 
 
 def record(hardware, route, output: Path, *, prepared_window=None):
@@ -234,7 +207,13 @@ def record(hardware, route, output: Path, *, prepared_window=None):
             while monotonic() < deadline:
                 control.require_ok()
                 hardware.supervisor.require_running()
-                frame, sample = hardware.camera.latest(), hardware.arms.read()
+                frame = hardware.camera.latest()
+                new_frame = frame["number"] != seen
+                if new_frame:
+                    detection = detect(frame["image"], board, reference=point["teaching"]["corners"])
+                    seen = frame["number"]
+                control.require_ok()
+                sample = hardware.arms.read()
                 now = monotonic()
                 stable = (
                     gate.update(sample, now, control.target()) and now >= expected_end
@@ -248,11 +227,7 @@ def record(hardware, route, output: Path, *, prepared_window=None):
                         raise RuntimeError("arm moved during capture window")
                 elif capture_started is None:
                     capture_started = now
-                if frame["number"] != seen:
-                    detection = detect(
-                        frame["image"], board, reference=point["teaching"]["corners"]
-                    )
-                    seen = frame["number"]
+                if new_frame:
                     within = (
                         capture_ready(frame, now)
                         and capture_started is not None
@@ -279,31 +254,14 @@ def record(hardware, route, output: Path, *, prepared_window=None):
                                 deepcopy(sample),
                                 detection.payload(),
                             )
-                status = (
-                    "CAPTURE"
-                    if capture_started
-                    else "SETTLE"
-                    if now >= expected_end
-                    else "MOVE"
-                )
-                lines = [
-                    f"{route['role']} | {index + 1}/{len(route['waypoints'])} | {status}",
-                    f"max speed {limits.velocity_rad_s:.2f} rad/s | Esc stop",
-                    frame.get("clock_error") or detection.reason,
-                ]
-                if (
-                    _key(
-                        window,
-                        overlay(
-                            frame["image"],
-                            board,
-                            detection,
-                            lines,
-                            stable and detection.valid and not frame.get("clock_error"),
-                        ),
-                    )
-                    == 27
-                ):
+                status = "CAPTURE" if capture_started else "SETTLE" if now >= expected_end else "MOVE"
+                checks = live_checks(frame, detection, board, sample, kin, limits, gate, stable, monotonic())
+                if _key(window, render(
+                    frame["image"], board, detection,
+                    f"{ROLE_NAMES[route['role']]} | {index + 1}/{len(route['waypoints'])} | {status}",
+                    checks,
+                    [f"Max speed {limits.velocity_rad_s:.2f} rad/s", "Esc or close window to stop"],
+                )) in (27, WINDOW_CLOSED):
                     raise KeyboardInterrupt("operator stopped calibration")
                 if capture_started and now - capture_started >= limits.capture_s:
                     if best is None:
@@ -368,4 +326,7 @@ def record(hardware, route, output: Path, *, prepared_window=None):
                     output / "control-trace.json", {"samples": list(control.trace)}
                 )
             write_json(output / "run.json", run)
-            cv2.destroyWindow(window)
+            try:
+                cv2.destroyWindow(window)
+            except cv2.error:
+                pass
