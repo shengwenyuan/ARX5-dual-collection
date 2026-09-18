@@ -1,0 +1,35 @@
+# Offline delta only. BASE_IMAGE must already exist locally; never use --pull.
+# offline/ contains audited controller sources and cached native/Python artifacts.
+ARG BASE_IMAGE=arx5-dual-collection:production-65bba3d
+FROM ${BASE_IMAGE} AS controller-builder
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+COPY offline/controller/ /tmp/controller_ws/src/arx_x5_controller/
+# Keep the installed SDK ABI/library; rebuild only the ROS controller wrapper.
+RUN cp /opt/arx_ws/install/lib/libarx_x5_src.so /tmp/controller_ws/src/arx_x5_controller/lib/arx_x5_src/libarx_x5_src.so \
+    && source /opt/ros/jazzy/setup.bash && source /opt/arx_ws/install/setup.bash \
+    && cd /tmp/controller_ws && colcon build --merge-install --cmake-args -DCMAKE_BUILD_TYPE=Release
+
+FROM ${BASE_IMAGE}
+ARG SOURCE_REVISION
+LABEL org.opencontainers.image.revision="${SOURCE_REVISION}" \
+      arx5.collection.source-revision="${SOURCE_REVISION}" \
+      arx5.calibration.offline="true"
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+COPY --from=controller-builder /tmp/controller_ws/install/lib/arx_x5_controller/X5Controller /opt/arx_ws/install/lib/arx_x5_controller/X5Controller
+COPY --from=controller-builder /tmp/controller_ws/install/share/arx_x5_controller/launch/ /opt/arx_ws/install/share/arx_x5_controller/launch/
+COPY offline/python/ /usr/local/lib/python3.12/dist-packages/
+COPY offline/lib/ /usr/local/lib/
+COPY offline/manifest.json /opt/arx5-runtime/offline-manifest.json
+RUN rm -rf /opt/arx5-runtime/src /opt/arx5-runtime/build /opt/collection_rebuild/src
+COPY src/ /opt/arx5-runtime/src/
+COPY pyproject.toml /opt/arx5-runtime/pyproject.toml
+COPY config/calibration/ /opt/arx5-runtime/config/calibration/
+COPY config/fastdds-shm.xml /opt/arx5-dual-collection/config/fastdds-shm.xml
+COPY scripts/ /opt/arx5-dual-collection/scripts/
+RUN ldconfig && python3 -m pip install --break-system-packages --no-index --no-build-isolation --no-deps /opt/arx5-runtime \
+    && python3 -c "import cv2, numpy, pyrealsense2; assert 'GUI:                           NONE' not in cv2.getBuildInformation(); print(cv2.__version__, numpy.__version__)"
+COPY ros2_ws/src/ /opt/collection_rebuild/src/
+RUN source /opt/ros/jazzy/setup.bash && source /opt/arx_ws/install/setup.bash \
+    && cd /opt/collection_rebuild && colcon build --merge-install --install-base /opt/collection_ws/install --cmake-args -DCMAKE_BUILD_TYPE=Release
+ENTRYPOINT ["/ros_entrypoint.sh"]
+CMD ["arx5-collect", "--help"]
