@@ -74,7 +74,8 @@ def teach(hardware, route, path: Path):
                     kin.validate(state[side]["q"])
             except ValueError as error:
                 joint_error = str(error)
-            fresh = monotonic() - frame["source_monotonic_s"] < 0.25
+            clock_error = frame.get("clock_error", "")
+            fresh = not clock_error and monotonic() - frame["source_monotonic_s"] < 0.25
             ready = (
                 detection.valid
                 and stable
@@ -85,7 +86,7 @@ def teach(hardware, route, path: Path):
             )
             n = sum(p["kind"] == "capture" for p in route["waypoints"])
             lines = [
-                f"{route['role']} | captured {n} | {'READY' if ready else joint_error or detection.reason or 'hold still'}",
+                f"{route['role']} | captured {n} | {'READY' if ready else clock_error or joint_error or detection.reason or 'hold still'}",
                 "SPACE save | R flip A | V transit | Backspace undo | Enter finish | Esc draft",
                 f"coverage {detection.coverage:.1%} | sharpness {detection.sharpness:.0f}",
                 message,
@@ -104,7 +105,9 @@ def teach(hardware, route, path: Path):
                 pressed_reference = {
                     side: state[side]["q"] for side in ("left", "right")
                 }
-                fresh = monotonic() - frame["source_monotonic_s"] < 0.25
+                fresh = (
+                    not clock_error and monotonic() - frame["source_monotonic_s"] < 0.25
+                )
                 if (
                     joint_error
                     or not stable
@@ -112,7 +115,9 @@ def teach(hardware, route, path: Path):
                     or (capture and (not ready or not fresh))
                 ):
                     message = "Not saved: " + (
-                        detection.reason or "wait for fresh, stationary view"
+                        clock_error
+                        or detection.reason
+                        or "wait for fresh, stationary view"
                     )
                     continue
                 state = pressed_state
@@ -225,7 +230,8 @@ def record(hardware, route, output: Path):
                     )
                     seen = frame["number"]
                     within = (
-                        capture_started is not None
+                        not frame.get("clock_error")
+                        and capture_started is not None
                         and capture_started + 0.1 <= frame["source_monotonic_s"] <= now
                         and now - frame["received_monotonic_s"] < 0.25
                     )
@@ -259,7 +265,7 @@ def record(hardware, route, output: Path):
                 lines = [
                     f"{route['role']} | {index + 1}/{len(route['waypoints'])} | {status}",
                     f"max speed {limits.velocity_rad_s:.2f} rad/s | Esc stop",
-                    detection.reason,
+                    frame.get("clock_error") or detection.reason,
                 ]
                 if (
                     _key(
@@ -269,7 +275,7 @@ def record(hardware, route, output: Path):
                             board,
                             detection,
                             lines,
-                            stable and detection.valid,
+                            stable and detection.valid and not frame.get("clock_error"),
                         ),
                     )
                     == 27

@@ -28,7 +28,8 @@ def check_observation(route, obs):
     begin, end = window["start"], window["end"]
     source = frame["source_monotonic_s"]
     if (
-        not np.isfinite([begin, end, source]).all()
+        frame.get("clock_error")
+        or not np.isfinite([begin, end, source]).all()
         or end - begin < limits.capture_s
         or frame["clock"] != "global_time"
         or not begin + 0.1 <= source <= end

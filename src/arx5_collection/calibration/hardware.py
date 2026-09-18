@@ -7,6 +7,8 @@ from contextlib import ExitStack
 from threading import Lock, Thread, Event
 from time import monotonic, time, sleep
 import math
+from pathlib import Path
+import traceback
 
 import numpy as np
 
@@ -25,13 +27,20 @@ PROFILE = {"width": 848, "height": 480, "fps": 30, "format": "rgb8"}
 class Camera:
     """One selected D405, one persistent pipeline, RGB copied off the SDK thread."""
 
-    def __init__(self, serial):
+    def __init__(self, serial, log_path=None):
         self.serial = serial
         self.pipeline = None
         self.started = False
         self.lock, self.stop_event = Lock(), Event()
         self.frame = self.error = self.thread = None
         self.metadata = {}
+        self.log_path = Path(log_path) if log_path else None
+
+    def _log(self, message):
+        if self.log_path:
+            self.log_path.parent.mkdir(parents=True, exist_ok=True)
+            with self.log_path.open("a") as stream:
+                stream.write(f"{time():.6f} {message}\n")
 
     def open(self):
         import pyrealsense2 as rs
@@ -100,7 +109,9 @@ class Camera:
         deadline = monotonic() + 15
         while self.frame is None and monotonic() < deadline:
             if self.error:
-                raise RuntimeError("camera startup failed") from self.error
+                raise RuntimeError(
+                    f"camera startup failed: {self.error}"
+                ) from self.error
             sleep(0.02)
         if self.frame is None:
             raise TimeoutError("no fresh global-time RGB frames")
@@ -108,40 +119,60 @@ class Camera:
     def _run(self):
         try:
             warmup_until = monotonic() + 2
+            previous_clock_error = None
             while not self.stop_event.is_set():
                 frames = self.pipeline.wait_for_frames(1000)
                 color = frames.get_color_frame()
                 if not color or monotonic() < warmup_until:
                     continue
-                if (
-                    color.get_frame_timestamp_domain()
-                    != self.rs.timestamp_domain.global_time
-                ):
-                    raise RuntimeError("camera must report global-time timestamps")
                 received, wall = monotonic(), time()
                 source = color.get_timestamp() / 1000
-                if not -0.02 <= wall - source <= 0.20:
-                    raise RuntimeError(
-                        "camera source time is stale or incompatible with host clock"
+                global_time = (
+                    color.get_frame_timestamp_domain()
+                    == self.rs.timestamp_domain.global_time
+                )
+                age = wall - source
+                # RealSense's host-clock estimate can settle after the image stream
+                # starts. Keep the live preview; never admit these frames to capture.
+                clock_error = (
+                    "waiting for camera global time"
+                    if not global_time
+                    else "invalid camera timestamp"
+                    if not math.isfinite(source)
+                    else "camera clock settling / frame outside time bounds"
+                    if not -0.02 <= age <= 0.20
+                    else ""
+                )
+                if clock_error != previous_clock_error:
+                    self._log(
+                        f"frame={color.get_frame_number()} age_ms={age * 1000:.3f} clock={clock_error or 'ready'}"
                     )
+                    previous_clock_error = clock_error
+                finite_source = source if math.isfinite(source) else None
                 frame = {
                     "image": np.asanyarray(color.get_data())[:, :, ::-1].copy(),
                     "number": color.get_frame_number(),
-                    "source_time_s": source,
+                    "source_time_s": finite_source,
                     "received_wall_s": wall,
                     "received_monotonic_s": received,
-                    "source_monotonic_s": received - (wall - source),
-                    "clock": "global_time",
+                    "source_monotonic_s": received - age
+                    if finite_source is not None
+                    else None,
+                    "clock": "global_time"
+                    if global_time
+                    else str(color.get_frame_timestamp_domain()),
+                    "clock_error": clock_error,
                 }
                 with self.lock:
                     self.frame = frame
         except BaseException as error:
             if not self.stop_event.is_set():
                 self.error = error
+                self._log(traceback.format_exc())
 
     def latest(self):
         if self.error:
-            raise RuntimeError("camera worker failed") from self.error
+            raise RuntimeError(f"camera worker failed: {self.error}") from self.error
         with self.lock:
             frame = self.frame
         if frame is None or monotonic() - frame["received_monotonic_s"] > 0.25:
@@ -344,7 +375,7 @@ class Hardware:
             serial = next(
                 c.serial_number for c in self.station.cameras if c.role == camera_role
             )
-            self.camera = Camera(serial)
+            self.camera = Camera(serial, self.logs / "camera.log")
             self.stack.callback(self.camera.close)
             self.camera.open()
             self.supervisor = RosProcessSupervisor()

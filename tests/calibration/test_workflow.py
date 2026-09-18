@@ -4,14 +4,16 @@ from copy import deepcopy
 
 import cv2
 import numpy as np
+import pytest
 
 from arx5_collection.calibration import workflow
 from arx5_collection.calibration.board import Board
 from arx5_collection.calibration.storage import read_json
 
 
+@pytest.mark.parametrize("clock_error", ["", "camera clock settling"])
 def test_space_saves_live_joints_and_duplicate_is_rejected(
-    tmp_path, route, monkeypatch
+    tmp_path, route, monkeypatch, clock_error
 ):
     route = deepcopy(route)
     q = route["waypoints"][0]["q"]
@@ -37,7 +39,12 @@ def test_space_saves_live_joints_and_duplicate_is_rejected(
         }
 
     def frame():
-        return {"image": image, "number": 1, "source_monotonic_s": monotonic() - 0.01}
+        return {
+            "image": image,
+            "number": 1,
+            "source_monotonic_s": monotonic() - 0.01,
+            "clock_error": clock_error,
+        }
 
     calls = []
     hardware = SimpleNamespace(
@@ -64,6 +71,10 @@ def test_space_saves_live_joints_and_duplicate_is_rejected(
     workflow.teach(hardware, route, path)
     saved = read_json(path)
     assert calls == ["gravity_compensation"]
+    if clock_error:
+        assert saved["waypoints"] == []
+        assert not list((path.parent / "teaching").rglob("*.png"))
+        return
     assert len(saved["waypoints"]) == 1 and saved["draft"]
     assert saved["waypoints"][0]["q"] == q
     assert saved["waypoints"][0]["teaching"]["actual"]["left"]["q"] == q["left"]

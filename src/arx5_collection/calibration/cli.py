@@ -213,6 +213,9 @@ def _run(args):
                     },
                 )
                 print(f"采集完成：{output}；离线计算请重新运行入口并选择 3。")
+        except Exception as error:
+            print(f"标定中断：{error}", file=sys.stderr, flush=True)
+            raise
         finally:
             # Runs on completion, Esc, Ctrl-C and exceptions while controller services remain alive.
             park(hardware, route["mode"] == "eye_to_hand")

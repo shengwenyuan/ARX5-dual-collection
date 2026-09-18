@@ -1,0 +1,13 @@
+# Python-only offline delta on a verified hardware image; no SDK/dependency rebuild.
+# Invoke with --network=none --pull=false and an already installed BASE_IMAGE.
+ARG BASE_IMAGE=arx5-dual-collection:production
+FROM ${BASE_IMAGE}
+ARG SOURCE_REVISION
+LABEL org.opencontainers.image.revision="${SOURCE_REVISION}" \
+      arx5.collection.source-revision="${SOURCE_REVISION}"
+RUN rm -rf /opt/arx5-runtime/src /opt/arx5-runtime/build
+COPY src/ /opt/arx5-runtime/src/
+COPY pyproject.toml /opt/arx5-runtime/pyproject.toml
+COPY config/calibration/ /opt/arx5-runtime/config/calibration/
+COPY scripts/ /opt/arx5-dual-collection/scripts/
+RUN python3 -m pip install --break-system-packages --no-index --no-build-isolation --no-deps /opt/arx5-runtime
