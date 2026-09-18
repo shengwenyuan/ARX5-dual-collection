@@ -11,6 +11,7 @@ import numpy as np
 from .board import Board
 from .geometry import Kinematics, errors, handeye, inverse, rigid, transform
 from .motion import MotionLimits, stationary, validate_sample
+from .profiles import validate_profile
 from .routes import route_hash, validate
 from .storage import bound_path, digest, file_digest, read_json, write_json
 from .timing import timing_error
@@ -158,6 +159,11 @@ def load_run(path):
 
 
 def intrinsics(datasets):
+    if not datasets:
+        raise ValueError("intrinsic calibration needs input datasets")
+    profile = validate_profile(datasets[0][0]["profile"])
+    if any(validate_profile(route["profile"]) != profile for route, _ in datasets):
+        raise ValueError("cannot fit intrinsics from mixed native camera profiles")
     points, corners = [], []
     for route, run in datasets:
         board = Board(**route["board"])
@@ -167,7 +173,6 @@ def intrinsics(datasets):
                 corners.append(np.array(obs["detection"]["corners"], np.float32))
     if len(points) < 15:
         raise ValueError("at least 15 intrinsic training views required")
-    profile = datasets[0][0]["profile"]
     rms, k, dist, _, _ = cv2.calibrateCamera(
         points, corners, (profile["width"], profile["height"]), None, None
     )
@@ -214,6 +219,8 @@ def board_pose(board, corners, intrinsic):
 
 
 def solve_route(route, run, intrinsic):
+    if validate_profile(intrinsic["profile"]) != validate_profile(route["profile"]):
+        raise ValueError("intrinsic profile differs from image profile; never reuse 480p K on 720p pixels")
     board = Board(**route["board"])
     views = []
     for obs in run["observations"]:

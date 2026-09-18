@@ -9,7 +9,6 @@ import pytest
 from arx5_collection.calibration.camera import Camera, frame_timing
 from arx5_collection.calibration.profiles import (
     DEFAULT_PROFILE,
-    LEGACY_PROFILE,
     validate_profile,
 )
 from arx5_collection.calibration.timing import capture_ready, timing_error
@@ -66,8 +65,8 @@ def test_invalid_clock_can_preview_but_not_capture(global_time, source):
     assert timing_error(valid) == "inconsistent camera clock mapping"
 
 
-@pytest.mark.parametrize("profile", [DEFAULT_PROFILE, LEGACY_PROFILE])
-def test_process_keeps_acquiring_while_parent_gil_is_blocked(profile):
+def test_process_keeps_acquiring_while_parent_gil_is_blocked():
+    profile = DEFAULT_PROFILE
     camera = Camera("synthetic", profile=profile, session_factory=SyntheticSession)
     camera.open()
     child = camera.process
@@ -111,6 +110,17 @@ def test_bad_native_image_fails_before_hardware_start():
 def test_profile_is_explicit_and_not_mutable_alias():
     p = validate_profile(DEFAULT_PROFILE)
     p["width"] = 12
-    assert DEFAULT_PROFILE["width"] == 1280
+    assert DEFAULT_PROFILE["width"] == 848
     with pytest.raises(ValueError, match="native RGB8"):
         validate_profile({**DEFAULT_PROFILE, "width": 1920})
+
+
+def test_calibration_matches_collection_native_profile_and_rejects_720p():
+    from pathlib import Path
+    import re
+    source = (Path(__file__).resolve().parents[2] / 'ros2_ws/src/arx5_d405_source_cpp/src/multi_d405_source.cpp').read_text()
+    for key, constant in (("width", "kRequiredWidth"), ("height", "kRequiredHeight"), ("fps", "kRequiredFps")):
+        assert DEFAULT_PROFILE[key] == int(re.search(rf"{constant} = (\d+)", source).group(1))
+    assert DEFAULT_PROFILE["format"] == "rgb8"
+    with pytest.raises(ValueError, match="re-teach old 720p"):
+        Camera("unused", profile={**DEFAULT_PROFILE, "width": 1280, "height": 720})

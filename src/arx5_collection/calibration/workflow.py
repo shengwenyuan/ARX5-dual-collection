@@ -62,7 +62,7 @@ def teach(hardware, route, path: Path, *, prepared_window=None):
     window = prepared_window or f"ARX5 calibration | {route['role']} | TEACH"
     gate = StableWindow(limits)
     feedback = TeachFeedback(hardware.arms, limits, gate, clock=monotonic)
-    message, reference = "Move by hand, release and wait for each check", None
+    reference = None
     archive_route(path)
     write_json(path, route)
     hardware.arms.call("gravity_compensation")
@@ -91,8 +91,6 @@ def teach(hardware, route, path: Path, *, prepared_window=None):
             n = sum(p["kind"] == "capture" for p in route["waypoints"])
             footer = [
                 "SPACE save | BACKSPACE delete last",
-                "Close window to finish; confirm physical A before saving",
-                message,
             ]
             key = _key(window, render(
                 frame["image"], board, detection,
@@ -103,9 +101,9 @@ def teach(hardware, route, path: Path, *, prepared_window=None):
                 if route["waypoints"]:
                     route["waypoints"].pop()
                     write_json(path, route)
-                    message = "Last pose deleted"
+                    print("已删除上一条位姿")
                 else:
-                    message = "No saved pose to delete"
+                    print("当前没有可删除的位姿")
             elif key == 32:
                 # GUI rendering can also take time. Re-read and revalidate at the keypress.
                 hardware.supervisor.require_running()
@@ -116,7 +114,7 @@ def teach(hardware, route, path: Path, *, prepared_window=None):
                 if not stationary(pressed_state, {s: state[s]["q"] for s in ("left", "right")}, limits):
                     failed.append("pose changed at keypress")
                 if not ready or failed:
-                    message = "Not saved: " + ", ".join((failed or [c.label for c in checks if not c.passed])[:3])
+                    print("未保存：" + ", ".join((failed or [c.label for c in checks if not c.passed])[:3]))
                     continue
                 state = pressed_state
                 p = {
@@ -136,7 +134,6 @@ def teach(hardware, route, path: Path, *, prepared_window=None):
                     validate(candidate)
                 except ValueError as error:
                     print(f"位姿校验未通过：{error}")
-                    message = "Not saved: route check failed; see terminal"
                     continue
                 image_path = evidence_dir / f"{p['pose_id']}.png"
                 if not cv2.imwrite(str(image_path), frame["image"]):
@@ -148,7 +145,7 @@ def teach(hardware, route, path: Path, *, prepared_window=None):
                 })
                 route["waypoints"].append(p)
                 write_json(path, route)
-                message = f"Saved pose {n + 1} ({p['split']})"
+                print(f"已保存第 {n + 1} 条（{p['split']}）")
             elif key == WINDOW_CLOSED:
                 try:
                     completed = finalize(route)

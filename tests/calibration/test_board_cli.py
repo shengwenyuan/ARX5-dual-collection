@@ -87,7 +87,7 @@ def test_session_window_precedes_hardware_and_route_profile_is_used(
     from types import SimpleNamespace
 
     from arx5_collection.calibration import cli, hardware, routes, workflow
-    from arx5_collection.calibration.profiles import DEFAULT_PROFILE, LEGACY_PROFILE
+    from arx5_collection.calibration.profiles import DEFAULT_PROFILE
     from arx5_collection.calibration.storage import write_json
     from arx5_collection.production import config
 
@@ -106,8 +106,8 @@ def test_session_window_precedes_hardware_and_route_profile_is_used(
     monkeypatch.setattr(
         workflow, "prepare_window", lambda *a: events.append("window") or "prepared"
     )
-    expected = DEFAULT_PROFILE if stage == "teach" else LEGACY_PROFILE
-    route["profile"] = LEGACY_PROFILE.copy()
+    expected = DEFAULT_PROFILE
+    route["profile"] = DEFAULT_PROFILE.copy()
     write_json(tmp_path / "routes/left-wrist.json", route)
 
     class Device:
@@ -140,3 +140,16 @@ def test_session_window_precedes_hardware_and_route_profile_is_used(
         "close-hardware",
         "close-window",
     ]
+
+
+def test_720p_route_is_rejected_before_hardware_opens(tmp_path, route, monkeypatch):
+    from types import SimpleNamespace
+    from arx5_collection.calibration.storage import write_json
+    from arx5_collection.production import config
+    route["profile"] = {"width": 1280, "height": 720, "fps": 30, "format": "rgb8"}
+    path = tmp_path / "old-route.json"
+    write_json(path, route)
+    monkeypatch.setattr(config, "load_configured_station", lambda _: SimpleNamespace(sdk_type=2))
+    with patch("arx5_collection.calibration.hardware.Hardware") as hardware:
+        assert main(["cali", "--left-wrist", "--record", "--poses", str(path)]) == 2
+    hardware.assert_not_called()

@@ -8,12 +8,7 @@ import pytest
 
 from arx5_collection.calibration.board import Board, detect
 from arx5_collection.calibration.geometry import inverse, rigid
-from arx5_collection.calibration.profiles import (
-    DEFAULT_PROFILE,
-)
-from arx5_collection.calibration.profiles import (
-    LEGACY_PROFILE as PROFILE,
-)
+from arx5_collection.calibration.profiles import DEFAULT_PROFILE as PROFILE
 from arx5_collection.calibration.routes import new_route, route_hash, validate
 from arx5_collection.calibration.solve import (
     check_observation,
@@ -167,9 +162,8 @@ def build_run(root, kin, profile=PROFILE):
     return route, run, x
 
 
-@pytest.mark.parametrize("profile", [PROFILE, DEFAULT_PROFILE])
-def test_full_pixel_fk_pipeline_and_recomputable_evidence(tmp_path, kin, profile):
-    route, run, truth = build_run(tmp_path / "run", kin, profile)
+def test_full_pixel_fk_pipeline_and_recomputable_evidence(tmp_path, kin):
+    route, run, truth = build_run(tmp_path / "run", kin, PROFILE)
     index = []
     for observation in run["observations"]:
         path = tmp_path / "run" / "observations" / (observation["pose_id"] + ".json")
@@ -221,3 +215,14 @@ def test_heldout_pixels_do_not_change_fitted_intrinsics(tmp_path, kin):
                 np.asarray(obs["detection"]["corners"]) + 50
             ).tolist()
     assert expected == intrinsics([(route, changed)])
+
+
+def test_profile_mismatch_is_rejected_before_any_intrinsic_or_pose_fit(route):
+    from arx5_collection.calibration.solve import solve_route
+    low = deepcopy(route)
+    low["profile"] = {"width": 1280, "height": 720, "fps": 30, "format": "rgb8"}
+    with pytest.raises(ValueError, match="native|profile"):
+        intrinsics([(route, {"observations": []}), (low, {"observations": []})])
+    # Reject before inspecting observations/K: pixel coordinates need matching K.
+    with pytest.raises(ValueError, match="native|profile"):
+        solve_route(route, {"observations": []}, {"profile": low["profile"]})

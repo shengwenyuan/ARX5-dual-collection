@@ -187,6 +187,7 @@ def test_slow_detection_reads_feedback_after_detection(tmp_path, route, monkeypa
         clock[0] += .12
         return Detection(corners, .1, 800., "")
     def panel(image, board, detection, title, checks, footer):
+        assert footer == ["SPACE save | BACKSPACE delete last"]
         panels.append(checks)
         return image
     def key(*a):
