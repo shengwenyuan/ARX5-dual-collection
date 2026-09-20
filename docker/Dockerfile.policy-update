@@ -1,0 +1,6 @@
+# Update only collection's policy adapter, retaining all installed dependencies.
+ARG BASE_IMAGE=arx5-dual-policy:dagger
+FROM ${BASE_IMAGE}
+ARG SOURCE_REVISION
+LABEL org.opencontainers.image.revision="${SOURCE_REVISION}"
+COPY src/arx5_collection/ /opt/arx5-policy/arx5_collection/

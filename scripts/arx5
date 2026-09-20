@@ -42,17 +42,50 @@ def collect(rgb_only: bool = False) -> int:
     )
 
 
-def dagger(mode: str, rgb_only: bool = False) -> int:
+def dagger(
+    mode: str,
+    rgb_only: bool = False,
+    inference_config: str | None = None,
+    runtime_config: str | None = None,
+) -> int:
     required("ARX5_OUTPUT_ROOT")
     required("ARX5_TASK_DESCRIPTION")
     environment = {**os.environ, "ARX5_DAGGER_MODE": mode}
     if rgb_only:
-        environment["ARX5_TASK_CONFIG"] = str(
-            ROOT / "config/task.rgb-only.json"
-        )
+        environment["ARX5_TASK_CONFIG"] = str(ROOT / "config/task.rgb-only.json")
     overrides = (
         ["-f", str(ROOT / "docker/compose.infer.yaml")] if mode == "infer" else []
     )
+    if inference_config:
+        # Only the host-side translation runs here; it never initializes devices.
+        sys.path.insert(0, str(ROOT / "src"))
+        from arx5_collection.dagger.unified_config import prepare_policy
+
+        defaults = {}
+        for line in (STATION_DIR / "dagger.env").read_text().splitlines():
+            if line.strip() and not line.lstrip().startswith("#"):
+                key, value = line.split("=", 1)
+                defaults[key.strip()] = value.strip()
+        checkpoint_root = environment.get(
+            "ARX5_CHECKPOINT_ROOT", defaults.get("ARX5_CHECKPOINT_ROOT")
+        )
+        if not checkpoint_root:
+            raise ValueError("set ARX5_CHECKPOINT_ROOT")
+        template = runtime_config or environment.get(
+            "ARX5_DAGGER_POLICY_CONFIG", defaults.get("ARX5_DAGGER_POLICY_CONFIG")
+        )
+        if not template:
+            raise ValueError("set --runtime-config or ARX5_DAGGER_POLICY_CONFIG")
+        config, override = prepare_policy(
+            Path(inference_config),
+            Path(template),
+            Path(required("ARX5_OUTPUT_ROOT")) / ".policy",
+            Path(checkpoint_root),
+            STATION_DIR / "station.json",
+        )
+        environment["ARX5_DAGGER_POLICY_CONFIG"] = str(config)
+        environment["ARX5_CHECKPOINT_ROOT"] = checkpoint_root
+        overrides += ["-f", str(override)]
     return subprocess.call(
         [
             "docker",
@@ -88,9 +121,20 @@ def cali(arguments: list[str]) -> int:
                 environment["XAUTHORITY"] = str(authority)
                 break
     return subprocess.call(
-        ["docker", "compose", "-f", str(ROOT / "docker/compose.calibration.yaml"),
-         "run", "--rm", "calibration", "arx5-collect", "cali", *arguments],
-        cwd=ROOT, env=environment,
+        [
+            "docker",
+            "compose",
+            "-f",
+            str(ROOT / "docker/compose.calibration.yaml"),
+            "run",
+            "--rm",
+            "calibration",
+            "arx5-collect",
+            "cali",
+            *arguments,
+        ],
+        cwd=ROOT,
+        env=environment,
     )
 
 
@@ -99,7 +143,9 @@ def main() -> int:
         return cali(sys.argv[2:])
     parser = argparse.ArgumentParser(prog="arx5")
     commands = parser.add_subparsers(dest="command", required=True)
-    commands.add_parser("cali", help="four-route camera calibration; cali --help for stages")
+    commands.add_parser(
+        "cali", help="four-route camera calibration; cali --help for stages"
+    )
     collect_parser = commands.add_parser(
         "collect", help="start a production collection Session"
     )
@@ -108,7 +154,9 @@ def main() -> int:
         action="store_true",
         help="temporarily omit aligned depth from the recorded MCAP",
     )
-    infer_parser = commands.add_parser("infer", help="RTC episodes with pedal success/fail")
+    infer_parser = commands.add_parser(
+        "infer", help="RTC episodes with pedal success/fail"
+    )
     infer_parser.add_argument("--rgb-only", action="store_true")
     dagger_parser = commands.add_parser("dagger", help="start a DAgger Session")
     dagger_parser.add_argument(
@@ -119,11 +167,24 @@ def main() -> int:
         action="store_true",
         help="temporarily omit aligned depth from the recorded MCAP",
     )
+    for command_parser in (infer_parser, dagger_parser):
+        command_parser.add_argument(
+            "--inference-config", help="checkpoint unified inference TOML"
+        )
+        command_parser.add_argument(
+            "--runtime-config",
+            help="collection runtime template; defaults to dagger.env",
+        )
     args = parser.parse_args()
     try:
         if args.command == "collect":
             return collect(args.rgb_only)
-        return dagger("infer" if args.command == "infer" else args.mode, args.rgb_only)
+        return dagger(
+            "infer" if args.command == "infer" else args.mode,
+            args.rgb_only,
+            args.inference_config,
+            args.runtime_config,
+        )
     except ValueError as error:
         parser.error(str(error))
 

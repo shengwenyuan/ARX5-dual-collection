@@ -5,6 +5,7 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 import re
+import sys
 import time
 import tomllib
 from typing import Any
@@ -35,6 +36,8 @@ class PolicyServerSettings:
     execution: PolicyExecutionProfile
     checkpoint_profile: Pi05CheckpointProfile
     rtc_rollout: RtcRolloutProfile | None
+    model_variant: str = "standard"
+    openpi_root: Path | None = None
 
     @classmethod
     def load(cls, path: str | Path) -> PolicyServerSettings:
@@ -61,6 +64,10 @@ class PolicyServerSettings:
             checkpoint_profile=checkpoint_profile,
             rtc_rollout=load_rtc_rollout(payload, checkpoint_profile),
             execution=checkpoint_profile.execution,
+            model_variant=str(policy.get("model_variant", "standard")),
+            openpi_root=Path(str(policy["openpi_root"]))
+            if policy.get("openpi_root")
+            else None,
         )
         if not settings.repo_id or not settings.prompt or not settings.host:
             raise ValueError("repo_id, prompt, and host must not be empty")
@@ -68,11 +75,29 @@ class PolicyServerSettings:
             raise ValueError("policy port is invalid")
         if not _SHA256.fullmatch(settings.checkpoint_sha256):
             raise ValueError("checkpoint_sha256 must contain 64 hexadecimal characters")
+        if settings.model_variant not in {"standard", "arx5_base"}:
+            raise ValueError(f"unsupported model_variant: {settings.model_variant}")
+        if settings.model_variant == "arx5_base" and (
+            settings.openpi_root is None
+            or checkpoint_profile.policy_type != "training_time_rtc"
+        ):
+            raise ValueError(
+                "arx5_base requires matching openpi_root and training_time_rtc"
+            )
         return settings
 
 
 def create_pi05_joint_policy(settings: PolicyServerSettings):
     """Create the joint-space π0.5 policy contract used by ARX5 checkpoints."""
+    if settings.openpi_root is not None:
+        root = settings.openpi_root
+        if not (root / "src/openpi").is_dir():
+            raise ValueError(f"OpenPI source does not exist: {root}")
+        if any(name == "openpi" or name.startswith("openpi.") for name in sys.modules):
+            raise RuntimeError(
+                "select OpenPI source before importing any OpenPI modules"
+            )
+        sys.path[:0] = [str(root / "src"), str(root / "packages/openpi-client/src")]
     from openpi import transforms
     from openpi.models import pi0_config
     from openpi.policies import policy_config
@@ -112,12 +137,23 @@ def create_pi05_joint_policy(settings: PolicyServerSettings):
     )
     policy_metadata: dict[str, Any] = {}
     if settings.checkpoint_profile.policy_type == "training_time_rtc":
-        from openpi.models import pi0_rtc_config
+        if settings.model_variant == "arx5_base":
+            from openpi.experiments.arx5_base.model_config import Pi05RtcConfig
+            from openpi.experiments.arx5_base.data_config import create_data_config
 
-        model = pi0_rtc_config.Pi05RtcConfig(
+            data = create_data_config(settings.repo_id)
+        else:
+            from openpi.models.pi0_rtc_config import Pi05RtcConfig
+
+        model = Pi05RtcConfig(
             action_dim=settings.checkpoint_profile.model_action_dimension,
             action_horizon=settings.execution.action_chunk_size,
             max_delay=settings.checkpoint_profile.max_delay_steps,
+            **(
+                {"max_token_len": 200, "discrete_state_input": True}
+                if settings.model_variant == "arx5_base"
+                else {}
+            ),
         )
         policy_metadata = {
             "policy_metadata": {
@@ -193,7 +229,9 @@ def warm_up_pi05_policy(
             tuple(float(value) for value in row) for row in result["actions"]
         )
     except (KeyError, TypeError, ValueError) as error:
-        raise RuntimeError(f"π0.5 warm-up returned an invalid action: {error}") from error
+        raise RuntimeError(
+            f"π0.5 warm-up returned an invalid action: {error}"
+        ) from error
     InferenceTicket(
         "policy-warmup",
         0,
@@ -225,8 +263,7 @@ def warm_up_pi05_policy(
         )
         try:
             conditioned_chunk = tuple(
-                tuple(float(value) for value in row)
-                for row in conditioned["actions"]
+                tuple(float(value) for value in row) for row in conditioned["actions"]
             )
         except (KeyError, TypeError, ValueError) as error:
             raise RuntimeError(
@@ -243,8 +280,6 @@ def warm_up_pi05_policy(
 
 
 def serve(settings: PolicyServerSettings) -> None:
-    from openpi.serving.websocket_policy_server import WebsocketPolicyServer
-
     logging.info("Hashing configured checkpoint once: %s", settings.checkpoint)
     actual_sha256 = checkpoint_tree_sha256(settings.checkpoint)
     if actual_sha256 != settings.checkpoint_sha256:
@@ -260,6 +295,8 @@ def serve(settings: PolicyServerSettings) -> None:
         settings.checkpoint_profile,
         settings.rtc_rollout,
     )
+    from openpi.serving.websocket_policy_server import WebsocketPolicyServer
+
     envelope = CorrelatedPolicyEnvelope(policy, actual_sha256, time.time_ns)
     WebsocketPolicyServer(
         envelope,
