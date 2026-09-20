@@ -27,8 +27,16 @@
 
 设备证据目录：`/var/lib/arx5-collection/deployments/20260920-064f8d9/`，包含构建日志、测试日志、合成 MCAP、烟测脚本和部署 manifest。
 
-## 真机前仍待处理
+## 配置补齐与历史问题归属
 
-未启动机械臂、相机、CAN 或模型服务。踏板释放/长按与实际多局行为仍待用户配合验收。
+后续核实：w5 当时确实没有 `/var/lib/arx5-collection/dagger.env`。此前 timeout 校验失败明确对应 **2026-08-28 17:38 的旧 `/var/lib/arx5-collection/dagger-policy.toml`**，SHA 为 `10bdb3dd54b430ccb0ae7b3efc613e748de3ef07d8c7cf49e815578b0f901147`，与 w3 的 `dagger-policy.toml.pre-e49bb09` 备份逐字节一致。它的 0.5 秒 timeout + 0.05 秒 margin 超过 10/25=0.4 秒预算。这是历史配置与现有校验规则不匹配，**不是当前新版 RTC 仍有故障或推理实际超时的结论**。
 
-本站原先不存在 `/var/lib/arx5-collection/dagger.env`；旧 `dagger-policy.toml` 中 `policy_wait_timeout_s=0.5` 加默认 margin 0.05 秒，超过当前 `max_delay_steps/control_rate_hz=10/25=0.4` 秒的 RTC deadline，因此未通过现有配置校验。该问题在本轮改动前的配置/代码组合中也存在。本轮保留原配置，真机启动前需补齐路径映射并结合实际推理延迟确定合规超时，不能直接宣称已可开始实机 infer。
+2026-09-20 只读参考 w3 当前 `dagger.env` 和 policy TOML，已在 w5 补齐：
+
+- `/var/lib/arx5-collection/dagger.env`：使用 w5 本机源码、checkpoint 和 reports 路径，policy 配置指向新 `infer-policy.toml`。旧 `dagger-policy.toml` 原样保留，不再是默认生效文件。
+- `/var/lib/arx5-collection/infer-policy.toml`：沿用 w5 checkpoint、25 Hz、动作和夹爪配置；参考 w3 将 request timeout 设为 200 ms、policy wait 设为 280 ms，显式 margin 为 50 ms。满足 `200 < 280` 且 `280 + 50 <= 400 ms`，实际延迟仍在真机阶段验收。
+- 复用现有两侧镜像，通过 collector/server 配置解析、checkpoint 完整树 SHA、RTC 类型与归一化资产检查；RGB-only 和完整采集的 Compose 配置、只读模型挂载、输出映射与宿主机入口 dry check 均通过。
+
+本次只新增外部挂载配置，没有重建镜像或下载组件，没有修改 w3、站点标定、旧配置、模型和已有采集数据。补齐记录在 `/var/lib/arx5-collection/deployments/20260920-infer-config/`。上节“18 份配置 SHA 不变”描述前次镜像更新时的检查；本次保留其中旧文件，仅新增上述两个配置。
+
+未启动模型服务、机械臂、相机或 CAN。真机命令、模型替换方法和踏板验收步骤见 [w5 infer 验收入口](w5-infer-acceptance.md)。

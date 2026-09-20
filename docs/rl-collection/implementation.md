@@ -55,9 +55,9 @@ infer CLI 默认复用 `--no-compress` 路径，不做结束后 MCAP 重写压�
 
 ## 下一步：先验证运行环境，再共同做真机
 
-以下是运行环境与真机交接步骤；2026-09-20 用户追加授权提交并在 w5-arx5 离线更新镜像，仍不运行真机。复用工作站已有 `/var/lib/arx5-collection/dagger.env`、station 与 RTC policy TOML；确认 checkpoint SHA、任务描述及 output root 对应本次实验。新增 ROS 消息需要重建 collector 镜像，不能仅替换 Python 文件沿用旧消息包。
+以下是运行环境与真机交接步骤；2026-09-20 用户追加授权提交并在 w5-arx5 离线更新镜像，仍不运行真机。w5 缺失的 `dagger.env` 已参考 w3 补齐，当前指向独立的 `infer-policy.toml`；具体挂载和启动命令以 [w5 infer 验收入口](w5-infer-acceptance.md) 为准。新增 ROS 消息需要重建 collector 镜像，不能仅替换 Python 文件沿用旧消息包。
 
-在 Linux 工作站复用现有镜像，只编译本仓库的 ROS 消息包并覆盖应用源码；不运行 apt、git fetch 或联网 pip。传输前比较文件 SHA，只发送变化文件。先构建候选镜像，隔离验证后再切换既有标签并删除被替代版本：
+以下保留已执行的构建流程；w5 已完成，无需再次构建。在 Linux 工作站复用现有镜像，只编译本仓库的 ROS 消息包并覆盖应用源码；不运行 apt、git fetch 或联网 pip。传输前比较文件 SHA，只发送变化文件。先构建候选镜像，隔离验证后再切换既有标签并删除被替代版本：
 
 ```bash
 docker image inspect arx5-dual-collection:dagger >/dev/null
@@ -76,7 +76,7 @@ docker run --rm --entrypoint /ros_entrypoint.sh arx5-dual-collection:infer-candi
   arx5-collect infer --help
 ```
 
-若 `dagger.env` 设置了自定义 collector image，上面两条命令需使用该实际 image tag。再做无机械臂的 ROS publisher/Recorder 小样本验证，确认新话题能写入真实 MCAP、时间戳及动作可回读；这项目前待完成。
+若 `dagger.env` 设置了自定义 collector image，上面两条命令需使用该实际 image tag。w5 已完成无机械臂的 ROS publisher/Recorder 小样本验证：success/fail 的真实 MCAP、新话题、时间戳和动作回读均通过，详见 [部署记录](deployment-w5-20260920.md)。
 
 与用户共同确认现场准备后，沿用原有环境变量，启动：
 
@@ -110,4 +110,4 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src .venv/bin/python -m pytest -q tests \
 
 `git diff --check`、改动 Python 文件 AST 语法检查、两个 infer CLI help、Compose 合并配置验证均通过；Compose 检查未启动容器。按 Python/宿主机入口源码增删口径，新增 infer 包 477 行，共享代码新增 62 行、删除 9 行，合计约 **548 行**；不含测试、schema、消息声明/构建配置与文档。低于原 600–1,100 行设计预算，未为达到行数增加功能。
 
-本结果只验收 collection 的离线逻辑。ROS 消息生成与实际录制、踏板释放/长按、真机多局，以及 exporter/replay 接入仍按上表保持待验收。
+上述 Mac 结果只验收 collection 的离线逻辑。随后 w5 已通过 ROS 消息生成、全量 395 项测试和真实 MCAP 合成录制；踏板释放/长按、真机多局及 exporter/replay 接入仍待验收。
