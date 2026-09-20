@@ -1,6 +1,6 @@
 # infer 采集：首版实施与验收计划
 
-更新：2026-09-20 · v0.4。状态：collection 首版代码已实现，离线验收完成；ROS 环境验证、真机验收与完成 commit 锁定待完成。
+更新：2026-09-20 · v0.4。状态：collection 首版代码已实现，离线验收完成；w5 镜像与合成 MCAP 验证完成，真机验收与完成版本锁定待完成。
 
 工作仓库：`/Users/shengwenyuan/1011/ARX5-dual-collection`。上层计划：[expo-online-RL/meta_plan.md](../../../expo-online-RL/meta_plan.md)。
 
@@ -124,7 +124,7 @@ MCAP + metadata（collection 已提交）
 
 ## 7. 实施、验收与 commit 锁定
 
-**本仓库补齐功能 → 验收明确通过 → 提交完成版本 → 主仓库锁定 commit。**当前已完成 collection 代码与离线测试，按用户要求停在真机测试前；未运行机器人；按用户追加要求提前提交开发版本，最终完成版本与 gitlink 仍待真机验收。原有其他未提交内容保持不变。实现与验收入口见 [implementation.md](implementation.md)。
+**本仓库补齐功能 → 验收明确通过 → 提交完成版本 → 主仓库锁定 commit。**当前已完成 collection 代码与离线测试，按用户要求停在真机测试前；未运行机器人；按用户追加要求提前提交开发版本，最终完成版本与 gitlink 仍待真机验收。原有其他未提交内容保持不变。实现与验收入口见 [implementation.md](implementation.md)，设备部署结果见 [w5 部署记录](deployment-w5-20260920.md)。
 
 | 阶段 | 交付/验收 |
 | --- | --- |
@@ -149,7 +149,7 @@ collection 验收可以使用 exporter 小样本接入验证输出契约，不�
 | --- | --- |
 | 计划 | v0.4，保持 v0.3 的三方边界 |
 | C0 | collection 命令/metadata 契约已落盘；官方 replay 适配仍属后续 |
-| C1 / C2 | 功能已实现；全量离线测试 394 passed、1 skipped（新增 28 项），源码改动约 548 行；ROS 消息编译和实际 MCAP 连通尚待 Linux 环境验证 |
+| C1 / C2 | 功能已实现；全量离线测试 394 passed、1 skipped（新增 28 项），源码改动约 548 行；w5 ROS 消息编译和真实 MCAP 合成两局验证通过，设备全量测试 395 passed |
 | C3 | exporter 接入、数据质量隔离和 replay 联调未执行，本轮未修改这两个模块 |
 | C4 | 未运行真机，等待用户配合；踏板释放/长按行为必须现场验收 |
 | 开发 commit / 完成版本 | 开发代码已提前提交；最终验收完成版本、主仓库锁定待完成 |
