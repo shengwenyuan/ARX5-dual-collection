@@ -124,7 +124,7 @@ MCAP + metadata（collection 已提交）
 
 ## 7. 实施、验收与 commit 锁定
 
-**本仓库补齐功能 → 验收明确通过 → 提交完成版本 → 主仓库锁定 commit。**当前已完成 collection 代码与离线测试，按用户要求停在真机测试前；未运行机器人、未提交完成版本，原有其他未提交内容保持不变。实现与验收入口见 [implementation.md](implementation.md)。
+**本仓库补齐功能 → 验收明确通过 → 提交完成版本 → 主仓库锁定 commit。**当前已完成 collection 代码与离线测试，按用户要求停在真机测试前；未运行机器人；按用户追加要求提前提交开发版本，最终完成版本与 gitlink 仍待真机验收。原有其他未提交内容保持不变。实现与验收入口见 [implementation.md](implementation.md)。
 
 | 阶段 | 交付/验收 |
 | --- | --- |
@@ -152,7 +152,7 @@ collection 验收可以使用 exporter 小样本接入验证输出契约，不�
 | C1 / C2 | 功能已实现；全量离线测试 394 passed、1 skipped（新增 28 项），源码改动约 548 行；ROS 消息编译和实际 MCAP 连通尚待 Linux 环境验证 |
 | C3 | exporter 接入、数据质量隔离和 replay 联调未执行，本轮未修改这两个模块 |
 | C4 | 未运行真机，等待用户配合；踏板释放/长按行为必须现场验收 |
-| 完成 commit / 主仓库锁定 | 未产生、未锁定 |
+| 开发 commit / 完成版本 | 开发代码已提前提交；最终验收完成版本、主仓库锁定待完成 |
 
 - v0.1：无 MCAP 与实时 sink 方案，已撤销。
 - v0.2：保留 MCAP，确认 infer、左 fail/右 success、落盘后右踏板 HOME。

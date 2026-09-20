@@ -1,0 +1,29 @@
+# Offline infer update. BASE_IMAGE must already exist on the target workstation.
+# docker build --network=none --pull=false -f docker/Dockerfile.infer-update ...
+ARG BASE_IMAGE=arx5-dual-collection:dagger
+FROM ${BASE_IMAGE}
+ARG SOURCE_REVISION
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+LABEL org.opencontainers.image.revision="${SOURCE_REVISION}" \
+      arx5.collection.source-revision="${SOURCE_REVISION}" \
+      arx5.collection.offline-update="infer-v1"
+
+# Reuse the installed ROS toolchain; regenerate only our small interface package.
+COPY ros2_ws/src/arx5_collection_interfaces/ /tmp/infer-interface/src/
+RUN source /opt/ros/${ROS_DISTRO}/setup.bash \
+    && cmake -S /tmp/infer-interface/src -B /tmp/infer-interface/build \
+        -DCMAKE_INSTALL_PREFIX=/opt/collection_ws/install \
+        -DPython3_EXECUTABLE=/usr/bin/python3 \
+        -DPYTHON_EXECUTABLE=/usr/bin/python3 \
+    && cmake --build /tmp/infer-interface/build --parallel 2 \
+    && cmake --install /tmp/infer-interface/build \
+    && rm -rf /tmp/infer-interface
+
+# Keep SDKs, Python dependencies, model assets and runtime environment unchanged.
+RUN rm -rf /opt/arx5-runtime/src /opt/arx5-runtime/build
+COPY src/ /opt/arx5-runtime/src/
+COPY pyproject.toml /opt/arx5-runtime/pyproject.toml
+COPY scripts/ /opt/arx5-dual-collection/scripts/
+COPY schemas/ /opt/arx5-dual-collection/schemas/
+RUN python3 -m pip install --break-system-packages --no-index \
+        --no-build-isolation --no-deps /opt/arx5-runtime

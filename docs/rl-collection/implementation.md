@@ -1,6 +1,6 @@
 # infer collection 实现与验收记录
 
-2026-09-20。状态：**collection 代码和离线测试完成，停在真机测试前。** 未操作机械臂、CAN、相机或模型服务器，未创建完成 commit，也未更新上层 submodule gitlink。
+2026-09-20。状态：**collection 代码和离线测试完成，停在真机测试前。** 未操作机械臂、CAN、相机或模型服务器，开发代码已按用户追加要求提前提交；真机完成 commit / 上层 submodule gitlink 仍待验收。
 
 ## 实现范围
 
@@ -55,21 +55,24 @@ infer CLI 默认复用 `--no-compress` 路径，不做结束后 MCAP 重写压�
 
 ## 下一步：先验证运行环境，再共同做真机
 
-以下命令只作交接，本轮未执行 build / run。复用工作站已有 `/var/lib/arx5-collection/dagger.env`、station 与 RTC policy TOML；确认 checkpoint SHA、任务描述及 output root 对应本次实验。新增 ROS 消息需要重建 collector 镜像，不能仅替换 Python 文件沿用旧消息包。
+以下是运行环境与真机交接步骤；2026-09-20 用户追加授权提交并在 w5-arx5 离线更新镜像，仍不运行真机。复用工作站已有 `/var/lib/arx5-collection/dagger.env`、station 与 RTC policy TOML；确认 checkpoint SHA、任务描述及 output root 对应本次实验。新增 ROS 消息需要重建 collector 镜像，不能仅替换 Python 文件沿用旧消息包。
 
-在 Linux 工作站仓库内，仅构建 collector（不启动硬件）：
+在 Linux 工作站复用现有镜像，只编译本仓库的 ROS 消息包并覆盖应用源码；不运行 apt、git fetch 或联网 pip。传输前比较文件 SHA，只发送变化文件。先构建候选镜像，隔离验证后再切换既有标签并删除被替代版本：
 
 ```bash
-docker compose --env-file /var/lib/arx5-collection/dagger.env \
-  -f docker/compose.dagger.yaml -f docker/compose.infer.yaml build collector
+docker image inspect arx5-dual-collection:dagger >/dev/null
+docker build --network=none --pull=false -f docker/Dockerfile.infer-update \
+  --build-arg BASE_IMAGE=arx5-dual-collection:dagger \
+  --build-arg SOURCE_REVISION="$(git rev-parse HEAD)" \
+  -t arx5-dual-collection:infer-candidate .
 ```
 
 可在不挂载设备的容器中先确认消息导入与 CLI：
 
 ```bash
-docker run --rm --entrypoint /ros_entrypoint.sh arx5-dual-collection:dagger \
+docker run --rm --entrypoint /ros_entrypoint.sh arx5-dual-collection:infer-candidate \
   python3 -c 'from arx5_collection_interfaces.msg import InferCommand; print(InferCommand())'
-docker run --rm --entrypoint /ros_entrypoint.sh arx5-dual-collection:dagger \
+docker run --rm --entrypoint /ros_entrypoint.sh arx5-dual-collection:infer-candidate \
   arx5-collect infer --help
 ```
 
