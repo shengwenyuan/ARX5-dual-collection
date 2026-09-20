@@ -1,0 +1,241 @@
+{
+  "scope": "collection output contract only; not exporter or replay acceptance",
+  "batch_root": "/home/lenovo/swy/reports/2026-09-20/slot4-infer-acceptance",
+  "session_id": "20260920T122828Z",
+  "acceptance": "not_passed",
+  "raw_data_modified": false,
+  "episodes_total": 19,
+  "contract_pass": 13,
+  "isolate_required": 6,
+  "operator_confirmed": [
+    "wait after every commit",
+    "new right pedal triggers HOME and next episode"
+  ],
+  "hardware_cases_not_tested": [
+    "long hold/release",
+    "Ctrl+C during recording",
+    "both-pedal conflict"
+  ],
+  "episodes": [
+    {
+      "episode_id": "20260920T122844722684Z-864ee434",
+      "path": "/home/lenovo/swy/reports/2026-09-20/slot4-infer-acceptance/20260920T122844722684Z-864ee434",
+      "outcome": "success",
+      "collection_contract": "pass",
+      "metadata_command_count": 413,
+      "mcap_command_count": 413,
+      "missing_steps": [],
+      "defects": []
+    },
+    {
+      "episode_id": "20260920T122907135492Z-8695baa8",
+      "path": "/home/lenovo/swy/reports/2026-09-20/slot4-infer-acceptance/infer_fail/20260920T122907135492Z-8695baa8",
+      "outcome": "fail",
+      "collection_contract": "pass",
+      "metadata_command_count": 580,
+      "mcap_command_count": 580,
+      "missing_steps": [],
+      "defects": []
+    },
+    {
+      "episode_id": "20260920T122937016044Z-28e442dd",
+      "path": "/home/lenovo/swy/reports/2026-09-20/slot4-infer-acceptance/infer_fail/20260920T122937016044Z-28e442dd",
+      "outcome": "fail",
+      "collection_contract": "pass",
+      "metadata_command_count": 372,
+      "mcap_command_count": 372,
+      "missing_steps": [],
+      "defects": []
+    },
+    {
+      "episode_id": "20260920T123003043664Z-f14fdaf4",
+      "path": "/home/lenovo/swy/reports/2026-09-20/slot4-infer-acceptance/infer_fail/20260920T123003043664Z-f14fdaf4",
+      "outcome": "fail",
+      "collection_contract": "pass",
+      "metadata_command_count": 435,
+      "mcap_command_count": 435,
+      "missing_steps": [],
+      "defects": []
+    },
+    {
+      "episode_id": "20260920T123100106771Z-717f637f",
+      "path": "/home/lenovo/swy/reports/2026-09-20/slot4-infer-acceptance/infer_fail/20260920T123100106771Z-717f637f",
+      "outcome": "fail",
+      "collection_contract": "pass",
+      "metadata_command_count": 390,
+      "mcap_command_count": 390,
+      "missing_steps": [],
+      "defects": []
+    },
+    {
+      "episode_id": "20260920T123122422432Z-2ac37b94",
+      "path": "/home/lenovo/swy/reports/2026-09-20/slot4-infer-acceptance/infer_fail/20260920T123122422432Z-2ac37b94",
+      "outcome": "fail",
+      "collection_contract": "pass",
+      "metadata_command_count": 382,
+      "mcap_command_count": 382,
+      "missing_steps": [],
+      "defects": []
+    },
+    {
+      "episode_id": "20260920T123148084034Z-b36481dd",
+      "path": "/home/lenovo/swy/reports/2026-09-20/slot4-infer-acceptance/infer_fail/20260920T123148084034Z-b36481dd",
+      "outcome": "fail",
+      "collection_contract": "pass",
+      "metadata_command_count": 379,
+      "mcap_command_count": 379,
+      "missing_steps": [],
+      "defects": []
+    },
+    {
+      "episode_id": "20260920T123208296508Z-4d310dff",
+      "path": "/home/lenovo/swy/reports/2026-09-20/slot4-infer-acceptance/infer_fail/20260920T123208296508Z-4d310dff",
+      "outcome": "fail",
+      "collection_contract": "pass",
+      "metadata_command_count": 450,
+      "mcap_command_count": 450,
+      "missing_steps": [],
+      "defects": []
+    },
+    {
+      "episode_id": "20260920T123240204649Z-3c25bf25",
+      "path": "/home/lenovo/swy/reports/2026-09-20/slot4-infer-acceptance/infer_fail/20260920T123240204649Z-3c25bf25",
+      "outcome": "fail",
+      "collection_contract": "pass",
+      "metadata_command_count": 416,
+      "mcap_command_count": 416,
+      "missing_steps": [],
+      "defects": []
+    },
+    {
+      "episode_id": "20260920T123302514811Z-23eff51f",
+      "path": "/home/lenovo/swy/reports/2026-09-20/slot4-infer-acceptance/20260920T123302514811Z-23eff51f",
+      "outcome": "success",
+      "collection_contract": "pass",
+      "metadata_command_count": 357,
+      "mcap_command_count": 357,
+      "missing_steps": [],
+      "defects": []
+    },
+    {
+      "episode_id": "20260920T123324740552Z-a3d13824",
+      "path": "/home/lenovo/swy/reports/2026-09-20/slot4-infer-acceptance/infer_fail/20260920T123324740552Z-a3d13824",
+      "outcome": "fail",
+      "collection_contract": "pass",
+      "metadata_command_count": 326,
+      "mcap_command_count": 326,
+      "missing_steps": [],
+      "defects": []
+    },
+    {
+      "episode_id": "20260920T123344109218Z-e6fc261c",
+      "path": "/home/lenovo/swy/reports/2026-09-20/slot4-infer-acceptance/infer_fail/20260920T123344109218Z-e6fc261c",
+      "outcome": "fail",
+      "collection_contract": "pass",
+      "metadata_command_count": 304,
+      "mcap_command_count": 304,
+      "missing_steps": [],
+      "defects": []
+    },
+    {
+      "episode_id": "20260920T123401250410Z-5f11a64c",
+      "path": "/home/lenovo/swy/reports/2026-09-20/slot4-infer-acceptance/infer_fail/20260920T123401250410Z-5f11a64c",
+      "outcome": "fail",
+      "collection_contract": "pass",
+      "metadata_command_count": 390,
+      "mcap_command_count": 390,
+      "missing_steps": [],
+      "defects": []
+    },
+    {
+      "episode_id": "20260920T123417544683Z-b670a9ef",
+      "path": "/home/lenovo/swy/reports/2026-09-20/slot4-infer-acceptance/20260920T123417544683Z-b670a9ef",
+      "outcome": "success",
+      "collection_contract": "isolate_required",
+      "metadata_command_count": 418,
+      "mcap_command_count": 417,
+      "missing_steps": [
+        0
+      ],
+      "defects": [
+        "command count mismatch/zero",
+        "command step sequence"
+      ]
+    },
+    {
+      "episode_id": "20260920T123441685634Z-1478a221",
+      "path": "/home/lenovo/swy/reports/2026-09-20/slot4-infer-acceptance/infer_fail/20260920T123441685634Z-1478a221",
+      "outcome": "fail",
+      "collection_contract": "isolate_required",
+      "metadata_command_count": 380,
+      "mcap_command_count": 379,
+      "missing_steps": [
+        0
+      ],
+      "defects": [
+        "command count mismatch/zero",
+        "command step sequence"
+      ]
+    },
+    {
+      "episode_id": "20260920T123502979569Z-6c341f3c",
+      "path": "/home/lenovo/swy/reports/2026-09-20/slot4-infer-acceptance/infer_fail/20260920T123502979569Z-6c341f3c",
+      "outcome": "fail",
+      "collection_contract": "isolate_required",
+      "metadata_command_count": 381,
+      "mcap_command_count": 380,
+      "missing_steps": [
+        0
+      ],
+      "defects": [
+        "command count mismatch/zero",
+        "command step sequence"
+      ]
+    },
+    {
+      "episode_id": "20260920T123520557087Z-363e5037",
+      "path": "/home/lenovo/swy/reports/2026-09-20/slot4-infer-acceptance/infer_fail/20260920T123520557087Z-363e5037",
+      "outcome": "fail",
+      "collection_contract": "isolate_required",
+      "metadata_command_count": 645,
+      "mcap_command_count": 644,
+      "missing_steps": [
+        0
+      ],
+      "defects": [
+        "command count mismatch/zero",
+        "command step sequence"
+      ]
+    },
+    {
+      "episode_id": "20260920T123549613496Z-ccbda5b9",
+      "path": "/home/lenovo/swy/reports/2026-09-20/slot4-infer-acceptance/infer_fail/20260920T123549613496Z-ccbda5b9",
+      "outcome": "fail",
+      "collection_contract": "isolate_required",
+      "metadata_command_count": 416,
+      "mcap_command_count": 415,
+      "missing_steps": [
+        0
+      ],
+      "defects": [
+        "command count mismatch/zero",
+        "command step sequence"
+      ]
+    },
+    {
+      "episode_id": "20260920T123610901408Z-9ccc3b87",
+      "path": "/home/lenovo/swy/reports/2026-09-20/slot4-infer-acceptance/infer_fail/20260920T123610901408Z-9ccc3b87",
+      "outcome": "fail",
+      "collection_contract": "isolate_required",
+      "metadata_command_count": 360,
+      "mcap_command_count": 359,
+      "missing_steps": [
+        0
+      ],
+      "defects": [
+        "command count mismatch/zero",
+        "command step sequence"
+      ]
+    }
+  ]
+}
