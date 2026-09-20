@@ -1,0 +1,15 @@
+# Use after compose.dagger.yaml to reuse the policy server and hardware Session.
+services:
+  collector:
+    command:
+      - arx5-collect
+      - infer
+      - --policy-config
+      - /config/policy.toml
+      - --task-config
+      - /config/task.json
+      - --output-root
+      - "${ARX5_OUTPUT_ROOT:-}"
+      - --task-description
+      - "${ARX5_TASK_DESCRIPTION:-}"
+      - --no-compress

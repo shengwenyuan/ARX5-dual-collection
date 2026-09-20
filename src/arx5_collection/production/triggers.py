@@ -11,7 +11,7 @@ from arx5_collection.episode.adapters.pedal import (
     PedalTrigger,
     PedalUnavailable,
 )
-from arx5_collection.episode.ports import RecordTrigger
+from arx5_collection.episode.ports import RecordTrigger, TriggerEvent
 
 from .config import StationConfig
 
@@ -23,6 +23,7 @@ StatusSink = Callable[[str], None]
 def open_configured_pedals(
     station: StationConfig,
     resolver: PedalDeviceResolver,
+    conflict_event: TriggerEvent | None = None,
 ) -> Iterator[PedalTrigger]:
     if station.triggers is None:
         raise PedalUnavailable("station configuration has no pedal pair")
@@ -30,7 +31,7 @@ def open_configured_pedals(
         station.triggers.activate,
         station.triggers.abort,
     )
-    with PedalTrigger(devices) as trigger:
+    with PedalTrigger(devices, conflict_event=conflict_event) as trigger:
         yield trigger
 
 

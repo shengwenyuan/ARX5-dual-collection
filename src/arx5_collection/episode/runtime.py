@@ -223,6 +223,8 @@ class EpisodeRuntime:
                         signal.monotonic_time_ns,
                         False,
                     )
+                if signal.event is TriggerEvent.TASK_FAIL:
+                    return EpisodeOutcome.FAIL, (), signal.monotonic_time_ns, False
                 if signal.event is TriggerEvent.FAIL:
                     assert signal.detail is not None
                     return (

@@ -12,6 +12,7 @@ _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 class CollectionType(str, Enum):
     DEMONSTRATION = "demonstration"
     DAGGER = "dagger"
+    INFER = "infer"
 
 
 class ControlOwner(str, Enum):
@@ -132,8 +133,11 @@ class DaggerMetadata:
 class MetadataContext:
     collection_type: CollectionType
     dagger: DaggerMetadata | None = None
+    infer: dict[str, object] | None = None
 
     def __post_init__(self) -> None:
+        if (self.collection_type is CollectionType.INFER) != (self.infer is not None):
+            raise ValueError("infer metadata is required only for infer collection")
         if self.collection_type is CollectionType.DAGGER and self.dagger is None:
             raise ValueError("dagger collection requires DaggerMetadata")
         if self.collection_type is not CollectionType.DAGGER and self.dagger is not None:

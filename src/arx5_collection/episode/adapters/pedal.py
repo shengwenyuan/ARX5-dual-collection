@@ -142,11 +142,13 @@ class PedalTrigger:
         read_function: Callable[[int, int], bytes] = os.read,
         close_function: Callable[[int], None] = os.close,
         monotonic_clock: Callable[[], float] = time.monotonic,
+        conflict_event: TriggerEvent | None = None,
     ) -> None:
         if set(devices) != {TriggerEvent.ACTIVATE, TriggerEvent.ABORT}:
             raise ValueError("pedal trigger requires activate and abort devices")
         if debounce_s < 0:
             raise ValueError("debounce_s must not be negative")
+        self.conflict_event = conflict_event
         self.devices = dict(devices)
         self.debounce_s = debounce_s
         self.select_function = select_function
@@ -238,6 +240,10 @@ class PedalTrigger:
             raise RuntimeError(f"pedal disconnected or unreadable: {error}") from error
 
         now = self.monotonic_clock()
+        if len(candidates) == 2 and self.conflict_event is not None:
+            for event in candidates:
+                self._last_press[event] = now
+            return TriggerSignal(self.conflict_event, round(now * 1e9))
         if TriggerEvent.ABORT in candidates:
             if now - self._last_press[TriggerEvent.ABORT] >= self.debounce_s:
                 self._last_press[TriggerEvent.ABORT] = now

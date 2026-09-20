@@ -18,7 +18,7 @@
   ],
   "properties": {
     "schema_version": {"const": 1},
-    "collection_type": {"enum": ["demonstration", "dagger"]},
+    "collection_type": {"enum": ["demonstration", "dagger", "infer"]},
     "dagger": {"$ref": "#/$defs/dagger"},
     "episode_id": {"type": "string", "minLength": 1},
     "task": {"$ref": "#/$defs/task"},
@@ -37,10 +37,19 @@
     },
     "extensions": {
       "type": "object",
-      "additionalProperties": true
+      "additionalProperties": true,
+      "properties": {"infer": {"$ref": "#/$defs/infer"}}
     }
   },
   "allOf": [
+    {
+      "if": {
+        "required": ["collection_type"],
+        "properties": {"collection_type": {"const": "infer"}}
+      },
+      "then": {"properties": {"extensions": {"required": ["infer"]}}},
+      "else": {"properties": {"extensions": {"not": {"required": ["infer"]}}}}
+    },
     {
       "if": {
         "required": ["collection_type"],
@@ -51,6 +60,135 @@
     }
   ],
   "$defs": {
+    "infer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "started_monotonic_ns",
+        "ended_monotonic_ns",
+        "actions_stopped_monotonic_ns",
+        "recording_stop_requested_monotonic_ns",
+        "label_monotonic_ns",
+        "last_command_monotonic_ns",
+        "label_source",
+        "termination_reason",
+        "command_count",
+        "post_stop_recording_s",
+        "recording_completed",
+        "commit_protocol",
+        "configuration"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "started_monotonic_ns": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "ended_monotonic_ns": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "actions_stopped_monotonic_ns": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "recording_stop_requested_monotonic_ns": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "label_monotonic_ns": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "last_command_monotonic_ns": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "label_source": {
+          "enum": [
+            "left_pedal",
+            "right_pedal",
+            "both_pedals",
+            null
+          ]
+        },
+        "termination_reason": {
+          "enum": [
+            "human_label",
+            "label_conflict",
+            "operator_abort",
+            "runtime_fault"
+          ]
+        },
+        "command_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "post_stop_recording_s": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "recording_completed": {
+          "const": true
+        },
+        "commit_protocol": {
+          "const": "episode_store_atomic_rename"
+        },
+        "configuration": {
+          "type": "object",
+          "required": [
+            "checkpoint_sha256",
+            "policy_config_sha256",
+            "action_order",
+            "action_units",
+            "command_topic",
+            "checkpoint_profile",
+            "rtc_rollout"
+          ],
+          "properties": {
+            "checkpoint_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "policy_config_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "action_order": {
+              "type": "array",
+              "minItems": 14,
+              "maxItems": 14,
+              "items": {
+                "type": "string"
+              }
+            },
+            "action_units": {
+              "type": "array",
+              "minItems": 14,
+              "maxItems": 14,
+              "items": {
+                "enum": [
+                  "rad",
+                  "vendor_raw"
+                ]
+              }
+            },
+            "command_topic": {
+              "const": "/infer/command"
+            }
+          }
+        }
+      }
+    },
     "dagger": {
       "type": "object",
       "additionalProperties": false,

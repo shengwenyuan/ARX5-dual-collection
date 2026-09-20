@@ -50,6 +50,9 @@ def dagger(mode: str, rgb_only: bool = False) -> int:
         environment["ARX5_TASK_CONFIG"] = str(
             ROOT / "config/task.rgb-only.json"
         )
+    overrides = (
+        ["-f", str(ROOT / "docker/compose.infer.yaml")] if mode == "infer" else []
+    )
     return subprocess.call(
         [
             "docker",
@@ -58,6 +61,7 @@ def dagger(mode: str, rgb_only: bool = False) -> int:
             str(STATION_DIR / "dagger.env"),
             "-f",
             str(ROOT / "docker/compose.dagger.yaml"),
+            *overrides,
             "up",
             "--no-build",
             "--abort-on-container-exit",
@@ -104,6 +108,8 @@ def main() -> int:
         action="store_true",
         help="temporarily omit aligned depth from the recorded MCAP",
     )
+    infer_parser = commands.add_parser("infer", help="RTC episodes with pedal success/fail")
+    infer_parser.add_argument("--rgb-only", action="store_true")
     dagger_parser = commands.add_parser("dagger", help="start a DAgger Session")
     dagger_parser.add_argument(
         "--mode", choices=("takeover", "shadow"), default="takeover"
@@ -117,7 +123,7 @@ def main() -> int:
     try:
         if args.command == "collect":
             return collect(args.rgb_only)
-        return dagger(args.mode, args.rgb_only)
+        return dagger("infer" if args.command == "infer" else args.mode, args.rgb_only)
     except ValueError as error:
         parser.error(str(error))
 

@@ -78,6 +78,7 @@ class DaggerSessionBuilder:
         settings: DaggerCollectorSettings,
         request: EpisodeRequest,
         additional_recording_topics: tuple[str, ...] = (),
+        fail_directory: str = "dagger_fail",
     ) -> ProductionSession:
         station = load_configured_station(spec.station_config)
         backend = RosbagRecordingBackend(
@@ -111,7 +112,7 @@ class DaggerSessionBuilder:
             warning_sink=lambda message: print(
                 f"WARNING {message}", file=self.stderr
             ),
-            fail_directory="dagger_fail",
+            fail_directory=fail_directory,
             compression_enabled=spec.compression_enabled,
             required_stream_ids=tuple(stream.id for stream in request.streams),
         )

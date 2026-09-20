@@ -69,6 +69,14 @@ def build_parser() -> argparse.ArgumentParser:
     run = subcommands.add_parser("run", help="run one long-lived collection Session")
     add_session_arguments(run)
 
+    infer = subcommands.add_parser(
+        "infer", help="RTC collection with human success/fail labels"
+    )
+    add_session_arguments(infer)
+    infer.set_defaults(no_compress=True)
+    infer.add_argument("--policy-config", type=Path, required=True)
+    infer.add_argument("--post-stop-recording-s", type=positive_float, default=0.1)
+
     dagger = subcommands.add_parser("dagger", help="run DAgger collection modes")
     dagger_commands = dagger.add_subparsers(dest="dagger_command", required=True)
     shadow = dagger_commands.add_parser(
@@ -127,6 +135,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                     args.ros_domain_id,
                 )
             return run_station_configure(args.station_config, args.log_dir)
+        if args.command == "infer":
+            from arx5_collection.infer.application import InferApplication
+
+            return InferApplication.build(
+                _dagger_run_spec(args), args.post_stop_recording_s
+            ).run()
         if args.command == "dagger":
             if args.dagger_command == "checkpoint-sha":
                 return run_checkpoint_sha(args.checkpoint)

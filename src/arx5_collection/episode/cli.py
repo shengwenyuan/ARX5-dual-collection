@@ -107,6 +107,10 @@ def run_episode_loop(
     episodes: int = 0,
     stdout: TextIO | None = None,
     stderr: TextIO | None = None,
+    ready_message: str = "READY: activate trigger starts; Ctrl+C exits the Session",
+    recording_message: str = (
+        "RECORDING: activate=success, abort=abort and continue, Ctrl+C=abort and exit"
+    ),
 ) -> int:
     output = stdout or sys.stdout
     error_output = stderr or sys.stderr
@@ -120,8 +124,7 @@ def run_episode_loop(
             previous_sink(state)
         if state is EpisodeState.RECORDING:
             print(
-                "RECORDING: activate=success, abort=abort and continue, "
-                "Ctrl+C=abort and exit",
+                recording_message,
                 file=error_output,
                 flush=True,
             )
@@ -133,7 +136,7 @@ def run_episode_loop(
     try:
         while episodes == 0 or completed < episodes:
             print(
-                "READY: activate trigger starts; Ctrl+C exits the Session",
+                ready_message,
                 file=error_output,
                 flush=True,
             )
@@ -176,7 +179,9 @@ def run_episode_loop(
                 )
             elif result.outcome is EpisodeOutcome.FAIL:
                 print(
-                    "EPISODE FAILED - SESSION READY: " + "; ".join(result.errors),
+                    ("EPISODE FAILED - SESSION READY: " + "; ".join(result.errors))
+                    if result.errors
+                    else "TASK FAIL SAVED - SESSION READY",
                     file=error_output,
                     flush=True,
                 )

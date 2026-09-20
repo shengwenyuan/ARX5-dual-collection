@@ -12,6 +12,8 @@ class TriggerEvent(str, Enum):
     ACTIVATE = "activate"
     ABORT = "abort"
     FAIL = "fail"
+    TASK_FAIL = "task_fail"
+    CONFLICT = "conflict"
 
 
 @dataclass(frozen=True, slots=True)

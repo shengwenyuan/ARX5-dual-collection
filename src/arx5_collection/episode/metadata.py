@@ -67,11 +67,23 @@ def build_metadata(
             "version": software_version,
         },
         "errors": list(result.errors),
-        "extensions": extensions or {},
+        "extensions": dict(extensions or {}),
     }
     if context.collection_type is CollectionType.DAGGER:
         assert context.dagger is not None
         metadata["dagger"] = context.dagger.to_dict()
+    if context.collection_type is CollectionType.INFER:
+        if "infer" in metadata["extensions"]:
+            raise ValueError("duplicate infer metadata extension")
+        assert context.infer is not None
+        infer = dict(context.infer)
+        # This builder runs only after recorder.stop and artifact finalization succeed.
+        infer["recording_completed"] = True
+        # Commit is the existing atomic directory rename, which occurs AFTER this write.
+        infer["commit_protocol"] = "episode_store_atomic_rename"
+        if result.errors and result.outcome.value == "fail":
+            infer["termination_reason"] = "runtime_fault"
+        metadata["extensions"]["infer"] = infer
     return metadata
 
 
