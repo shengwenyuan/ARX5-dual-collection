@@ -1,0 +1,924 @@
+{
+  "image": "sha256:ed5e7447389de7b383aab0c076507a292062e68dbe01803c5959dc62ec90db8c",
+  "local_pytest": {
+    "passed": 431,
+    "skipped": 1
+  },
+  "groups": {
+    "authority-before": {
+      "summary": {
+        "topic": "/dagger/authority",
+        "legacy": true,
+        "episodes": 20,
+        "complete": 13,
+        "anomalies": [
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20
+        ],
+        "sent": 8000,
+        "received": 7993,
+        "max_delay_ms": 620.522052
+      },
+      "episodes": [
+        {
+          "episode": 1,
+          "sent": 400,
+          "received": 400,
+          "complete": true,
+          "missing": [],
+          "max_delay_ms": 0.302241,
+          "timing": {
+            "start_begin": 301711841164884,
+            "recorder_ready": 301712020531518,
+            "recorder_stopped": 301720319273887
+          },
+          "mcap_sha256": "49f327c304aec2230902c47976fbae564e210cc4c592e04165641993ff79b95e"
+        },
+        {
+          "episode": 2,
+          "sent": 400,
+          "received": 400,
+          "complete": true,
+          "missing": [],
+          "max_delay_ms": 0.280157,
+          "timing": {
+            "start_begin": 301721336831701,
+            "recorder_ready": 301721520799325,
+            "recorder_stopped": 301729815813613
+          },
+          "mcap_sha256": "15e8f34e6d6cea192b3a93391fe8c421cb6336fa5514e55a01c4ab1b9aea0270"
+        },
+        {
+          "episode": 3,
+          "sent": 400,
+          "received": 400,
+          "complete": true,
+          "missing": [],
+          "max_delay_ms": 0.429984,
+          "timing": {
+            "start_begin": 301730832213849,
+            "recorder_ready": 301731010301927,
+            "recorder_stopped": 301739306759663
+          },
+          "mcap_sha256": "8317aed3f7a51041deb060ec2723cae455d6294c992ae63e3706a3267ff36086"
+        },
+        {
+          "episode": 4,
+          "sent": 400,
+          "received": 400,
+          "complete": true,
+          "missing": [],
+          "max_delay_ms": 0.415242,
+          "timing": {
+            "start_begin": 301740324477845,
+            "recorder_ready": 301740506106559,
+            "recorder_stopped": 301748800380098
+          },
+          "mcap_sha256": "8d96a60ce97d2dcb770cfe671bcc9a98b2320f2fd64a04030fdf59d079ceb3c7"
+        },
+        {
+          "episode": 5,
+          "sent": 400,
+          "received": 400,
+          "complete": true,
+          "missing": [],
+          "max_delay_ms": 0.364505,
+          "timing": {
+            "start_begin": 301749816519062,
+            "recorder_ready": 301749995585354,
+            "recorder_stopped": 301758290811677
+          },
+          "mcap_sha256": "7ef1465cebafdebe2f4b4d5121adbebaf920f0918933c67a556d887ce691ca03"
+        },
+        {
+          "episode": 6,
+          "sent": 400,
+          "received": 400,
+          "complete": true,
+          "missing": [],
+          "max_delay_ms": 0.375943,
+          "timing": {
+            "start_begin": 301759305979623,
+            "recorder_ready": 301759486351747,
+            "recorder_stopped": 301767781935393
+          },
+          "mcap_sha256": "0f70a8312c32bcba236ff24e99ca420c904ad245169d5814f0604b0a24283bd5"
+        },
+        {
+          "episode": 7,
+          "sent": 400,
+          "received": 400,
+          "complete": true,
+          "missing": [],
+          "max_delay_ms": 0.386958,
+          "timing": {
+            "start_begin": 301768796730553,
+            "recorder_ready": 301768978661770,
+            "recorder_stopped": 301777273972171
+          },
+          "mcap_sha256": "890fed25aeef493b50e510ffc125bb2c71484645d20687d064ffaeef7f1e5c90"
+        },
+        {
+          "episode": 8,
+          "sent": 400,
+          "received": 400,
+          "complete": true,
+          "missing": [],
+          "max_delay_ms": 0.354897,
+          "timing": {
+            "start_begin": 301778288542138,
+            "recorder_ready": 301778467599228,
+            "recorder_stopped": 301786765656119
+          },
+          "mcap_sha256": "d18dd53c92c18cc127793cc6013f1b0ff6828c988e5f7f63cc2955790c8015fa"
+        },
+        {
+          "episode": 9,
+          "sent": 400,
+          "received": 400,
+          "complete": true,
+          "missing": [],
+          "max_delay_ms": 0.46922,
+          "timing": {
+            "start_begin": 301787785482928,
+            "recorder_ready": 301787971059781,
+            "recorder_stopped": 301796268530329
+          },
+          "mcap_sha256": "ae9d9e92897b28f84932c4548753dbb2f9c11da84a4dff2af8ef52cfe1ad0be3"
+        },
+        {
+          "episode": 10,
+          "sent": 400,
+          "received": 400,
+          "complete": true,
+          "missing": [],
+          "max_delay_ms": 0.410172,
+          "timing": {
+            "start_begin": 301797284876426,
+            "recorder_ready": 301797466833219,
+            "recorder_stopped": 301805763892614
+          },
+          "mcap_sha256": "7226efcc9300238c41a26bd72d9f312e9e23b116874ce2b41a666284b05adb69"
+        },
+        {
+          "episode": 11,
+          "sent": 400,
+          "received": 400,
+          "complete": true,
+          "missing": [],
+          "max_delay_ms": 0.43144,
+          "timing": {
+            "start_begin": 301806781148394,
+            "recorder_ready": 301806968041931,
+            "recorder_stopped": 301815262748962
+          },
+          "mcap_sha256": "5e46788921c23ddfe9474ed3e4e598ccaa894480b886d26ec0ad3989aca4e35b"
+        },
+        {
+          "episode": 12,
+          "sent": 400,
+          "received": 400,
+          "complete": true,
+          "missing": [],
+          "max_delay_ms": 0.446663,
+          "timing": {
+            "start_begin": 301816277988757,
+            "recorder_ready": 301816457829019,
+            "recorder_stopped": 301824755245166
+          },
+          "mcap_sha256": "06f409d5b7ce407eca6d59f6ffcdd8d271331cb25de266cc428ec5e096605f76"
+        },
+        {
+          "episode": 13,
+          "sent": 400,
+          "received": 400,
+          "complete": true,
+          "missing": [],
+          "max_delay_ms": 0.57466,
+          "timing": {
+            "start_begin": 301825771466535,
+            "recorder_ready": 301825958417945,
+            "recorder_stopped": 301834257609825
+          },
+          "mcap_sha256": "46e5cdf13303ff6ca4479f2ffbbe2c2e7de5073e30a53a4ca7a47971d6c01bbe"
+        },
+        {
+          "episode": 14,
+          "sent": 400,
+          "received": 399,
+          "complete": false,
+          "missing": [
+            0
+          ],
+          "max_delay_ms": 620.131417,
+          "timing": {
+            "start_begin": 301835274753359,
+            "recorder_ready": 301835453594588,
+            "recorder_stopped": 301843749286873
+          },
+          "mcap_sha256": "7487b53af0a43fad4d6d869d8a2caa351878bfb8a56535923cc987e636e12e8e"
+        },
+        {
+          "episode": 15,
+          "sent": 400,
+          "received": 399,
+          "complete": false,
+          "missing": [
+            0
+          ],
+          "max_delay_ms": 619.755302,
+          "timing": {
+            "start_begin": 301844764542091,
+            "recorder_ready": 301844945685926,
+            "recorder_stopped": 301853243243530
+          },
+          "mcap_sha256": "1e74873ae61e4166eb923c10483c5eb15dbf7f22cf02591c924520d4aa2b6e35"
+        },
+        {
+          "episode": 16,
+          "sent": 400,
+          "received": 399,
+          "complete": false,
+          "missing": [
+            0
+          ],
+          "max_delay_ms": 620.046146,
+          "timing": {
+            "start_begin": 301854260074944,
+            "recorder_ready": 301854434793141,
+            "recorder_stopped": 301862730599470
+          },
+          "mcap_sha256": "53f1bf0513060168df4136bd63faadc159cd30814f78032fa886950a8a1e9d6d"
+        },
+        {
+          "episode": 17,
+          "sent": 400,
+          "received": 399,
+          "complete": false,
+          "missing": [
+            0
+          ],
+          "max_delay_ms": 620.192141,
+          "timing": {
+            "start_begin": 301863746609382,
+            "recorder_ready": 301863929493648,
+            "recorder_stopped": 301872227415202
+          },
+          "mcap_sha256": "d604f021bda3642477d57e79126e32ec22581deb830e57bd81cc71d79682540a"
+        },
+        {
+          "episode": 18,
+          "sent": 400,
+          "received": 399,
+          "complete": false,
+          "missing": [
+            0
+          ],
+          "max_delay_ms": 620.16694,
+          "timing": {
+            "start_begin": 301873245439149,
+            "recorder_ready": 301873429026844,
+            "recorder_stopped": 301881724260296
+          },
+          "mcap_sha256": "39fbec36434c6e0f5f67be839888a965a98a6d24a5131927cbcb4c28c99877f5"
+        },
+        {
+          "episode": 19,
+          "sent": 400,
+          "received": 399,
+          "complete": false,
+          "missing": [
+            0
+          ],
+          "max_delay_ms": 620.166054,
+          "timing": {
+            "start_begin": 301882739691348,
+            "recorder_ready": 301882919850578,
+            "recorder_stopped": 301891214997257
+          },
+          "mcap_sha256": "f85f31a536cfd07c8f655e77e044307f8c0c662b2ec8ec69b19b331439fcad3a"
+        },
+        {
+          "episode": 20,
+          "sent": 400,
+          "received": 399,
+          "complete": false,
+          "missing": [
+            0
+          ],
+          "max_delay_ms": 620.522052,
+          "timing": {
+            "start_begin": 301892234784003,
+            "recorder_ready": 301892402379521,
+            "recorder_stopped": 301900697642358
+          },
+          "mcap_sha256": "f118214ce07afdd4f3a86f5a47670f875b804ca1b0b53a46c5dc58ea39a6d37c"
+        }
+      ]
+    },
+    "infer-after": {
+      "summary": {
+        "topic": "/infer/command",
+        "legacy": false,
+        "episodes": 20,
+        "complete": 20,
+        "anomalies": [],
+        "sent": 8000,
+        "received": 8000,
+        "max_delay_ms": 0.561252
+      },
+      "episodes": [
+        {
+          "episode": 1,
+          "sent": 400,
+          "received": 400,
+          "complete": true,
+          "missing": [],
+          "max_delay_ms": 0.410796,
+          "timing": {
+            "start_begin": 301955351500730,
+            "recorder_ready": 301955552637601,
+            "recorder_stopped": 301963848233445
+          },
+          "mcap_sha256": "974a68b6f1bbb093b264d754e5d18cc0f0a88df9c51fcf02f9e16f04bc1ee9ad"
+        },
+        {
+          "episode": 2,
+          "sent": 400,
+          "received": 400,
+          "complete": true,
+          "missing": [],
+          "max_delay_ms": 0.377651,
+          "timing": {
+            "start_begin": 301964863662952,
+            "recorder_ready": 301965050767336,
+            "recorder_stopped": 301973338065987
+          },
+          "mcap_sha256": "27211434046b5343a8acbc4dbaea293cc51aa4ca75ed55c04989002f62db5aa3"
+        },
+        {
+          "episode": 3,
+          "sent": 400,
+          "received": 400,
+          "complete": true,
+          "missing": [],
+          "max_delay_ms": 0.396908,
+          "timing": {
+            "start_begin": 301974353525692,
+            "recorder_ready": 301974540643877,
+            "recorder_stopped": 301982837081428
+          },
+          "mcap_sha256": "ab25c6c703ac941d969fb19f5e22635e5746a74fc670034822491fc39c32b294"
+        },
+        {
+          "episode": 4,
+          "sent": 400,
+          "received": 400,
+          "complete": true,
+          "missing": [],
+          "max_delay_ms": 0.431808,
+          "timing": {
+            "start_begin": 301983855223577,
+            "recorder_ready": 301984041038157,
+            "recorder_stopped": 301992339343752
+          },
+          "mcap_sha256": "fab66f0b99886cf310a88935ca2f1fa873ea377a2a78822bbf76d73dcff5143a"
+        },
+        {
+          "episode": 5,
+          "sent": 400,
+          "received": 400,
+          "complete": true,
+          "missing": [],
+          "max_delay_ms": 0.392445,
+          "timing": {
+            "start_begin": 301993356671038,
+            "recorder_ready": 301993544837966,
+            "recorder_stopped": 302001840519651
+          },
+          "mcap_sha256": "f085b642d21e3745f61867659f58031b5eea85c9e76c4015007b76596bc43244"
+        },
+        {
+          "episode": 6,
+          "sent": 400,
+          "received": 400,
+          "complete": true,
+          "missing": [],
+          "max_delay_ms": 0.428357,
+          "timing": {
+            "start_begin": 302002858115781,
+            "recorder_ready": 302003033349395,
+            "recorder_stopped": 302011330569176
+          },
+          "mcap_sha256": "c49d3e162d9959b8d908e01e70151267738ab7ae1088e7cb2c570f06be459577"
+        },
+        {
+          "episode": 7,
+          "sent": 400,
+          "received": 400,
+          "complete": true,
+          "missing": [],
+          "max_delay_ms": 0.447082,
+          "timing": {
+            "start_begin": 302012356879361,
+            "recorder_ready": 302012543355696,
+            "recorder_stopped": 302020840055267
+          },
+          "mcap_sha256": "2244c613962d676f0f2beac5b0b362dc4b8c99c79134a4564b0a3d18ae530910"
+        },
+        {
+          "episode": 8,
+          "sent": 400,
+          "received": 400,
+          "complete": true,
+          "missing": [],
+          "max_delay_ms": 0.4015,
+          "timing": {
+            "start_begin": 302021858382038,
+            "recorder_ready": 302022035984523,
+            "recorder_stopped": 302030330257496
+          },
+          "mcap_sha256": "c2e5756d8e94a0bbae519f33009a9d1b2648a8d4b1438d1809925e9a82990d69"
+        },
+        {
+          "episode": 9,
+          "sent": 400,
+          "received": 400,
+          "complete": true,
+          "missing": [],
+          "max_delay_ms": 0.372778,
+          "timing": {
+            "start_begin": 302031349193951,
+            "recorder_ready": 302031529067859,
+            "recorder_stopped": 302039826263163
+          },
+          "mcap_sha256": "354f94a9b4e32b97ed4c0f958059a82409b45237d8f3765a95f253a35e1bb96b"
+        },
+        {
+          "episode": 10,
+          "sent": 400,
+          "received": 400,
+          "complete": true,
+          "missing": [],
+          "max_delay_ms": 0.561252,
+          "timing": {
+            "start_begin": 302040843589648,
+            "recorder_ready": 302041021551071,
+            "recorder_stopped": 302049314945960
+          },
+          "mcap_sha256": "b90d4d5c1e1ba6f5f0743d4b7ea926f155c93aecf28605e6857a06766c443d11"
+        },
+        {
+          "episode": 11,
+          "sent": 400,
+          "received": 400,
+          "complete": true,
+          "missing": [],
+          "max_delay_ms": 0.405116,
+          "timing": {
+            "start_begin": 302050332846146,
+            "recorder_ready": 302050511927403,
+            "recorder_stopped": 302058809467588
+          },
+          "mcap_sha256": "4a1ab63290517f87dc9ac4f952977220a34d7707949616dc01223ded945fcc0f"
+        },
+        {
+          "episode": 12,
+          "sent": 400,
+          "received": 400,
+          "complete": true,
+          "missing": [],
+          "max_delay_ms": 0.381591,
+          "timing": {
+            "start_begin": 302059827239290,
+            "recorder_ready": 302060012121211,
+            "recorder_stopped": 302068309162693
+          },
+          "mcap_sha256": "6e8380d2b1d6a92ef9a06f67d01397044fe88ced21e42d36a33438f148aad6e8"
+        },
+        {
+          "episode": 13,
+          "sent": 400,
+          "received": 400,
+          "complete": true,
+          "missing": [],
+          "max_delay_ms": 0.526898,
+          "timing": {
+            "start_begin": 302069326958428,
+            "recorder_ready": 302069506489469,
+            "recorder_stopped": 302077803295284
+          },
+          "mcap_sha256": "405a0c0556f275ba197364d101eaa5033f209355a7f454cb3f44f4f96a58ef65"
+        },
+        {
+          "episode": 14,
+          "sent": 400,
+          "received": 400,
+          "complete": true,
+          "missing": [],
+          "max_delay_ms": 0.43541,
+          "timing": {
+            "start_begin": 302078818422073,
+            "recorder_ready": 302078997096075,
+            "recorder_stopped": 302087294271485
+          },
+          "mcap_sha256": "b8accf6eda50c96341401ad9a49b37dc2484af2170d6f2821e3151f348e43bdf"
+        },
+        {
+          "episode": 15,
+          "sent": 400,
+          "received": 400,
+          "complete": true,
+          "missing": [],
+          "max_delay_ms": 0.389623,
+          "timing": {
+            "start_begin": 302088311408387,
+            "recorder_ready": 302088490834177,
+            "recorder_stopped": 302096792575316
+          },
+          "mcap_sha256": "2e7eb4eba71cdcd255718316cfcd05fb75783c808ada64d010c831342e726f30"
+        },
+        {
+          "episode": 16,
+          "sent": 400,
+          "received": 400,
+          "complete": true,
+          "missing": [],
+          "max_delay_ms": 0.526339,
+          "timing": {
+            "start_begin": 302097808517223,
+            "recorder_ready": 302097985636480,
+            "recorder_stopped": 302106282409246
+          },
+          "mcap_sha256": "4d1c9f95cb4f8160e0d2ff2d65495cf2d6e60080f1cf5d20056c597db4e9130c"
+        },
+        {
+          "episode": 17,
+          "sent": 400,
+          "received": 400,
+          "complete": true,
+          "missing": [],
+          "max_delay_ms": 0.432687,
+          "timing": {
+            "start_begin": 302107300442089,
+            "recorder_ready": 302107427451498,
+            "recorder_stopped": 302115725241223
+          },
+          "mcap_sha256": "3e6bca78a65ea0facf2653edd89c0c44b7ed656ae082facdee45f2db8b345c1a"
+        },
+        {
+          "episode": 18,
+          "sent": 400,
+          "received": 400,
+          "complete": true,
+          "missing": [],
+          "max_delay_ms": 0.393287,
+          "timing": {
+            "start_begin": 302116742899025,
+            "recorder_ready": 302116923949512,
+            "recorder_stopped": 302125217552355
+          },
+          "mcap_sha256": "529f1fdaf916034620fb386c55f394ff8f826a84ae96a61fd168b0ee120d1a52"
+        },
+        {
+          "episode": 19,
+          "sent": 400,
+          "received": 400,
+          "complete": true,
+          "missing": [],
+          "max_delay_ms": 0.445515,
+          "timing": {
+            "start_begin": 302126244034260,
+            "recorder_ready": 302126428125675,
+            "recorder_stopped": 302134725308843
+          },
+          "mcap_sha256": "c2d4d8b2b9e631cf9980149c77ce1ff449c82114d600e9413439005ee5e67cb5"
+        },
+        {
+          "episode": 20,
+          "sent": 400,
+          "received": 400,
+          "complete": true,
+          "missing": [],
+          "max_delay_ms": 0.434491,
+          "timing": {
+            "start_begin": 302135743488523,
+            "recorder_ready": 302135931075337,
+            "recorder_stopped": 302144227646918
+          },
+          "mcap_sha256": "53651a525f12174177ac983d6ae74e3e0f980e4a786fc5b81c44173cbc1f27b1"
+        }
+      ]
+    },
+    "authority-after": {
+      "summary": {
+        "topic": "/dagger/authority",
+        "legacy": false,
+        "episodes": 20,
+        "complete": 20,
+        "anomalies": [],
+        "sent": 8000,
+        "received": 8000,
+        "max_delay_ms": 0.495321
+      },
+      "episodes": [
+        {
+          "episode": 1,
+          "sent": 400,
+          "received": 400,
+          "complete": true,
+          "missing": [],
+          "max_delay_ms": 0.299211,
+          "timing": {
+            "start_begin": 301955402916367,
+            "recorder_ready": 301955613296691,
+            "recorder_stopped": 301963909515501
+          },
+          "mcap_sha256": "ade63f9c086e6c3059eae7292d7a0f5d36c24e253926e38905c0390e8ffc56d4"
+        },
+        {
+          "episode": 2,
+          "sent": 400,
+          "received": 400,
+          "complete": true,
+          "missing": [],
+          "max_delay_ms": 0.298655,
+          "timing": {
+            "start_begin": 301964926153471,
+            "recorder_ready": 301965109194270,
+            "recorder_stopped": 301973402686086
+          },
+          "mcap_sha256": "179549becef1d640449a93fb9ff4af074d640325edd23709e7de9e85e3d57f91"
+        },
+        {
+          "episode": 3,
+          "sent": 400,
+          "received": 400,
+          "complete": true,
+          "missing": [],
+          "max_delay_ms": 0.28183,
+          "timing": {
+            "start_begin": 301974419690108,
+            "recorder_ready": 301974601259546,
+            "recorder_stopped": 301982896166091
+          },
+          "mcap_sha256": "7108d65af78194780d16240903355eab04388721692eb9fd69ea48aee210f69b"
+        },
+        {
+          "episode": 4,
+          "sent": 400,
+          "received": 400,
+          "complete": true,
+          "missing": [],
+          "max_delay_ms": 0.252395,
+          "timing": {
+            "start_begin": 301983913029211,
+            "recorder_ready": 301984091816965,
+            "recorder_stopped": 301992385873279
+          },
+          "mcap_sha256": "fa6e5afa8cfae531a5d930b2121b1a403128ca965aa2f68eee137d736dc39de0"
+        },
+        {
+          "episode": 5,
+          "sent": 400,
+          "received": 400,
+          "complete": true,
+          "missing": [],
+          "max_delay_ms": 0.296169,
+          "timing": {
+            "start_begin": 301993397519058,
+            "recorder_ready": 301993578306084,
+            "recorder_stopped": 302001863392800
+          },
+          "mcap_sha256": "7436da0118069c2617043aeb0c9a7749e38e23d145cf756b500e9862d73e23db"
+        },
+        {
+          "episode": 6,
+          "sent": 400,
+          "received": 400,
+          "complete": true,
+          "missing": [],
+          "max_delay_ms": 0.305091,
+          "timing": {
+            "start_begin": 302002870844911,
+            "recorder_ready": 302003046037025,
+            "recorder_stopped": 302011341704242
+          },
+          "mcap_sha256": "080d8c679438eb2b44df7d20156d5a8448bdfc619729143755b71afa191919cc"
+        },
+        {
+          "episode": 7,
+          "sent": 400,
+          "received": 400,
+          "complete": true,
+          "missing": [],
+          "max_delay_ms": 0.247189,
+          "timing": {
+            "start_begin": 302012359031604,
+            "recorder_ready": 302012544540042,
+            "recorder_stopped": 302020841441951
+          },
+          "mcap_sha256": "51cc70927cc1828c8c9e96e4ca901029d6cf8ea37f7fb5b7f044cfe93b45f247"
+        },
+        {
+          "episode": 8,
+          "sent": 400,
+          "received": 400,
+          "complete": true,
+          "missing": [],
+          "max_delay_ms": 0.288837,
+          "timing": {
+            "start_begin": 302021857998541,
+            "recorder_ready": 302022035723504,
+            "recorder_stopped": 302030333710332
+          },
+          "mcap_sha256": "855109a5f895a8872ee27a041134775e1fd10c7810b438650e26e32315bfeab5"
+        },
+        {
+          "episode": 9,
+          "sent": 400,
+          "received": 400,
+          "complete": true,
+          "missing": [],
+          "max_delay_ms": 0.305344,
+          "timing": {
+            "start_begin": 302031348462955,
+            "recorder_ready": 302031528164855,
+            "recorder_stopped": 302039825026026
+          },
+          "mcap_sha256": "41c8c89bde805b31187520e3aa3134095453a95ed82f24df1ab2378cf1807a40"
+        },
+        {
+          "episode": 10,
+          "sent": 400,
+          "received": 400,
+          "complete": true,
+          "missing": [],
+          "max_delay_ms": 0.291271,
+          "timing": {
+            "start_begin": 302040842605106,
+            "recorder_ready": 302041021134969,
+            "recorder_stopped": 302049315251821
+          },
+          "mcap_sha256": "127d94e194cbee45f57442511c5dec8d1e8eebea3152621e82eeb7adaa893615"
+        },
+        {
+          "episode": 11,
+          "sent": 400,
+          "received": 400,
+          "complete": true,
+          "missing": [],
+          "max_delay_ms": 0.255385,
+          "timing": {
+            "start_begin": 302050332282427,
+            "recorder_ready": 302050511983712,
+            "recorder_stopped": 302058809928802
+          },
+          "mcap_sha256": "2dc3534c7f20b09e95e65e5dbbbe8e273c0510ec98972b002954b968e9c17f9f"
+        },
+        {
+          "episode": 12,
+          "sent": 400,
+          "received": 400,
+          "complete": true,
+          "missing": [],
+          "max_delay_ms": 0.29151,
+          "timing": {
+            "start_begin": 302059826697527,
+            "recorder_ready": 302060011034867,
+            "recorder_stopped": 302068311774571
+          },
+          "mcap_sha256": "c31fdc4e4ac2f678ebe6b7b0fd1ef9ae80671e304633c2591725c2e53994f2b7"
+        },
+        {
+          "episode": 13,
+          "sent": 400,
+          "received": 400,
+          "complete": true,
+          "missing": [],
+          "max_delay_ms": 0.383621,
+          "timing": {
+            "start_begin": 302069326976191,
+            "recorder_ready": 302069506209810,
+            "recorder_stopped": 302077803286737
+          },
+          "mcap_sha256": "92fe276a585b6cc19934991aa17160adec1c9f297ecaf38f992077d8821b8c4d"
+        },
+        {
+          "episode": 14,
+          "sent": 400,
+          "received": 400,
+          "complete": true,
+          "missing": [],
+          "max_delay_ms": 0.259981,
+          "timing": {
+            "start_begin": 302078819202068,
+            "recorder_ready": 302078997568580,
+            "recorder_stopped": 302087294661921
+          },
+          "mcap_sha256": "f62d7912f6e338d764dbbf7e0b7f4df3286f1124863b392d0d7f7ad89be50453"
+        },
+        {
+          "episode": 15,
+          "sent": 400,
+          "received": 400,
+          "complete": true,
+          "missing": [],
+          "max_delay_ms": 0.249411,
+          "timing": {
+            "start_begin": 302088310802788,
+            "recorder_ready": 302088491967441,
+            "recorder_stopped": 302096792821850
+          },
+          "mcap_sha256": "0837ed72a61899540f66cb9cc1fa3d940dc0bf80a5832c97b9031e018aa908da"
+        },
+        {
+          "episode": 16,
+          "sent": 400,
+          "received": 400,
+          "complete": true,
+          "missing": [],
+          "max_delay_ms": 0.290516,
+          "timing": {
+            "start_begin": 302097808090140,
+            "recorder_ready": 302097987197284,
+            "recorder_stopped": 302106282965875
+          },
+          "mcap_sha256": "047d9e2db28fb1163555cca3757a08cd7393ac794e046cf1dfc56648497fec6b"
+        },
+        {
+          "episode": 17,
+          "sent": 400,
+          "received": 400,
+          "complete": true,
+          "missing": [],
+          "max_delay_ms": 0.495321,
+          "timing": {
+            "start_begin": 302107299804693,
+            "recorder_ready": 302107478122359,
+            "recorder_stopped": 302115773892954
+          },
+          "mcap_sha256": "b8fd4ba8c2c98a52f888f3e9337d6e58d9e79611d24805df08747b414efb3006"
+        },
+        {
+          "episode": 18,
+          "sent": 400,
+          "received": 400,
+          "complete": true,
+          "missing": [],
+          "max_delay_ms": 0.227839,
+          "timing": {
+            "start_begin": 302116790942850,
+            "recorder_ready": 302116967853306,
+            "recorder_stopped": 302125254787118
+          },
+          "mcap_sha256": "d6363305b6fb0cf9152a198f9d9318f65a0e6e4796eb5d80fa6d55aacb9cf1b3"
+        },
+        {
+          "episode": 19,
+          "sent": 400,
+          "received": 400,
+          "complete": true,
+          "missing": [],
+          "max_delay_ms": 0.427087,
+          "timing": {
+            "start_begin": 302126264515569,
+            "recorder_ready": 302126438226920,
+            "recorder_stopped": 302134733679355
+          },
+          "mcap_sha256": "86ed05c62cf78979df5f0b2f278ebdc57d54c616d5fdf7b49107348033382a32"
+        },
+        {
+          "episode": 20,
+          "sent": 400,
+          "received": 400,
+          "complete": true,
+          "missing": [],
+          "max_delay_ms": 0.247927,
+          "timing": {
+            "start_begin": 302135745130745,
+            "recorder_ready": 302135931968485,
+            "recorder_stopped": 302144228150431
+          },
+          "mcap_sha256": "5fde2da28be7e0762f15b6762e3f90c4a546a0c626791ad68e85cf5ab677d364"
+        }
+      ]
+    }
+  },
+  "source_hashes": {
+    "src/arx5_collection/ros2_adapters/recording_publisher.py": "196c1b5d10fb16be358e4152367f7c21563856f62a94ecb182da6270c9c7b72e",
+    "src/arx5_collection/ros2_adapters/recording.py": "0dac3f0006f8e2fb4582291a82033c7a19f13b53881d5595daafebd233880f89",
+    "src/arx5_collection/infer/recording.py": "b91d4fd25f2b36ceb991e2d80510b20646a06e2051a5bec0be30640b097aa0f4",
+    "src/arx5_collection/infer/application.py": "61ad4c089332000d7ef9e012b6ea1a0a875a5aa35657c25eee2b509c3dd7a717",
+    "src/arx5_collection/dagger/authority_ros.py": "4f56e2b5c9b77a5dc272b71bb0853bd995963f8c01dc6e4ad3c04b7870ae76fb",
+    "src/arx5_collection/dagger/application.py": "61ba7b04965b9b994e26e7c8e9c69de3af92b8095ce862486ca5293e97481d67",
+    "tests/test_recording_publisher.py": "8f8d020f841891833d65435505e86ea4b051d28016e8f3866849fb132ac9fe66",
+    "tests/infer/test_application.py": "2fe6ffa63cac9dd88aee0bb8dc0784288072b5baa956ad785164b5ad29ca7a07",
+    "tests/dagger/test_application.py": "92ad60145bbf3fd680c5f40d78fee6a9db5d9d15eaee06a8a4eb34677202a11a"
+  }
+}

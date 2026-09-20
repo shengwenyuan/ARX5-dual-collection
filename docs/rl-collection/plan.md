@@ -130,7 +130,7 @@ MCAP + metadata（collection 已提交）
 
 ## 7. 实施、验收与 commit 锁定
 
-**本仓库补齐功能 → 验收明确通过 → 提交完成版本 → 主仓库锁定 commit。**用户已完成真机录制，本轮只读验收 19 局，发现 6 局缺首条命令；详见 [真机验收记录](acceptance-w5-20260920.md)。开发版本已提前提交，最终完成版本与 gitlink 仍待缺陷修复和剩余现场验收。原有其他未提交内容保持不变。实现与验收入口见 [implementation.md](implementation.md)，设备部署结果见 [w5 部署记录](deployment-w5-20260920.md)。
+**本仓库补齐功能 → 验收明确通过 → 提交完成版本 → 主仓库锁定 commit。**用户已完成真机录制，本轮只读验收 19 局，发现 6 局缺首条命令；详见 [真机验收记录](acceptance-w5-20260920.md)。随后完成 [无真机传输实验](command-transport-experiment-20260920.md)：仅等待匹配无效，每局重建发布端的 C 组 20 局完整；候选修复尚未接入生产，验收状态不变。[第二轮 160 局定位](command-transport-root-cause-20260920.md)已确认累计序号/接收端 samples limit 与 Fast DDS 进程内交付的组合问题；仅重建 publisher 实体已通过 20 局，随后 [共享按局 publisher 修复](publisher-lifecycle-fix-20260920.md)已落盘，infer/DAgger 各 20 局完整；已部署 w5，用户已追加录制 10 局；新批次动作回读及剩余真机边界验收待完成。开发版本已提前提交，最终完成版本与 gitlink 仍待缺陷修复和剩余现场验收。原有其他未提交内容保持不变。实现与验收入口见 [implementation.md](implementation.md)，设备部署结果见 [w5 部署记录](deployment-w5-20260920.md)。
 
 | 阶段 | 交付/验收 |
 | --- | --- |

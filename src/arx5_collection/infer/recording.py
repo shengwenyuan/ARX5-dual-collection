@@ -3,11 +3,10 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from time import monotonic_ns, time_ns
-from typing import Any
-from uuid import uuid4
 
 from arx5_collection.dagger.action_gateway import DualArmJointCommand, DualArmJointState
 from arx5_collection.dagger.action_runtime import TakeoverControlPort
+from arx5_collection.ros2_adapters.recording_publisher import RosRecordingPublisher
 
 
 COMMAND_TOPIC = "/infer/command"
@@ -85,44 +84,11 @@ class RecordedControl:
             raise
 
 
-class RosCommandPublisher:
+class RosCommandPublisher(RosRecordingPublisher):
     """One small ROS message per successful paired send; no hardware ACK claim."""
 
     def __init__(self) -> None:
-        self._context: Any = None
-        self._node: Any = None
-        self._publisher: Any = None
-        self._message_type: Any = None
-
-    def __enter__(self) -> RosCommandPublisher:
-        import rclpy
-        from arx5_collection_interfaces.msg import InferCommand
-        from rclpy.qos import QoSProfile, ReliabilityPolicy
-
-        self._context = rclpy.Context()
-        try:
-            rclpy.init(context=self._context)
-            self._node = rclpy.create_node(
-                f"infer_commands_{uuid4().hex[:8]}", context=self._context
-            )
-            if self._node.get_parameter("use_sim_time").value:
-                raise RuntimeError("infer command timestamps require the host system clock")
-            self._publisher = self._node.create_publisher(
-                InferCommand, COMMAND_TOPIC,
-                QoSProfile(depth=256, reliability=ReliabilityPolicy.RELIABLE),
-            )
-            self._message_type = InferCommand
-        except BaseException:
-            self.__exit__()
-            raise
-        return self
-
-    def __exit__(self, *args: object) -> None:
-        if self._node is not None:
-            self._node.destroy_node()
-        if self._context is not None and self._context.ok():
-            self._context.shutdown()
-        self._publisher = self._node = self._context = self._message_type = None
+        super().__init__(COMMAND_TOPIC, "InferCommand", "infer_commands", 256, require_system_clock=True)
 
     def now_ns(self) -> int:
         if self._node is None:

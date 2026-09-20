@@ -9,6 +9,7 @@ from uuid import uuid4
 from arx5_collection.episode.models import StreamMetrics, StreamSpec
 
 from .mcap_metrics import audit_mcap
+from .recording_publisher import RosRecordingPublisher
 
 
 RecorderFactory = Callable[[Path, tuple[str, ...], str], Any]
@@ -102,6 +103,7 @@ class RosbagRecordingBackend:
         stop_timeout_s: float = 15.0,
         warning_ratio: float = 0.9,
         additional_topics: tuple[str, ...] = (),
+        recording_publisher: RosRecordingPublisher | None = None,
     ) -> None:
         if start_timeout_s <= 0 or stop_timeout_s <= 0:
             raise ValueError("recorder timeouts must be positive")
@@ -121,6 +123,7 @@ class RosbagRecordingBackend:
         self.stop_timeout_s = stop_timeout_s
         self.warning_ratio = warning_ratio
         self.additional_topics = additional_topics
+        self.recording_publisher = recording_publisher
         self._recorder: Any | None = None
         self._thread: Thread | None = None
         self._thread_error: BaseException | None = None
@@ -133,6 +136,23 @@ class RosbagRecordingBackend:
         self._last_completed_path: Path | None = None
 
     def start(self, mcap_path: Path, streams: tuple[StreamSpec, ...]) -> None:
+        if self._recorder is not None:
+            raise RuntimeError("recording is already active")
+        publisher = self.recording_publisher
+        if publisher is not None:
+            publisher.start_episode()
+        try:
+            self._start(mcap_path, streams)
+        except BaseException:
+            try:
+                if self._recorder is not None:
+                    self.stop()
+            finally:
+                if publisher is not None:
+                    publisher.stop_episode()
+            raise
+
+    def _start(self, mcap_path: Path, streams: tuple[StreamSpec, ...]) -> None:
         if self._recorder is not None:
             raise RuntimeError("recording is already active")
         if not streams:
@@ -193,6 +213,10 @@ class RosbagRecordingBackend:
                             recorder_node_name,
                             max(0.0, deadline - monotonic()),
                         )
+                    if self.recording_publisher is not None:
+                        self.recording_publisher.wait_for_recorder(
+                            recorder_node_name, max(0.0, deadline - monotonic())
+                        )
                 except BaseException:
                     try:
                         self._stop_recorder_thread()
@@ -226,6 +250,14 @@ class RosbagRecordingBackend:
             self._record_entered.set()
 
     def stop(self) -> None:
+        try:
+            self._stop()
+        finally:
+            if self._thread is None or not self._thread.is_alive():
+                if self.recording_publisher is not None:
+                    self.recording_publisher.stop_episode()
+
+    def _stop(self) -> None:
         if self._recorder is None or self._thread is None:
             raise RuntimeError("recording is not active")
         target_path = self._target_path

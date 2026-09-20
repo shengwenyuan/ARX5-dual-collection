@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from time import monotonic
-from typing import Any
 from uuid import uuid4
+
+from arx5_collection.ros2_adapters.recording_publisher import RosRecordingPublisher
 
 from .takeover import AuthorityEvent
 from .topics import AUTHORITY_TOPIC
@@ -58,54 +59,11 @@ def require_no_action_publishers(
             context.shutdown()
 
 
-class RosAuthorityEventPublisher:
+class RosAuthorityEventPublisher(RosRecordingPublisher):
     """Publish sparse authority transitions without owning an executor thread."""
 
     def __init__(self, topic: str = AUTHORITY_TOPIC) -> None:
-        if not topic.startswith("/"):
-            raise ValueError("authority event topic must be absolute")
-        self.topic = topic
-        self._context: Any | None = None
-        self._node: Any | None = None
-        self._publisher: Any | None = None
-        self._message_type: Any | None = None
-
-    def __enter__(self) -> RosAuthorityEventPublisher:
-        self.open()
-        return self
-
-    def __exit__(self, *args: object) -> None:
-        self.close()
-
-    def open(self) -> None:
-        if self._context is not None:
-            raise RuntimeError("authority event publisher is already open")
-        import rclpy
-        from arx5_collection_interfaces.msg import AuthorityEvent as RosAuthorityEvent
-        from rclpy.qos import QoSProfile, ReliabilityPolicy
-
-        self._context = rclpy.Context()
-        rclpy.init(context=self._context)
-        self._node = rclpy.create_node(
-            f"dagger_authority_{uuid4().hex[:8]}",
-            context=self._context,
-        )
-        self._publisher = self._node.create_publisher(
-            RosAuthorityEvent,
-            self.topic,
-            QoSProfile(depth=32, reliability=ReliabilityPolicy.RELIABLE),
-        )
-        self._message_type = RosAuthorityEvent
-
-    def close(self) -> None:
-        if self._node is not None:
-            self._node.destroy_node()
-        if self._context is not None and self._context.ok():
-            self._context.shutdown()
-        self._publisher = None
-        self._message_type = None
-        self._node = None
-        self._context = None
+        super().__init__(topic, "AuthorityEvent", "dagger_authority", 32)
 
     def __call__(self, event: AuthorityEvent) -> None:
         if self._publisher is None or self._node is None or self._message_type is None:

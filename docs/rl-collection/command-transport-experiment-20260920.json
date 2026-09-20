@@ -1,0 +1,1759 @@
+{
+  "A": {
+    "episodes": 20,
+    "complete_episodes": 13,
+    "sent_messages": 8000,
+    "received_messages": 7993,
+    "signature_episodes": [
+      "A-014",
+      "A-015",
+      "A-016",
+      "A-017",
+      "A-018",
+      "A-019",
+      "A-020"
+    ],
+    "max_receive_delay_ms": 5100.266435,
+    "all_matched_before_first_send": true,
+    "episodes_detail": [
+      {
+        "episode_id": "A-001",
+        "sent": 400,
+        "received": 400,
+        "complete": true,
+        "missing": [],
+        "duplicates": {},
+        "signature": false,
+        "delay_ms": {
+          "min": 0.040548,
+          "median": 0.1933525,
+          "max": 1.213285
+        },
+        "step_1_delay_ms": 0.119453,
+        "steps_1_256_receive_span_ms": 5099.987707,
+        "steps_257_399_median_delay_ms": 0.200675,
+        "matched_count_at_first_send": 1,
+        "match_before_first_send_ms": 357.148569,
+        "graph_ready_before_first_send_ms": 200.087854,
+        "explicit_match_wait_ms": null,
+        "send_duration_s": 7.98015465,
+        "send_gap_ms": {
+          "min": 19.466983,
+          "max": 20.543846
+        },
+        "mcap_sha256": "ed59ba6d47be46457c90dbff2e6ddcd60e98ca5db5c3347b9dc8d91261cf1a6a",
+        "receive_time_nondecreasing": true
+      },
+      {
+        "episode_id": "A-002",
+        "sent": 400,
+        "received": 400,
+        "complete": true,
+        "missing": [],
+        "duplicates": {},
+        "signature": false,
+        "delay_ms": {
+          "min": 0.046685,
+          "median": 0.201983,
+          "max": 0.313002
+        },
+        "step_1_delay_ms": 0.205736,
+        "steps_1_256_receive_span_ms": 5100.016117,
+        "steps_257_399_median_delay_ms": 0.201286,
+        "matched_count_at_first_send": 1,
+        "match_before_first_send_ms": 303.46108,
+        "graph_ready_before_first_send_ms": 200.180671,
+        "explicit_match_wait_ms": null,
+        "send_duration_s": 7.980148688,
+        "send_gap_ms": {
+          "min": 19.761459,
+          "max": 20.158399
+        },
+        "mcap_sha256": "d7d62910880b76493d764f35e88c6a8e4a9847ed88f1e8325b4190fc8e51fd06",
+        "receive_time_nondecreasing": true
+      },
+      {
+        "episode_id": "A-003",
+        "sent": 400,
+        "received": 400,
+        "complete": true,
+        "missing": [],
+        "duplicates": {},
+        "signature": false,
+        "delay_ms": {
+          "min": 0.03195,
+          "median": 0.2244045,
+          "max": 0.374292
+        },
+        "step_1_delay_ms": 0.23859,
+        "steps_1_256_receive_span_ms": 5099.985035,
+        "steps_257_399_median_delay_ms": 0.223783,
+        "matched_count_at_first_send": 1,
+        "match_before_first_send_ms": 305.388182,
+        "graph_ready_before_first_send_ms": 200.17716,
+        "explicit_match_wait_ms": null,
+        "send_duration_s": 7.9801558,
+        "send_gap_ms": {
+          "min": 19.83951,
+          "max": 20.248774
+        },
+        "mcap_sha256": "7a1560c2e07a79e2ce34a68bb2e1a517bfb286094a565a1cec58521417254120",
+        "receive_time_nondecreasing": true
+      },
+      {
+        "episode_id": "A-004",
+        "sent": 400,
+        "received": 400,
+        "complete": true,
+        "missing": [],
+        "duplicates": {},
+        "signature": false,
+        "delay_ms": {
+          "min": 0.04638,
+          "median": 0.20215,
+          "max": 0.290917
+        },
+        "step_1_delay_ms": 0.142703,
+        "steps_1_256_receive_span_ms": 5100.005876,
+        "steps_257_399_median_delay_ms": 0.201449,
+        "matched_count_at_first_send": 1,
+        "match_before_first_send_ms": 303.504071,
+        "graph_ready_before_first_send_ms": 200.091868,
+        "explicit_match_wait_ms": null,
+        "send_duration_s": 7.980158379,
+        "send_gap_ms": {
+          "min": 19.768377,
+          "max": 20.22154
+        },
+        "mcap_sha256": "e81f3160ea19366da8a267e0d51986cdf0747b14fbb2b310f9ba9fb0d976325c",
+        "receive_time_nondecreasing": true
+      },
+      {
+        "episode_id": "A-005",
+        "sent": 400,
+        "received": 400,
+        "complete": true,
+        "missing": [],
+        "duplicates": {},
+        "signature": false,
+        "delay_ms": {
+          "min": 0.03683,
+          "median": 0.1692975,
+          "max": 0.331574
+        },
+        "step_1_delay_ms": 0.222191,
+        "steps_1_256_receive_span_ms": 5099.735496,
+        "steps_257_399_median_delay_ms": 0.198724,
+        "matched_count_at_first_send": 1,
+        "match_before_first_send_ms": 302.025771,
+        "graph_ready_before_first_send_ms": 200.185072,
+        "explicit_match_wait_ms": null,
+        "send_duration_s": 7.980152783,
+        "send_gap_ms": {
+          "min": 19.839432,
+          "max": 20.163626
+        },
+        "mcap_sha256": "649cae8bc49d811d748f3d2a4307ffb4e9cf0ab2f89d4e14b70b8e9c90612589",
+        "receive_time_nondecreasing": true
+      },
+      {
+        "episode_id": "A-006",
+        "sent": 400,
+        "received": 400,
+        "complete": true,
+        "missing": [],
+        "duplicates": {},
+        "signature": false,
+        "delay_ms": {
+          "min": 0.063121,
+          "median": 0.1183615,
+          "max": 0.383203
+        },
+        "step_1_delay_ms": 0.203301,
+        "steps_1_256_receive_span_ms": 5100.00333,
+        "steps_257_399_median_delay_ms": 0.199335,
+        "matched_count_at_first_send": 1,
+        "match_before_first_send_ms": 303.460499,
+        "graph_ready_before_first_send_ms": 200.103621,
+        "explicit_match_wait_ms": null,
+        "send_duration_s": 7.980154343,
+        "send_gap_ms": {
+          "min": 19.780105,
+          "max": 20.257764
+        },
+        "mcap_sha256": "d47954a6eab722f911643b57d7717747ad0f7f8bc1b990dbe12d8e0e7b9d2660",
+        "receive_time_nondecreasing": true
+      },
+      {
+        "episode_id": "A-007",
+        "sent": 400,
+        "received": 400,
+        "complete": true,
+        "missing": [],
+        "duplicates": {},
+        "signature": false,
+        "delay_ms": {
+          "min": 0.050249,
+          "median": 0.196085,
+          "max": 0.388177
+        },
+        "step_1_delay_ms": 0.202587,
+        "steps_1_256_receive_span_ms": 5100.046031,
+        "steps_257_399_median_delay_ms": 0.189155,
+        "matched_count_at_first_send": 1,
+        "match_before_first_send_ms": 305.946925,
+        "graph_ready_before_first_send_ms": 200.098725,
+        "explicit_match_wait_ms": null,
+        "send_duration_s": 7.98015773,
+        "send_gap_ms": {
+          "min": 19.608915,
+          "max": 20.388816
+        },
+        "mcap_sha256": "916b252a0d113a02311612b0d4616be4b4ac6d649403c7e5e807c8981c9ec7ea",
+        "receive_time_nondecreasing": true
+      },
+      {
+        "episode_id": "A-008",
+        "sent": 400,
+        "received": 400,
+        "complete": true,
+        "missing": [],
+        "duplicates": {},
+        "signature": false,
+        "delay_ms": {
+          "min": 0.05516,
+          "median": 0.193211,
+          "max": 0.436502
+        },
+        "step_1_delay_ms": 0.226041,
+        "steps_1_256_receive_span_ms": 5099.873164,
+        "steps_257_399_median_delay_ms": 0.181889,
+        "matched_count_at_first_send": 1,
+        "match_before_first_send_ms": 302.808524,
+        "graph_ready_before_first_send_ms": 200.178779,
+        "explicit_match_wait_ms": null,
+        "send_duration_s": 7.980146731,
+        "send_gap_ms": {
+          "min": 19.718067,
+          "max": 20.321891
+        },
+        "mcap_sha256": "634f6093d63b798c8a1d5489c3f0d605b4a298b5bd1a2914654f1fd1ce4ca12f",
+        "receive_time_nondecreasing": true
+      },
+      {
+        "episode_id": "A-009",
+        "sent": 400,
+        "received": 400,
+        "complete": true,
+        "missing": [],
+        "duplicates": {},
+        "signature": false,
+        "delay_ms": {
+          "min": 0.048757,
+          "median": 0.202322,
+          "max": 0.421725
+        },
+        "step_1_delay_ms": 0.2066,
+        "steps_1_256_receive_span_ms": 5100.017016,
+        "steps_257_399_median_delay_ms": 0.202169,
+        "matched_count_at_first_send": 1,
+        "match_before_first_send_ms": 300.737579,
+        "graph_ready_before_first_send_ms": 200.142747,
+        "explicit_match_wait_ms": null,
+        "send_duration_s": 7.980078663,
+        "send_gap_ms": {
+          "min": 19.743701,
+          "max": 20.231494
+        },
+        "mcap_sha256": "2bcd3619099d1abd8e58d3cb0c351cfad16e7850a43ce6b1b94d4769bd628114",
+        "receive_time_nondecreasing": true
+      },
+      {
+        "episode_id": "A-010",
+        "sent": 400,
+        "received": 400,
+        "complete": true,
+        "missing": [],
+        "duplicates": {},
+        "signature": false,
+        "delay_ms": {
+          "min": 0.029547,
+          "median": 0.202409,
+          "max": 0.444635
+        },
+        "step_1_delay_ms": 0.205484,
+        "steps_1_256_receive_span_ms": 5099.920074,
+        "steps_257_399_median_delay_ms": 0.206821,
+        "matched_count_at_first_send": 1,
+        "match_before_first_send_ms": 291.733577,
+        "graph_ready_before_first_send_ms": 200.193776,
+        "explicit_match_wait_ms": null,
+        "send_duration_s": 7.980161505,
+        "send_gap_ms": {
+          "min": 19.711301,
+          "max": 20.288047
+        },
+        "mcap_sha256": "db085f97e4a269486219cc806eaf4bc906cf0e564d1366b01565de7f5d710f01",
+        "receive_time_nondecreasing": true
+      },
+      {
+        "episode_id": "A-011",
+        "sent": 400,
+        "received": 400,
+        "complete": true,
+        "missing": [],
+        "duplicates": {},
+        "signature": false,
+        "delay_ms": {
+          "min": 0.059601,
+          "median": 0.2025905,
+          "max": 0.420971
+        },
+        "step_1_delay_ms": 0.099877,
+        "steps_1_256_receive_span_ms": 5100.2186,
+        "steps_257_399_median_delay_ms": 0.201685,
+        "matched_count_at_first_send": 1,
+        "match_before_first_send_ms": 304.148729,
+        "graph_ready_before_first_send_ms": 200.074855,
+        "explicit_match_wait_ms": null,
+        "send_duration_s": 7.980200128,
+        "send_gap_ms": {
+          "min": 19.740137,
+          "max": 20.320284
+        },
+        "mcap_sha256": "26743c995cdfe25c9d718236614eca5a33408e91c1bedb3545bfe52f55c4dbc1",
+        "receive_time_nondecreasing": true
+      },
+      {
+        "episode_id": "A-012",
+        "sent": 400,
+        "received": 400,
+        "complete": true,
+        "missing": [],
+        "duplicates": {},
+        "signature": false,
+        "delay_ms": {
+          "min": 0.043231,
+          "median": 0.20281,
+          "max": 0.470453
+        },
+        "step_1_delay_ms": 0.10205,
+        "steps_1_256_receive_span_ms": 5100.209598,
+        "steps_257_399_median_delay_ms": 0.202498,
+        "matched_count_at_first_send": 1,
+        "match_before_first_send_ms": 304.440907,
+        "graph_ready_before_first_send_ms": 200.073818,
+        "explicit_match_wait_ms": null,
+        "send_duration_s": 7.980158972,
+        "send_gap_ms": {
+          "min": 19.734572,
+          "max": 20.265603
+        },
+        "mcap_sha256": "74db78aff0d155aa5401652e290557ac1c61a64b9a61ba3ed25e77e40d56d27a",
+        "receive_time_nondecreasing": true
+      },
+      {
+        "episode_id": "A-013",
+        "sent": 400,
+        "received": 400,
+        "complete": true,
+        "missing": [],
+        "duplicates": {},
+        "signature": false,
+        "delay_ms": {
+          "min": 0.046661,
+          "median": 0.2027185,
+          "max": 0.583329
+        },
+        "step_1_delay_ms": 0.223094,
+        "steps_1_256_receive_span_ms": 5100.062591,
+        "steps_257_399_median_delay_ms": 0.201801,
+        "matched_count_at_first_send": 1,
+        "match_before_first_send_ms": 303.978238,
+        "graph_ready_before_first_send_ms": 200.110422,
+        "explicit_match_wait_ms": null,
+        "send_duration_s": 7.980160705,
+        "send_gap_ms": {
+          "min": 19.766045,
+          "max": 20.246214
+        },
+        "mcap_sha256": "acee4e6874885cb361c630992a8a1a6e3e4c29c3e766a76af17de5f14d89eee9",
+        "receive_time_nondecreasing": true
+      },
+      {
+        "episode_id": "A-014",
+        "sent": 400,
+        "received": 399,
+        "complete": false,
+        "missing": [
+          0
+        ],
+        "duplicates": {},
+        "signature": true,
+        "delay_ms": {
+          "min": 0.060372,
+          "median": 1120.124938,
+          "max": 5100.027535
+        },
+        "step_1_delay_ms": 5100.027535,
+        "steps_1_256_receive_span_ms": 0.210936,
+        "steps_257_399_median_delay_ms": 0.208555,
+        "matched_count_at_first_send": 1,
+        "match_before_first_send_ms": 305.548821,
+        "graph_ready_before_first_send_ms": 200.097853,
+        "explicit_match_wait_ms": null,
+        "send_duration_s": 7.980144951,
+        "send_gap_ms": {
+          "min": 19.677657,
+          "max": 20.336845
+        },
+        "mcap_sha256": "691145dd2adc400f851fb85b590fd17e5d850f6e81e84e0f374484694d5166a8",
+        "receive_time_nondecreasing": true
+      },
+      {
+        "episode_id": "A-015",
+        "sent": 400,
+        "received": 399,
+        "complete": false,
+        "missing": [
+          0
+        ],
+        "duplicates": {},
+        "signature": true,
+        "delay_ms": {
+          "min": 0.061043,
+          "median": 1120.263142,
+          "max": 5100.14337
+        },
+        "step_1_delay_ms": 5100.14337,
+        "steps_1_256_receive_span_ms": 0.211299,
+        "steps_257_399_median_delay_ms": 0.077629,
+        "matched_count_at_first_send": 1,
+        "match_before_first_send_ms": 301.116854,
+        "graph_ready_before_first_send_ms": 200.179429,
+        "explicit_match_wait_ms": null,
+        "send_duration_s": 7.980153221,
+        "send_gap_ms": {
+          "min": 19.838883,
+          "max": 20.163362
+        },
+        "mcap_sha256": "caaa890129dae1078e2fdd483b0851b0c96dd30a071162919458380825749b1c",
+        "receive_time_nondecreasing": true
+      },
+      {
+        "episode_id": "A-016",
+        "sent": 400,
+        "received": 399,
+        "complete": false,
+        "missing": [
+          0
+        ],
+        "duplicates": {},
+        "signature": true,
+        "delay_ms": {
+          "min": 0.06624,
+          "median": 1120.387123,
+          "max": 5100.261926
+        },
+        "step_1_delay_ms": 5100.261926,
+        "steps_1_256_receive_span_ms": 0.224322,
+        "steps_257_399_median_delay_ms": 0.20304,
+        "matched_count_at_first_send": 1,
+        "match_before_first_send_ms": 306.675605,
+        "graph_ready_before_first_send_ms": 200.17626,
+        "explicit_match_wait_ms": null,
+        "send_duration_s": 7.980150864,
+        "send_gap_ms": {
+          "min": 19.833615,
+          "max": 20.16775
+        },
+        "mcap_sha256": "5d1e3c5357617fb2acd43185223d1c467922c9015f36c63223710f256c68512c",
+        "receive_time_nondecreasing": true
+      },
+      {
+        "episode_id": "A-017",
+        "sent": 400,
+        "received": 399,
+        "complete": false,
+        "missing": [
+          0
+        ],
+        "duplicates": {},
+        "signature": true,
+        "delay_ms": {
+          "min": 0.06221,
+          "median": 1120.378859,
+          "max": 5100.266435
+        },
+        "step_1_delay_ms": 5100.266435,
+        "steps_1_256_receive_span_ms": 0.216195,
+        "steps_257_399_median_delay_ms": 0.226565,
+        "matched_count_at_first_send": 1,
+        "match_before_first_send_ms": 304.603268,
+        "graph_ready_before_first_send_ms": 200.184228,
+        "explicit_match_wait_ms": null,
+        "send_duration_s": 7.980049851,
+        "send_gap_ms": {
+          "min": 19.850414,
+          "max": 20.162883
+        },
+        "mcap_sha256": "3ee6a5f48fc193b9c2a9c999ef377a930c3359b52fea9814eaa2064d443f6671",
+        "receive_time_nondecreasing": true
+      },
+      {
+        "episode_id": "A-018",
+        "sent": 400,
+        "received": 399,
+        "complete": false,
+        "missing": [
+          0
+        ],
+        "duplicates": {},
+        "signature": true,
+        "delay_ms": {
+          "min": 0.044436,
+          "median": 1120.381523,
+          "max": 5100.242489
+        },
+        "step_1_delay_ms": 5100.242489,
+        "steps_1_256_receive_span_ms": 0.224505,
+        "steps_257_399_median_delay_ms": 0.199613,
+        "matched_count_at_first_send": 1,
+        "match_before_first_send_ms": 305.640256,
+        "graph_ready_before_first_send_ms": 200.179791,
+        "explicit_match_wait_ms": null,
+        "send_duration_s": 7.980152367,
+        "send_gap_ms": {
+          "min": 19.75102,
+          "max": 20.241108
+        },
+        "mcap_sha256": "a110fa49b9516e16b7483b05c4c735bcdb73c61f853101277073e4412f79932d",
+        "receive_time_nondecreasing": true
+      },
+      {
+        "episode_id": "A-019",
+        "sent": 400,
+        "received": 399,
+        "complete": false,
+        "missing": [
+          0
+        ],
+        "duplicates": {},
+        "signature": true,
+        "delay_ms": {
+          "min": 0.032871,
+          "median": 1120.348325,
+          "max": 5100.087769
+        },
+        "step_1_delay_ms": 5100.087769,
+        "steps_1_256_receive_span_ms": 0.227153,
+        "steps_257_399_median_delay_ms": 0.203564,
+        "matched_count_at_first_send": 1,
+        "match_before_first_send_ms": 304.612809,
+        "graph_ready_before_first_send_ms": 200.177564,
+        "explicit_match_wait_ms": null,
+        "send_duration_s": 7.980147645,
+        "send_gap_ms": {
+          "min": 19.881449,
+          "max": 20.296495
+        },
+        "mcap_sha256": "f1a5593da0c48f5e3b79ca2020d0c4639b88ef8afbe053404e15512ad5114b82",
+        "receive_time_nondecreasing": true
+      },
+      {
+        "episode_id": "A-020",
+        "sent": 400,
+        "received": 399,
+        "complete": false,
+        "missing": [
+          0
+        ],
+        "duplicates": {},
+        "signature": true,
+        "delay_ms": {
+          "min": 0.03722,
+          "median": 1120.230907,
+          "max": 5099.984427
+        },
+        "step_1_delay_ms": 5099.984427,
+        "steps_1_256_receive_span_ms": 0.204483,
+        "steps_257_399_median_delay_ms": 0.078795,
+        "matched_count_at_first_send": 1,
+        "match_before_first_send_ms": 300.317624,
+        "graph_ready_before_first_send_ms": 200.179034,
+        "explicit_match_wait_ms": null,
+        "send_duration_s": 7.980058764,
+        "send_gap_ms": {
+          "min": 19.842947,
+          "max": 20.157868
+        },
+        "mcap_sha256": "3f151b580344207e42a5b9e98256564fb57420a6f3e64fb81b62280d3585906b",
+        "receive_time_nondecreasing": true
+      }
+    ]
+  },
+  "B": {
+    "episodes": 20,
+    "complete_episodes": 13,
+    "sent_messages": 8000,
+    "received_messages": 7993,
+    "signature_episodes": [
+      "B-014",
+      "B-015",
+      "B-016",
+      "B-017",
+      "B-018",
+      "B-019",
+      "B-020"
+    ],
+    "max_receive_delay_ms": 5100.134089,
+    "all_matched_before_first_send": true,
+    "episodes_detail": [
+      {
+        "episode_id": "B-001",
+        "sent": 400,
+        "received": 400,
+        "complete": true,
+        "missing": [],
+        "duplicates": {},
+        "signature": false,
+        "delay_ms": {
+          "min": 0.042781,
+          "median": 0.2600015,
+          "max": 0.293411
+        },
+        "step_1_delay_ms": 0.103401,
+        "steps_1_256_receive_span_ms": 5100.322031,
+        "steps_257_399_median_delay_ms": 0.211519,
+        "matched_count_at_first_send": 1,
+        "match_before_first_send_ms": 356.735774,
+        "graph_ready_before_first_send_ms": 200.083834,
+        "explicit_match_wait_ms": 0.008349,
+        "send_duration_s": 7.980171174,
+        "send_gap_ms": {
+          "min": 19.740982,
+          "max": 20.165781
+        },
+        "mcap_sha256": "9c13aa56e204b1ca12e3f9d4381490dfc998a737ea6c3e6897edca3128be8ff7",
+        "receive_time_nondecreasing": true
+      },
+      {
+        "episode_id": "B-002",
+        "sent": 400,
+        "received": 400,
+        "complete": true,
+        "missing": [],
+        "duplicates": {},
+        "signature": false,
+        "delay_ms": {
+          "min": 0.024873,
+          "median": 0.17367,
+          "max": 0.30963
+        },
+        "step_1_delay_ms": 0.19359,
+        "steps_1_256_receive_span_ms": 5099.868547,
+        "steps_257_399_median_delay_ms": 0.168876,
+        "matched_count_at_first_send": 1,
+        "match_before_first_send_ms": 299.350103,
+        "graph_ready_before_first_send_ms": 200.093415,
+        "explicit_match_wait_ms": 0.021382,
+        "send_duration_s": 7.980074109,
+        "send_gap_ms": {
+          "min": 19.709956,
+          "max": 20.29606
+        },
+        "mcap_sha256": "5ac400b3dd53eafe837a744da54ea12605275a8268d37d43396c786819fe9793",
+        "receive_time_nondecreasing": true
+      },
+      {
+        "episode_id": "B-003",
+        "sent": 400,
+        "received": 400,
+        "complete": true,
+        "missing": [],
+        "duplicates": {},
+        "signature": false,
+        "delay_ms": {
+          "min": 0.0182,
+          "median": 0.0541985,
+          "max": 0.117486
+        },
+        "step_1_delay_ms": 0.075335,
+        "steps_1_256_receive_span_ms": 5100.002165,
+        "steps_257_399_median_delay_ms": 0.062555,
+        "matched_count_at_first_send": 1,
+        "match_before_first_send_ms": 237.481751,
+        "graph_ready_before_first_send_ms": 200.068817,
+        "explicit_match_wait_ms": 0.005818,
+        "send_duration_s": 7.980055803,
+        "send_gap_ms": {
+          "min": 19.885887,
+          "max": 20.118038
+        },
+        "mcap_sha256": "7afe7ebadf930d3a67e37dac72716277fd3ee856b20e21951ac54d9e7eee86d0",
+        "receive_time_nondecreasing": true
+      },
+      {
+        "episode_id": "B-004",
+        "sent": 400,
+        "received": 400,
+        "complete": true,
+        "missing": [],
+        "duplicates": {},
+        "signature": false,
+        "delay_ms": {
+          "min": 0.052963,
+          "median": 0.0879025,
+          "max": 0.191199
+        },
+        "step_1_delay_ms": 0.1054,
+        "steps_1_256_receive_span_ms": 5099.970024,
+        "steps_257_399_median_delay_ms": 0.088222,
+        "matched_count_at_first_send": 1,
+        "match_before_first_send_ms": 287.991734,
+        "graph_ready_before_first_send_ms": 200.067934,
+        "explicit_match_wait_ms": 0.004463,
+        "send_duration_s": 7.980109459,
+        "send_gap_ms": {
+          "min": 19.908327,
+          "max": 20.084521
+        },
+        "mcap_sha256": "fc4d9148c1f0280b13f9001199535a64d03acb256943fab34bc7be272b48898c",
+        "receive_time_nondecreasing": true
+      },
+      {
+        "episode_id": "B-005",
+        "sent": 400,
+        "received": 400,
+        "complete": true,
+        "missing": [],
+        "duplicates": {},
+        "signature": false,
+        "delay_ms": {
+          "min": 0.030908,
+          "median": 0.0904885,
+          "max": 0.163203
+        },
+        "step_1_delay_ms": 0.107742,
+        "steps_1_256_receive_span_ms": 5100.026183,
+        "steps_257_399_median_delay_ms": 0.090551,
+        "matched_count_at_first_send": 1,
+        "match_before_first_send_ms": 287.650906,
+        "graph_ready_before_first_send_ms": 200.075879,
+        "explicit_match_wait_ms": 0.005209,
+        "send_duration_s": 7.98005289,
+        "send_gap_ms": {
+          "min": 19.881228,
+          "max": 20.09711
+        },
+        "mcap_sha256": "41f85678cd94bdd6d18d4904082048d69864ea9a3e52a88d4687cf4f66b83e02",
+        "receive_time_nondecreasing": true
+      },
+      {
+        "episode_id": "B-006",
+        "sent": 400,
+        "received": 400,
+        "complete": true,
+        "missing": [],
+        "duplicates": {},
+        "signature": false,
+        "delay_ms": {
+          "min": 0.053794,
+          "median": 0.0923605,
+          "max": 0.147933
+        },
+        "step_1_delay_ms": 0.089714,
+        "steps_1_256_receive_span_ms": 5100.015664,
+        "steps_257_399_median_delay_ms": 0.09007,
+        "matched_count_at_first_send": 1,
+        "match_before_first_send_ms": 287.81263,
+        "graph_ready_before_first_send_ms": 200.055738,
+        "explicit_match_wait_ms": 0.003856,
+        "send_duration_s": 7.980060579,
+        "send_gap_ms": {
+          "min": 19.948429,
+          "max": 20.056821
+        },
+        "mcap_sha256": "faab66c815c5539db43ed6b4c3d485c9c16040acf2cb71711a45cf8d0351e8bb",
+        "receive_time_nondecreasing": true
+      },
+      {
+        "episode_id": "B-007",
+        "sent": 400,
+        "received": 400,
+        "complete": true,
+        "missing": [],
+        "duplicates": {},
+        "signature": false,
+        "delay_ms": {
+          "min": 0.037988,
+          "median": 0.09045500000000001,
+          "max": 0.148853
+        },
+        "step_1_delay_ms": 0.096424,
+        "steps_1_256_receive_span_ms": 5099.920857,
+        "steps_257_399_median_delay_ms": 0.088097,
+        "matched_count_at_first_send": 1,
+        "match_before_first_send_ms": 290.054265,
+        "graph_ready_before_first_send_ms": 200.122913,
+        "explicit_match_wait_ms": 0.005979,
+        "send_duration_s": 7.980065812,
+        "send_gap_ms": {
+          "min": 19.915014,
+          "max": 20.113001
+        },
+        "mcap_sha256": "4fa90a10d567eb85071a5d78079a2b4bf846116396b002e70497abef387f3750",
+        "receive_time_nondecreasing": true
+      },
+      {
+        "episode_id": "B-008",
+        "sent": 400,
+        "received": 400,
+        "complete": true,
+        "missing": [],
+        "duplicates": {},
+        "signature": false,
+        "delay_ms": {
+          "min": 0.020055,
+          "median": 0.068602,
+          "max": 0.134593
+        },
+        "step_1_delay_ms": 0.076627,
+        "steps_1_256_receive_span_ms": 5100.018039,
+        "steps_257_399_median_delay_ms": 0.049341,
+        "matched_count_at_first_send": 1,
+        "match_before_first_send_ms": 356.59577,
+        "graph_ready_before_first_send_ms": 200.068023,
+        "explicit_match_wait_ms": 0.00417,
+        "send_duration_s": 7.980053249,
+        "send_gap_ms": {
+          "min": 19.924392,
+          "max": 20.075277
+        },
+        "mcap_sha256": "356911abad8dc3c847974d8726316232aa6096fb6ce231785a247af3e5d8e719",
+        "receive_time_nondecreasing": true
+      },
+      {
+        "episode_id": "B-009",
+        "sent": 400,
+        "received": 400,
+        "complete": true,
+        "missing": [],
+        "duplicates": {},
+        "signature": false,
+        "delay_ms": {
+          "min": 0.020506,
+          "median": 0.08087050000000001,
+          "max": 0.189263
+        },
+        "step_1_delay_ms": 0.082517,
+        "steps_1_256_receive_span_ms": 5099.996685,
+        "steps_257_399_median_delay_ms": 0.083198,
+        "matched_count_at_first_send": 1,
+        "match_before_first_send_ms": 288.029353,
+        "graph_ready_before_first_send_ms": 200.067357,
+        "explicit_match_wait_ms": 0.004266,
+        "send_duration_s": 7.980057218,
+        "send_gap_ms": {
+          "min": 19.930785,
+          "max": 20.080763
+        },
+        "mcap_sha256": "847cba5e905ba5068bd264e52a89324465c2e24e028de511c0e69e0fddf60633",
+        "receive_time_nondecreasing": true
+      },
+      {
+        "episode_id": "B-010",
+        "sent": 400,
+        "received": 400,
+        "complete": true,
+        "missing": [],
+        "duplicates": {},
+        "signature": false,
+        "delay_ms": {
+          "min": 0.031933,
+          "median": 0.0831965,
+          "max": 0.188262
+        },
+        "step_1_delay_ms": 0.083745,
+        "steps_1_256_receive_span_ms": 5100.003347,
+        "steps_257_399_median_delay_ms": 0.082839,
+        "matched_count_at_first_send": 1,
+        "match_before_first_send_ms": 288.090871,
+        "graph_ready_before_first_send_ms": 200.066611,
+        "explicit_match_wait_ms": 0.003112,
+        "send_duration_s": 7.98006009,
+        "send_gap_ms": {
+          "min": 19.933843,
+          "max": 20.064801
+        },
+        "mcap_sha256": "c2c2bcf55b2881748db222818b8911ad7cef8474d7ee7ff913aa8e25ddb74bdd",
+        "receive_time_nondecreasing": true
+      },
+      {
+        "episode_id": "B-011",
+        "sent": 400,
+        "received": 400,
+        "complete": true,
+        "missing": [],
+        "duplicates": {},
+        "signature": false,
+        "delay_ms": {
+          "min": 0.043266,
+          "median": 0.08740700000000001,
+          "max": 0.239612
+        },
+        "step_1_delay_ms": 0.105493,
+        "steps_1_256_receive_span_ms": 5099.994302,
+        "steps_257_399_median_delay_ms": 0.087923,
+        "matched_count_at_first_send": 1,
+        "match_before_first_send_ms": 287.896583,
+        "graph_ready_before_first_send_ms": 200.069819,
+        "explicit_match_wait_ms": 0.005294,
+        "send_duration_s": 7.980059824,
+        "send_gap_ms": {
+          "min": 19.929958,
+          "max": 20.138139
+        },
+        "mcap_sha256": "a0ae1b33f0cb23cb475d2220304c25c839d2665bbef0b21e30965bc4e623d7b9",
+        "receive_time_nondecreasing": true
+      },
+      {
+        "episode_id": "B-012",
+        "sent": 400,
+        "received": 400,
+        "complete": true,
+        "missing": [],
+        "duplicates": {},
+        "signature": false,
+        "delay_ms": {
+          "min": 0.051033,
+          "median": 0.08277899999999999,
+          "max": 0.563435
+        },
+        "step_1_delay_ms": 0.082493,
+        "steps_1_256_receive_span_ms": 5100.003602,
+        "steps_257_399_median_delay_ms": 0.083192,
+        "matched_count_at_first_send": 1,
+        "match_before_first_send_ms": 287.979483,
+        "graph_ready_before_first_send_ms": 200.053542,
+        "explicit_match_wait_ms": 0.004213,
+        "send_duration_s": 7.980057881,
+        "send_gap_ms": {
+          "min": 19.925362,
+          "max": 20.074528
+        },
+        "mcap_sha256": "24ea4d7e1d191424da079a6b949bfb40a2cd4ffacf0a1b648fb6967c52235811",
+        "receive_time_nondecreasing": true
+      },
+      {
+        "episode_id": "B-013",
+        "sent": 400,
+        "received": 400,
+        "complete": true,
+        "missing": [],
+        "duplicates": {},
+        "signature": false,
+        "delay_ms": {
+          "min": 0.042009,
+          "median": 0.083505,
+          "max": 0.162199
+        },
+        "step_1_delay_ms": 0.083704,
+        "steps_1_256_receive_span_ms": 5099.999254,
+        "steps_257_399_median_delay_ms": 0.083465,
+        "matched_count_at_first_send": 1,
+        "match_before_first_send_ms": 287.58464,
+        "graph_ready_before_first_send_ms": 200.068486,
+        "explicit_match_wait_ms": 0.004199,
+        "send_duration_s": 7.980056609,
+        "send_gap_ms": {
+          "min": 19.874506,
+          "max": 20.115125
+        },
+        "mcap_sha256": "078d0232b16f06e8caa1f84e661472f508e6c35acc2f73fc37ccfd879bf4afb1",
+        "receive_time_nondecreasing": true
+      },
+      {
+        "episode_id": "B-014",
+        "sent": 400,
+        "received": 399,
+        "complete": false,
+        "missing": [
+          0
+        ],
+        "duplicates": {},
+        "signature": true,
+        "delay_ms": {
+          "min": 0.054611,
+          "median": 1120.191105,
+          "max": 5100.134089
+        },
+        "step_1_delay_ms": 5100.134089,
+        "steps_1_256_receive_span_ms": 0.108061,
+        "steps_257_399_median_delay_ms": 0.080628,
+        "matched_count_at_first_send": 1,
+        "match_before_first_send_ms": 287.916017,
+        "graph_ready_before_first_send_ms": 200.064499,
+        "explicit_match_wait_ms": 0.003809,
+        "send_duration_s": 7.980056594,
+        "send_gap_ms": {
+          "min": 19.91354,
+          "max": 20.081302
+        },
+        "mcap_sha256": "65b130e188b4a5b6ace2cf8cc8263bfbe14bcdc1d63242a92af88de41ead2f13",
+        "receive_time_nondecreasing": true
+      },
+      {
+        "episode_id": "B-015",
+        "sent": 400,
+        "received": 399,
+        "complete": false,
+        "missing": [
+          0
+        ],
+        "duplicates": {},
+        "signature": true,
+        "delay_ms": {
+          "min": 0.066392,
+          "median": 1120.138322,
+          "max": 5099.988435
+        },
+        "step_1_delay_ms": 5099.988435,
+        "steps_1_256_receive_span_ms": 0.107127,
+        "steps_257_399_median_delay_ms": 0.082765,
+        "matched_count_at_first_send": 1,
+        "match_before_first_send_ms": 355.700615,
+        "graph_ready_before_first_send_ms": 200.102623,
+        "explicit_match_wait_ms": 0.021327,
+        "send_duration_s": 7.980056923,
+        "send_gap_ms": {
+          "min": 19.770263,
+          "max": 20.22583
+        },
+        "mcap_sha256": "b0c3ffec9aa295cda543a3d0395f0135def81378e6e2d7f6455e3aa1d0805ab5",
+        "receive_time_nondecreasing": true
+      },
+      {
+        "episode_id": "B-016",
+        "sent": 400,
+        "received": 399,
+        "complete": false,
+        "missing": [
+          0
+        ],
+        "duplicates": {},
+        "signature": true,
+        "delay_ms": {
+          "min": 0.066888,
+          "median": 1120.12326,
+          "max": 5100.085571
+        },
+        "step_1_delay_ms": 5100.085571,
+        "steps_1_256_receive_span_ms": 0.069278,
+        "steps_257_399_median_delay_ms": 0.078885,
+        "matched_count_at_first_send": 1,
+        "match_before_first_send_ms": 287.974523,
+        "graph_ready_before_first_send_ms": 200.068326,
+        "explicit_match_wait_ms": 0.004131,
+        "send_duration_s": 7.980057951,
+        "send_gap_ms": {
+          "min": 19.91893,
+          "max": 20.080006
+        },
+        "mcap_sha256": "ffa9699726177c39e4c32fd8b48e32d72d55cab3a3a666d5caf916b73e77dcd1",
+        "receive_time_nondecreasing": true
+      },
+      {
+        "episode_id": "B-017",
+        "sent": 400,
+        "received": 399,
+        "complete": false,
+        "missing": [
+          0
+        ],
+        "duplicates": {},
+        "signature": true,
+        "delay_ms": {
+          "min": 0.054464,
+          "median": 1120.128105,
+          "max": 5100.102027
+        },
+        "step_1_delay_ms": 5100.102027,
+        "steps_1_256_receive_span_ms": 0.068176,
+        "steps_257_399_median_delay_ms": 0.083846,
+        "matched_count_at_first_send": 1,
+        "match_before_first_send_ms": 288.488644,
+        "graph_ready_before_first_send_ms": 200.06644,
+        "explicit_match_wait_ms": 0.004333,
+        "send_duration_s": 7.980060171,
+        "send_gap_ms": {
+          "min": 19.782043,
+          "max": 20.148621
+        },
+        "mcap_sha256": "cacbe773d2dab8af31c7bec357ad516df79b10312cfca72a3fa2c366aa300de8",
+        "receive_time_nondecreasing": true
+      },
+      {
+        "episode_id": "B-018",
+        "sent": 400,
+        "received": 399,
+        "complete": false,
+        "missing": [
+          0
+        ],
+        "duplicates": {},
+        "signature": true,
+        "delay_ms": {
+          "min": 0.066495,
+          "median": 1120.114603,
+          "max": 5100.047455
+        },
+        "step_1_delay_ms": 5100.047455,
+        "steps_1_256_receive_span_ms": 0.113551,
+        "steps_257_399_median_delay_ms": 0.087871,
+        "matched_count_at_first_send": 1,
+        "match_before_first_send_ms": 288.969122,
+        "graph_ready_before_first_send_ms": 200.064126,
+        "explicit_match_wait_ms": 0.002783,
+        "send_duration_s": 7.980056543,
+        "send_gap_ms": {
+          "min": 19.880452,
+          "max": 20.117455
+        },
+        "mcap_sha256": "8b10791d80b8d93a9a920fc5e1892941fa57e77a5c5c031c277fd8b919869031",
+        "receive_time_nondecreasing": true
+      },
+      {
+        "episode_id": "B-019",
+        "sent": 400,
+        "received": 399,
+        "complete": false,
+        "missing": [
+          0
+        ],
+        "duplicates": {},
+        "signature": true,
+        "delay_ms": {
+          "min": 0.026784,
+          "median": 1120.122682,
+          "max": 5100.081915
+        },
+        "step_1_delay_ms": 5100.081915,
+        "steps_1_256_receive_span_ms": 0.067319,
+        "steps_257_399_median_delay_ms": 0.085218,
+        "matched_count_at_first_send": 1,
+        "match_before_first_send_ms": 287.952799,
+        "graph_ready_before_first_send_ms": 200.071162,
+        "explicit_match_wait_ms": 0.004789,
+        "send_duration_s": 7.9800571,
+        "send_gap_ms": {
+          "min": 19.883002,
+          "max": 20.092032
+        },
+        "mcap_sha256": "97b081cbac95f1f060856782a8d7199c8637474ed14e68b70f948291a1ce0830",
+        "receive_time_nondecreasing": true
+      },
+      {
+        "episode_id": "B-020",
+        "sent": 400,
+        "received": 399,
+        "complete": false,
+        "missing": [
+          0
+        ],
+        "duplicates": {},
+        "signature": true,
+        "delay_ms": {
+          "min": 0.02906,
+          "median": 1120.147093,
+          "max": 5100.09754
+        },
+        "step_1_delay_ms": 5100.09754,
+        "steps_1_256_receive_span_ms": 0.081483,
+        "steps_257_399_median_delay_ms": 0.086501,
+        "matched_count_at_first_send": 1,
+        "match_before_first_send_ms": 287.589286,
+        "graph_ready_before_first_send_ms": 200.067096,
+        "explicit_match_wait_ms": 0.003771,
+        "send_duration_s": 7.980056462,
+        "send_gap_ms": {
+          "min": 19.864072,
+          "max": 20.143361
+        },
+        "mcap_sha256": "399cf5e4406986685081c5d2cc6ae6e8ca371e16089a217b9bc3e9b99108d5f1",
+        "receive_time_nondecreasing": true
+      }
+    ]
+  },
+  "C": {
+    "episodes": 20,
+    "complete_episodes": 20,
+    "sent_messages": 8000,
+    "received_messages": 8000,
+    "signature_episodes": [],
+    "max_receive_delay_ms": 0.279788,
+    "all_matched_before_first_send": true,
+    "episodes_detail": [
+      {
+        "episode_id": "C-001",
+        "sent": 400,
+        "received": 400,
+        "complete": true,
+        "missing": [],
+        "duplicates": {},
+        "signature": false,
+        "delay_ms": {
+          "min": 0.047095,
+          "median": 0.0880805,
+          "max": 0.171357
+        },
+        "step_1_delay_ms": 0.09973,
+        "steps_1_256_receive_span_ms": 5099.998366,
+        "steps_257_399_median_delay_ms": 0.082927,
+        "matched_count_at_first_send": 1,
+        "match_before_first_send_ms": 289.84718,
+        "graph_ready_before_first_send_ms": 200.085056,
+        "explicit_match_wait_ms": 0.008571,
+        "send_duration_s": 7.980059254,
+        "send_gap_ms": {
+          "min": 19.881404,
+          "max": 20.148049
+        },
+        "mcap_sha256": "ba35a81a6abcbb66b4167a540a5c4e857574c1e3d0d0bd66157fd26f7c273912",
+        "receive_time_nondecreasing": true
+      },
+      {
+        "episode_id": "C-002",
+        "sent": 400,
+        "received": 400,
+        "complete": true,
+        "missing": [],
+        "duplicates": {},
+        "signature": false,
+        "delay_ms": {
+          "min": 0.02644,
+          "median": 0.08438399999999999,
+          "max": 0.246985
+        },
+        "step_1_delay_ms": 0.119569,
+        "steps_1_256_receive_span_ms": 5099.974894,
+        "steps_257_399_median_delay_ms": 0.082441,
+        "matched_count_at_first_send": 1,
+        "match_before_first_send_ms": 355.993978,
+        "graph_ready_before_first_send_ms": 200.077547,
+        "explicit_match_wait_ms": 0.00909,
+        "send_duration_s": 7.980126327,
+        "send_gap_ms": {
+          "min": 19.854373,
+          "max": 20.114244
+        },
+        "mcap_sha256": "7817d85030bccbbefc5a7bb640e35c91e2c6afa1f30783b3da5d63d154448d8e",
+        "receive_time_nondecreasing": true
+      },
+      {
+        "episode_id": "C-003",
+        "sent": 400,
+        "received": 400,
+        "complete": true,
+        "missing": [],
+        "duplicates": {},
+        "signature": false,
+        "delay_ms": {
+          "min": 0.045508,
+          "median": 0.0891015,
+          "max": 0.20408
+        },
+        "step_1_delay_ms": 0.115308,
+        "steps_1_256_receive_span_ms": 5099.97236,
+        "steps_257_399_median_delay_ms": 0.08739,
+        "matched_count_at_first_send": 1,
+        "match_before_first_send_ms": 287.76086,
+        "graph_ready_before_first_send_ms": 200.06575,
+        "explicit_match_wait_ms": 0.003329,
+        "send_duration_s": 7.980057687,
+        "send_gap_ms": {
+          "min": 19.856821,
+          "max": 20.127297
+        },
+        "mcap_sha256": "e9800d40fccae1729af76ebdfd930a34b2d5923cb82cefd02bf86c2328a51d97",
+        "receive_time_nondecreasing": true
+      },
+      {
+        "episode_id": "C-004",
+        "sent": 400,
+        "received": 400,
+        "complete": true,
+        "missing": [],
+        "duplicates": {},
+        "signature": false,
+        "delay_ms": {
+          "min": 0.048818,
+          "median": 0.0886425,
+          "max": 0.134747
+        },
+        "step_1_delay_ms": 0.10757,
+        "steps_1_256_receive_span_ms": 5099.990832,
+        "steps_257_399_median_delay_ms": 0.092714,
+        "matched_count_at_first_send": 1,
+        "match_before_first_send_ms": 287.379612,
+        "graph_ready_before_first_send_ms": 200.066615,
+        "explicit_match_wait_ms": 0.003893,
+        "send_duration_s": 7.980058789,
+        "send_gap_ms": {
+          "min": 19.923025,
+          "max": 20.07471
+        },
+        "mcap_sha256": "15cb7cb9209f8f1345bc48121abd6fd5d69110c83916b0e32e3a8d2c5b332929",
+        "receive_time_nondecreasing": true
+      },
+      {
+        "episode_id": "C-005",
+        "sent": 400,
+        "received": 400,
+        "complete": true,
+        "missing": [],
+        "duplicates": {},
+        "signature": false,
+        "delay_ms": {
+          "min": 0.062207,
+          "median": 0.091525,
+          "max": 0.245885
+        },
+        "step_1_delay_ms": 0.092204,
+        "steps_1_256_receive_span_ms": 5100.005409,
+        "steps_257_399_median_delay_ms": 0.091895,
+        "matched_count_at_first_send": 1,
+        "match_before_first_send_ms": 287.68132,
+        "graph_ready_before_first_send_ms": 200.077418,
+        "explicit_match_wait_ms": 0.004354,
+        "send_duration_s": 7.980058502,
+        "send_gap_ms": {
+          "min": 19.800571,
+          "max": 20.163683
+        },
+        "mcap_sha256": "bf2f6d2f88a934be2b3a25545a348f9cdb6b2366ee78fd030a7d5014bcbc6c57",
+        "receive_time_nondecreasing": true
+      },
+      {
+        "episode_id": "C-006",
+        "sent": 400,
+        "received": 400,
+        "complete": true,
+        "missing": [],
+        "duplicates": {},
+        "signature": false,
+        "delay_ms": {
+          "min": 0.027993,
+          "median": 0.08665600000000001,
+          "max": 0.196482
+        },
+        "step_1_delay_ms": 0.066854,
+        "steps_1_256_receive_span_ms": 5100.017763,
+        "steps_257_399_median_delay_ms": 0.088279,
+        "matched_count_at_first_send": 1,
+        "match_before_first_send_ms": 287.723773,
+        "graph_ready_before_first_send_ms": 200.070631,
+        "explicit_match_wait_ms": 0.005968,
+        "send_duration_s": 7.980056619,
+        "send_gap_ms": {
+          "min": 19.895937,
+          "max": 20.103204
+        },
+        "mcap_sha256": "66d9a4f035e0316a8ca0a9209211167c8d6470911923d1a155998ce4a9090844",
+        "receive_time_nondecreasing": true
+      },
+      {
+        "episode_id": "C-007",
+        "sent": 400,
+        "received": 400,
+        "complete": true,
+        "missing": [],
+        "duplicates": {},
+        "signature": false,
+        "delay_ms": {
+          "min": 0.057586,
+          "median": 0.08677599999999999,
+          "max": 0.192682
+        },
+        "step_1_delay_ms": 0.064855,
+        "steps_1_256_receive_span_ms": 5099.969902,
+        "steps_257_399_median_delay_ms": 0.084593,
+        "matched_count_at_first_send": 1,
+        "match_before_first_send_ms": 356.944181,
+        "graph_ready_before_first_send_ms": 200.111416,
+        "explicit_match_wait_ms": 0.01896,
+        "send_duration_s": 7.980045749,
+        "send_gap_ms": {
+          "min": 19.877602,
+          "max": 20.119498
+        },
+        "mcap_sha256": "9aa730cccd0d664725ea6e1e4bc59d39914f87d601b759e683941550e5fb92c7",
+        "receive_time_nondecreasing": true
+      },
+      {
+        "episode_id": "C-008",
+        "sent": 400,
+        "received": 400,
+        "complete": true,
+        "missing": [],
+        "duplicates": {},
+        "signature": false,
+        "delay_ms": {
+          "min": 0.029195,
+          "median": 0.088267,
+          "max": 0.131461
+        },
+        "step_1_delay_ms": 0.079015,
+        "steps_1_256_receive_span_ms": 5100.001912,
+        "steps_257_399_median_delay_ms": 0.08755,
+        "matched_count_at_first_send": 1,
+        "match_before_first_send_ms": 287.470245,
+        "graph_ready_before_first_send_ms": 200.067476,
+        "explicit_match_wait_ms": 0.003859,
+        "send_duration_s": 7.980066226,
+        "send_gap_ms": {
+          "min": 19.904682,
+          "max": 20.08508
+        },
+        "mcap_sha256": "6307bd42ee78b2b44c09b5b9a752c1e06399fc607fe0cca67f71906a502ed222",
+        "receive_time_nondecreasing": true
+      },
+      {
+        "episode_id": "C-009",
+        "sent": 400,
+        "received": 400,
+        "complete": true,
+        "missing": [],
+        "duplicates": {},
+        "signature": false,
+        "delay_ms": {
+          "min": 0.055053,
+          "median": 0.08725250000000001,
+          "max": 0.172342
+        },
+        "step_1_delay_ms": 0.110564,
+        "steps_1_256_receive_span_ms": 5100.013648,
+        "steps_257_399_median_delay_ms": 0.086451,
+        "matched_count_at_first_send": 1,
+        "match_before_first_send_ms": 287.919806,
+        "graph_ready_before_first_send_ms": 200.037792,
+        "explicit_match_wait_ms": 0.004851,
+        "send_duration_s": 7.980089674,
+        "send_gap_ms": {
+          "min": 19.8601,
+          "max": 20.137962
+        },
+        "mcap_sha256": "644c3653e7f2341b1e76b3311cc7f0f7bf255a2bd599d3d2332e062d7aab2e3f",
+        "receive_time_nondecreasing": true
+      },
+      {
+        "episode_id": "C-010",
+        "sent": 400,
+        "received": 400,
+        "complete": true,
+        "missing": [],
+        "duplicates": {},
+        "signature": false,
+        "delay_ms": {
+          "min": 0.034471,
+          "median": 0.0871805,
+          "max": 0.148546
+        },
+        "step_1_delay_ms": 0.080818,
+        "steps_1_256_receive_span_ms": 5100.006167,
+        "steps_257_399_median_delay_ms": 0.085343,
+        "matched_count_at_first_send": 1,
+        "match_before_first_send_ms": 287.223361,
+        "graph_ready_before_first_send_ms": 200.068575,
+        "explicit_match_wait_ms": 0.005012,
+        "send_duration_s": 7.980056511,
+        "send_gap_ms": {
+          "min": 19.895354,
+          "max": 20.107503
+        },
+        "mcap_sha256": "d893cc5167d7d5bc01f0181a2c9142148648cfc57d53cd77107da8fa2c9159a4",
+        "receive_time_nondecreasing": true
+      },
+      {
+        "episode_id": "C-011",
+        "sent": 400,
+        "received": 400,
+        "complete": true,
+        "missing": [],
+        "duplicates": {},
+        "signature": false,
+        "delay_ms": {
+          "min": 0.033438,
+          "median": 0.0844385,
+          "max": 0.222311
+        },
+        "step_1_delay_ms": 0.080807,
+        "steps_1_256_receive_span_ms": 5099.998439,
+        "steps_257_399_median_delay_ms": 0.082685,
+        "matched_count_at_first_send": 1,
+        "match_before_first_send_ms": 355.100281,
+        "graph_ready_before_first_send_ms": 200.06375,
+        "explicit_match_wait_ms": 0.002989,
+        "send_duration_s": 7.980100992,
+        "send_gap_ms": {
+          "min": 19.910716,
+          "max": 20.094805
+        },
+        "mcap_sha256": "0e54f676b023ed0ebe8904f9beb32422027eb1cc67d39fb33c1f6e8b5b235683",
+        "receive_time_nondecreasing": true
+      },
+      {
+        "episode_id": "C-012",
+        "sent": 400,
+        "received": 400,
+        "complete": true,
+        "missing": [],
+        "duplicates": {},
+        "signature": false,
+        "delay_ms": {
+          "min": 0.021749,
+          "median": 0.0884635,
+          "max": 0.154284
+        },
+        "step_1_delay_ms": 0.0847,
+        "steps_1_256_receive_span_ms": 5099.992012,
+        "steps_257_399_median_delay_ms": 0.088995,
+        "matched_count_at_first_send": 1,
+        "match_before_first_send_ms": 287.480377,
+        "graph_ready_before_first_send_ms": 200.071701,
+        "explicit_match_wait_ms": 0.005748,
+        "send_duration_s": 7.980060198,
+        "send_gap_ms": {
+          "min": 19.906457,
+          "max": 20.091779
+        },
+        "mcap_sha256": "6844df72e654ec36e2c0adeb272bdba7ee696825135c3cffd1394d90456a076d",
+        "receive_time_nondecreasing": true
+      },
+      {
+        "episode_id": "C-013",
+        "sent": 400,
+        "received": 400,
+        "complete": true,
+        "missing": [],
+        "duplicates": {},
+        "signature": false,
+        "delay_ms": {
+          "min": 0.026096,
+          "median": 0.083087,
+          "max": 0.138835
+        },
+        "step_1_delay_ms": 0.109149,
+        "steps_1_256_receive_span_ms": 5099.837688,
+        "steps_257_399_median_delay_ms": 0.08798,
+        "matched_count_at_first_send": 1,
+        "match_before_first_send_ms": 288.254359,
+        "graph_ready_before_first_send_ms": 200.187719,
+        "explicit_match_wait_ms": 0.015587,
+        "send_duration_s": 7.980119462,
+        "send_gap_ms": {
+          "min": 19.856421,
+          "max": 20.200353
+        },
+        "mcap_sha256": "a56283ad11e4b0633c1cf91d85534b09dc5abe091c898424bc1e0220eda5fd9a",
+        "receive_time_nondecreasing": true
+      },
+      {
+        "episode_id": "C-014",
+        "sent": 400,
+        "received": 400,
+        "complete": true,
+        "missing": [],
+        "duplicates": {},
+        "signature": false,
+        "delay_ms": {
+          "min": 0.057159,
+          "median": 0.087806,
+          "max": 0.16089
+        },
+        "step_1_delay_ms": 0.084385,
+        "steps_1_256_receive_span_ms": 5099.998758,
+        "steps_257_399_median_delay_ms": 0.087975,
+        "matched_count_at_first_send": 1,
+        "match_before_first_send_ms": 288.23604,
+        "graph_ready_before_first_send_ms": 200.068752,
+        "explicit_match_wait_ms": 0.005364,
+        "send_duration_s": 7.980058593,
+        "send_gap_ms": {
+          "min": 19.89441,
+          "max": 20.096683
+        },
+        "mcap_sha256": "f72558f3c85938ab7642a11d57353d031f58585e0c61c0f7cb40b283b0754c4f",
+        "receive_time_nondecreasing": true
+      },
+      {
+        "episode_id": "C-015",
+        "sent": 400,
+        "received": 400,
+        "complete": true,
+        "missing": [],
+        "duplicates": {},
+        "signature": false,
+        "delay_ms": {
+          "min": 0.052382,
+          "median": 0.0879145,
+          "max": 0.175618
+        },
+        "step_1_delay_ms": 0.094634,
+        "steps_1_256_receive_span_ms": 5100.041592,
+        "steps_257_399_median_delay_ms": 0.087097,
+        "matched_count_at_first_send": 1,
+        "match_before_first_send_ms": 287.93321,
+        "graph_ready_before_first_send_ms": 200.079149,
+        "explicit_match_wait_ms": 0.007016,
+        "send_duration_s": 7.980057301,
+        "send_gap_ms": {
+          "min": 19.921793,
+          "max": 20.077984
+        },
+        "mcap_sha256": "489eb43a3669ec63c149cc284e4fd08087bb82a2cb328052d37949276923b3c1",
+        "receive_time_nondecreasing": true
+      },
+      {
+        "episode_id": "C-016",
+        "sent": 400,
+        "received": 400,
+        "complete": true,
+        "missing": [],
+        "duplicates": {},
+        "signature": false,
+        "delay_ms": {
+          "min": 0.052809,
+          "median": 0.088285,
+          "max": 0.138205
+        },
+        "step_1_delay_ms": 0.083275,
+        "steps_1_256_receive_span_ms": 5100.027615,
+        "steps_257_399_median_delay_ms": 0.088452,
+        "matched_count_at_first_send": 1,
+        "match_before_first_send_ms": 287.775835,
+        "graph_ready_before_first_send_ms": 200.069428,
+        "explicit_match_wait_ms": 0.004549,
+        "send_duration_s": 7.980057867,
+        "send_gap_ms": {
+          "min": 19.924187,
+          "max": 20.06785
+        },
+        "mcap_sha256": "d66c91a2785f1beadfa5095aa1108af9f414541fca977cd5354a79ee3ddaaeae",
+        "receive_time_nondecreasing": true
+      },
+      {
+        "episode_id": "C-017",
+        "sent": 400,
+        "received": 400,
+        "complete": true,
+        "missing": [],
+        "duplicates": {},
+        "signature": false,
+        "delay_ms": {
+          "min": 0.024145,
+          "median": 0.086601,
+          "max": 0.169011
+        },
+        "step_1_delay_ms": 0.083929,
+        "steps_1_256_receive_span_ms": 5100.046512,
+        "steps_257_399_median_delay_ms": 0.087976,
+        "matched_count_at_first_send": 1,
+        "match_before_first_send_ms": 356.065718,
+        "graph_ready_before_first_send_ms": 200.065855,
+        "explicit_match_wait_ms": 0.0043,
+        "send_duration_s": 7.980058356,
+        "send_gap_ms": {
+          "min": 19.934521,
+          "max": 20.066288
+        },
+        "mcap_sha256": "3550efe068d7e3a62440a1728320b53828fca1881326694d8a9131dff981998b",
+        "receive_time_nondecreasing": true
+      },
+      {
+        "episode_id": "C-018",
+        "sent": 400,
+        "received": 400,
+        "complete": true,
+        "missing": [],
+        "duplicates": {},
+        "signature": false,
+        "delay_ms": {
+          "min": 0.046659,
+          "median": 0.089391,
+          "max": 0.159032
+        },
+        "step_1_delay_ms": 0.096472,
+        "steps_1_256_receive_span_ms": 5099.999671,
+        "steps_257_399_median_delay_ms": 0.089891,
+        "matched_count_at_first_send": 1,
+        "match_before_first_send_ms": 287.94349,
+        "graph_ready_before_first_send_ms": 200.066434,
+        "explicit_match_wait_ms": 0.003712,
+        "send_duration_s": 7.980072175,
+        "send_gap_ms": {
+          "min": 19.868383,
+          "max": 20.112571
+        },
+        "mcap_sha256": "f7a4fba053f21e4bc23f19eb59c9a4505da5552a755905da3a968a6f1f451a9a",
+        "receive_time_nondecreasing": true
+      },
+      {
+        "episode_id": "C-019",
+        "sent": 400,
+        "received": 400,
+        "complete": true,
+        "missing": [],
+        "duplicates": {},
+        "signature": false,
+        "delay_ms": {
+          "min": 0.054359,
+          "median": 0.08901,
+          "max": 0.279788
+        },
+        "step_1_delay_ms": 0.076865,
+        "steps_1_256_receive_span_ms": 5100.024866,
+        "steps_257_399_median_delay_ms": 0.086443,
+        "matched_count_at_first_send": 1,
+        "match_before_first_send_ms": 287.698133,
+        "graph_ready_before_first_send_ms": 200.072996,
+        "explicit_match_wait_ms": 0.00656,
+        "send_duration_s": 7.980054618,
+        "send_gap_ms": {
+          "min": 19.907802,
+          "max": 20.094555
+        },
+        "mcap_sha256": "5bfd45996c504f03b385e8e59bace6b1cdfa5f384de9a21df648e08103e2c191",
+        "receive_time_nondecreasing": true
+      },
+      {
+        "episode_id": "C-020",
+        "sent": 400,
+        "received": 400,
+        "complete": true,
+        "missing": [],
+        "duplicates": {},
+        "signature": false,
+        "delay_ms": {
+          "min": 0.056407,
+          "median": 0.0889895,
+          "max": 0.239398
+        },
+        "step_1_delay_ms": 0.093618,
+        "steps_1_256_receive_span_ms": 5099.958551,
+        "steps_257_399_median_delay_ms": 0.088369,
+        "matched_count_at_first_send": 1,
+        "match_before_first_send_ms": 288.203294,
+        "graph_ready_before_first_send_ms": 200.06778,
+        "explicit_match_wait_ms": 0.003759,
+        "send_duration_s": 7.98006058,
+        "send_gap_ms": {
+          "min": 19.861654,
+          "max": 20.137461
+        },
+        "mcap_sha256": "d67cc85ef75e0373062666ed5ddb8bf07e7547f075494162518e151500b4ba48",
+        "receive_time_nondecreasing": true
+      }
+    ]
+  }
+}

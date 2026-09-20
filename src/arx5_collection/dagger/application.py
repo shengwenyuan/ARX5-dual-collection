@@ -269,6 +269,7 @@ class TakeoverDryRunApplication:
         with termination_as_interrupt():
             require_no_action_publishers()
             with RosAuthorityEventPublisher() as events, self.session:
+                self.session.backend.recording_publisher = events
                 gateway = NoActionGateway()
                 controller = TakeoverController(
                     gateway=gateway,
@@ -369,6 +370,7 @@ class TakeoverApplication:
             width=self.settings.checkpoint_profile.input.width,
             height=self.settings.checkpoint_profile.input.height,
         ) as observations, RosAuthorityEventPublisher() as events:
+            self.session.backend.recording_publisher = events
             policy = AsyncPi05PolicyClient(
                 session_id=self.spec.session_id,
                 prompt=self.settings.prompt,

@@ -30,6 +30,7 @@ def test_application_wires_hooks_and_closes_policy_and_executor_on_exit(tmp_path
         mocks["open_takeover_action_runtime"].return_value.__enter__.return_value = actions
         def loop(*args, **kwargs):
             wiring = app.session.create_runtime.call_args.kwargs
+            assert app.session.backend.recording_publisher is mocks["RosCommandPublisher"].return_value.__enter__.return_value
             assert wiring["metadata_context_provider"].__self__ is wiring["recording_stopping_hook"].__self__
             wiring["recording_started_hook"](RecordingStarted("ep", 0))
             if loop_error:

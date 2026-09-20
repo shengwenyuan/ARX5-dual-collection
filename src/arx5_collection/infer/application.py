@@ -123,6 +123,7 @@ class InferApplication:
             arena_path=snapshot.arena_path, width=settings.checkpoint_profile.input.width,
             height=settings.checkpoint_profile.input.height,
         ) as observations, RosCommandPublisher() as publisher:
+            self.session.backend.recording_publisher = publisher
             policy = AsyncPi05PolicyClient(
                 session_id=self.spec.session_id, prompt=settings.prompt,
                 checkpoint_sha256=settings.checkpoint_sha256, observations=observations,

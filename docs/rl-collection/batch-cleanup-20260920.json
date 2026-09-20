@@ -1,0 +1,295 @@
+{
+  "deletion": {
+    "deleted_at": "2026-09-20T14:18:14.521085+00:00",
+    "deleted": [
+      {
+        "path": "/home/lenovo/swy/reports/2026-09-20/slot4-infer-acceptance/20260920T123417544683Z-b670a9ef",
+        "episode_id": "20260920T123417544683Z-b670a9ef",
+        "outcome": "success",
+        "duration_s": 8.685044997
+      },
+      {
+        "path": "/home/lenovo/swy/reports/2026-09-20/slot4-infer-acceptance/infer_fail/20260920T123441685634Z-1478a221",
+        "episode_id": "20260920T123441685634Z-1478a221",
+        "outcome": "fail",
+        "duration_s": 8.078890352
+      },
+      {
+        "path": "/home/lenovo/swy/reports/2026-09-20/slot4-infer-acceptance/infer_fail/20260920T123502979569Z-6c341f3c",
+        "episode_id": "20260920T123502979569Z-6c341f3c",
+        "outcome": "fail",
+        "duration_s": 8.10780702
+      },
+      {
+        "path": "/home/lenovo/swy/reports/2026-09-20/slot4-infer-acceptance/infer_fail/20260920T123520557087Z-363e5037",
+        "episode_id": "20260920T123520557087Z-363e5037",
+        "outcome": "fail",
+        "duration_s": 13.372719607
+      },
+      {
+        "path": "/home/lenovo/swy/reports/2026-09-20/slot4-infer-acceptance/infer_fail/20260920T123549613496Z-ccbda5b9",
+        "episode_id": "20260920T123549613496Z-ccbda5b9",
+        "outcome": "fail",
+        "duration_s": 8.797821213
+      },
+      {
+        "path": "/home/lenovo/swy/reports/2026-09-20/slot4-infer-acceptance/infer_fail/20260920T123610901408Z-9ccc3b87",
+        "episode_id": "20260920T123610901408Z-9ccc3b87",
+        "outcome": "fail",
+        "duration_s": 7.668058649
+      }
+    ],
+    "sessions": {
+      "20260920T122828Z": {
+        "episodes": 13,
+        "outcomes": {
+          "success": 2,
+          "fail": 11
+        },
+        "success_rate": 0.15384615384615385,
+        "duration_s": 110.563778557,
+        "success_duration_s": 16.434695603
+      },
+      "20260920T140737Z": {
+        "episodes": 10,
+        "outcomes": {
+          "success": 4,
+          "fail": 6
+        },
+        "success_rate": 0.4,
+        "duration_s": 86.554343993,
+        "success_duration_s": 35.527946663
+      }
+    },
+    "total": {
+      "episodes": 23,
+      "outcomes": {
+        "success": 6,
+        "fail": 17
+      },
+      "success_rate": 0.2608695652173913,
+      "duration_s": 197.11812255,
+      "success_duration_s": 51.962642266
+    }
+  },
+  "merge": {
+    "timestamp": "2026-09-20T14:20:59.084232+00:00",
+    "root": "/home/lenovo/swy/reports/2026-09-20/slot4-infer-acceptance",
+    "moved": [
+      {
+        "from": "/home/lenovo/swy/reports/2026-09-20/slot4-infer-acceptance/infer_fail/20260920T122907135492Z-8695baa8",
+        "to": "/home/lenovo/swy/reports/2026-09-20/slot4-infer-acceptance/20260920T122907135492Z-8695baa8"
+      },
+      {
+        "from": "/home/lenovo/swy/reports/2026-09-20/slot4-infer-acceptance/infer_fail/20260920T122937016044Z-28e442dd",
+        "to": "/home/lenovo/swy/reports/2026-09-20/slot4-infer-acceptance/20260920T122937016044Z-28e442dd"
+      },
+      {
+        "from": "/home/lenovo/swy/reports/2026-09-20/slot4-infer-acceptance/infer_fail/20260920T123003043664Z-f14fdaf4",
+        "to": "/home/lenovo/swy/reports/2026-09-20/slot4-infer-acceptance/20260920T123003043664Z-f14fdaf4"
+      },
+      {
+        "from": "/home/lenovo/swy/reports/2026-09-20/slot4-infer-acceptance/infer_fail/20260920T123100106771Z-717f637f",
+        "to": "/home/lenovo/swy/reports/2026-09-20/slot4-infer-acceptance/20260920T123100106771Z-717f637f"
+      },
+      {
+        "from": "/home/lenovo/swy/reports/2026-09-20/slot4-infer-acceptance/infer_fail/20260920T123122422432Z-2ac37b94",
+        "to": "/home/lenovo/swy/reports/2026-09-20/slot4-infer-acceptance/20260920T123122422432Z-2ac37b94"
+      },
+      {
+        "from": "/home/lenovo/swy/reports/2026-09-20/slot4-infer-acceptance/infer_fail/20260920T123148084034Z-b36481dd",
+        "to": "/home/lenovo/swy/reports/2026-09-20/slot4-infer-acceptance/20260920T123148084034Z-b36481dd"
+      },
+      {
+        "from": "/home/lenovo/swy/reports/2026-09-20/slot4-infer-acceptance/infer_fail/20260920T123208296508Z-4d310dff",
+        "to": "/home/lenovo/swy/reports/2026-09-20/slot4-infer-acceptance/20260920T123208296508Z-4d310dff"
+      },
+      {
+        "from": "/home/lenovo/swy/reports/2026-09-20/slot4-infer-acceptance/infer_fail/20260920T123240204649Z-3c25bf25",
+        "to": "/home/lenovo/swy/reports/2026-09-20/slot4-infer-acceptance/20260920T123240204649Z-3c25bf25"
+      },
+      {
+        "from": "/home/lenovo/swy/reports/2026-09-20/slot4-infer-acceptance/infer_fail/20260920T123324740552Z-a3d13824",
+        "to": "/home/lenovo/swy/reports/2026-09-20/slot4-infer-acceptance/20260920T123324740552Z-a3d13824"
+      },
+      {
+        "from": "/home/lenovo/swy/reports/2026-09-20/slot4-infer-acceptance/infer_fail/20260920T123344109218Z-e6fc261c",
+        "to": "/home/lenovo/swy/reports/2026-09-20/slot4-infer-acceptance/20260920T123344109218Z-e6fc261c"
+      },
+      {
+        "from": "/home/lenovo/swy/reports/2026-09-20/slot4-infer-acceptance/infer_fail/20260920T123401250410Z-5f11a64c",
+        "to": "/home/lenovo/swy/reports/2026-09-20/slot4-infer-acceptance/20260920T123401250410Z-5f11a64c"
+      },
+      {
+        "from": "/home/lenovo/swy/reports/2026-09-20/slot4-infer-acceptance/infer_fail/20260920T140823886712Z-56f25ee9",
+        "to": "/home/lenovo/swy/reports/2026-09-20/slot4-infer-acceptance/20260920T140823886712Z-56f25ee9"
+      },
+      {
+        "from": "/home/lenovo/swy/reports/2026-09-20/slot4-infer-acceptance/infer_fail/20260920T140859418321Z-c834b103",
+        "to": "/home/lenovo/swy/reports/2026-09-20/slot4-infer-acceptance/20260920T140859418321Z-c834b103"
+      },
+      {
+        "from": "/home/lenovo/swy/reports/2026-09-20/slot4-infer-acceptance/infer_fail/20260920T140919484219Z-f41b8190",
+        "to": "/home/lenovo/swy/reports/2026-09-20/slot4-infer-acceptance/20260920T140919484219Z-f41b8190"
+      },
+      {
+        "from": "/home/lenovo/swy/reports/2026-09-20/slot4-infer-acceptance/infer_fail/20260920T141006308264Z-57fbbf52",
+        "to": "/home/lenovo/swy/reports/2026-09-20/slot4-infer-acceptance/20260920T141006308264Z-57fbbf52"
+      },
+      {
+        "from": "/home/lenovo/swy/reports/2026-09-20/slot4-infer-acceptance/infer_fail/20260920T141038190891Z-f4b39251",
+        "to": "/home/lenovo/swy/reports/2026-09-20/slot4-infer-acceptance/20260920T141038190891Z-f4b39251"
+      },
+      {
+        "from": "/home/lenovo/swy/reports/2026-09-20/slot4-infer-acceptance/infer_fail/20260920T141122108083Z-1966f5d5",
+        "to": "/home/lenovo/swy/reports/2026-09-20/slot4-infer-acceptance/20260920T141122108083Z-1966f5d5"
+      }
+    ],
+    "episodes": 23,
+    "outcomes": {
+      "success": 6,
+      "fail": 17
+    },
+    "duration_s": 197.11812255,
+    "verified_unchanged": {
+      "20260920T122844722684Z-864ee434": {
+        "metadata_sha256": "5d466e7f4cda631fc7002116333ad81ca75421ab92cb351f0d3c061809b0e9bb",
+        "mcap_inode": 85992772,
+        "mcap_bytes": 947946044,
+        "outcome": "success"
+      },
+      "20260920T123302514811Z-23eff51f": {
+        "metadata_sha256": "8947334f4188ce06546c4e457ff3225964bfc85ebcb00aec41882df52f7da6d3",
+        "mcap_inode": 85992800,
+        "mcap_bytes": 825154998,
+        "outcome": "success"
+      },
+      "20260920T140841699377Z-35a52431": {
+        "metadata_sha256": "3063b452edd74431de1488b7d44c2dafe9271d2e01317fade03cf28d65c6dc2f",
+        "mcap_inode": 85995424,
+        "mcap_bytes": 785902551,
+        "outcome": "success"
+      },
+      "20260920T140944517305Z-a3721315": {
+        "metadata_sha256": "2fc495185dacb9de1ae1834bd75f52dc5e463b7df17bf6d7d1f83886cbdc1950",
+        "mcap_inode": 85995433,
+        "mcap_bytes": 938116941,
+        "outcome": "success"
+      },
+      "20260920T141056475320Z-b23cbe0e": {
+        "metadata_sha256": "663cdd0e50afa760e04390f53585955b54be4902e179309bea1e65a050aa2d6c",
+        "mcap_inode": 85995442,
+        "mcap_bytes": 991334534,
+        "outcome": "success"
+      },
+      "20260920T141142203209Z-0aeb16ca": {
+        "metadata_sha256": "9d887daed618263f97ca042e1f90d01864e7af25d5c6973abe08c747ec84623f",
+        "mcap_inode": 85995448,
+        "mcap_bytes": 1004422426,
+        "outcome": "success"
+      },
+      "20260920T122907135492Z-8695baa8": {
+        "metadata_sha256": "91220d6a452bf5641a746bff14f577cc47e1eb62bf6926101ea15eed66e2cd36",
+        "mcap_inode": 85992775,
+        "mcap_bytes": 1320054020,
+        "outcome": "fail"
+      },
+      "20260920T122937016044Z-28e442dd": {
+        "metadata_sha256": "761530342603cbf8771a65869713642a29094f4fc302edbfa5a06e9537991c00",
+        "mcap_inode": 85992779,
+        "mcap_bytes": 874206478,
+        "outcome": "fail"
+      },
+      "20260920T123003043664Z-f14fdaf4": {
+        "metadata_sha256": "024757ca59cdc0e4fe96edfcc64fc69a1c5cc12f5612122ba9ef955215aeea2c",
+        "mcap_inode": 85992782,
+        "mcap_bytes": 1009352975,
+        "outcome": "fail"
+      },
+      "20260920T123100106771Z-717f637f": {
+        "metadata_sha256": "0bb9f6603204c2aa2eb0ca23c4f82e3bb9e91ba12f28870e3ea70a69390350f9",
+        "mcap_inode": 85992785,
+        "mcap_bytes": 914720778,
+        "outcome": "fail"
+      },
+      "20260920T123122422432Z-2ac37b94": {
+        "metadata_sha256": "e92b220b9ebf478bf393b908222351bd508967429f3829610799dc60f7943d3e",
+        "mcap_inode": 85992788,
+        "mcap_bytes": 895085807,
+        "outcome": "fail"
+      },
+      "20260920T123148084034Z-b36481dd": {
+        "metadata_sha256": "208795e1a5ecf2f0a9ab73532da05a980f202f824fffa46ecc8a325512acdbc4",
+        "mcap_inode": 85992791,
+        "mcap_bytes": 873108823,
+        "outcome": "fail"
+      },
+      "20260920T123208296508Z-4d310dff": {
+        "metadata_sha256": "3f61e46a0adf76262869d78569be60a694081d489b1b710b928c9d845f5a9b63",
+        "mcap_inode": 85992794,
+        "mcap_bytes": 1033958490,
+        "outcome": "fail"
+      },
+      "20260920T123240204649Z-3c25bf25": {
+        "metadata_sha256": "2c97594c2031b797b2df6b64403b68f034d6f3f781c8bcd1037f6bee35156970",
+        "mcap_inode": 85992797,
+        "mcap_bytes": 958991293,
+        "outcome": "fail"
+      },
+      "20260920T123324740552Z-a3d13824": {
+        "metadata_sha256": "8abc1e147819072f2e33f8f91f7113a9b7652eca0683f943f8ce7b2ab36462f0",
+        "mcap_inode": 85992803,
+        "mcap_bytes": 755169333,
+        "outcome": "fail"
+      },
+      "20260920T123344109218Z-e6fc261c": {
+        "metadata_sha256": "d6b0db51d4695fca9c59878b8edbe6095b3f01aa6f89d39d1e51db8077872021",
+        "mcap_inode": 85992806,
+        "mcap_bytes": 707282221,
+        "outcome": "fail"
+      },
+      "20260920T123401250410Z-5f11a64c": {
+        "metadata_sha256": "f0a61cc0b81053405d7d13647a66a585cc6cc94cadf482d6a660b1c4938fb3fd",
+        "mcap_inode": 85992809,
+        "mcap_bytes": 901347907,
+        "outcome": "fail"
+      },
+      "20260920T140823886712Z-56f25ee9": {
+        "metadata_sha256": "85ecacea8ff23895841520136b687776f7ad7a581b742b43ebf94336f3d48389",
+        "mcap_inode": 85995421,
+        "mcap_bytes": 892689227,
+        "outcome": "fail"
+      },
+      "20260920T140859418321Z-c834b103": {
+        "metadata_sha256": "e72aa29537cfb65fb3f471c5c2e8e58e0cb287302170f760609be85ba161f335",
+        "mcap_inode": 85995427,
+        "mcap_bytes": 974957310,
+        "outcome": "fail"
+      },
+      "20260920T140919484219Z-f41b8190": {
+        "metadata_sha256": "8d7c0f79ec10edaf31abe747b1135976e6ef75f9cef2a95547cbd297f36ed0dd",
+        "mcap_inode": 85995430,
+        "mcap_bytes": 1081841107,
+        "outcome": "fail"
+      },
+      "20260920T141006308264Z-57fbbf52": {
+        "metadata_sha256": "aa0f6f224c4d562afaabad00f7e110f602423f6a9457e9ed6077df855e4d11ce",
+        "mcap_inode": 85995436,
+        "mcap_bytes": 941793248,
+        "outcome": "fail"
+      },
+      "20260920T141038190891Z-f4b39251": {
+        "metadata_sha256": "306f052303b1cc51302acd70dc75ba4f4e8729498213009e64001027ace6ad6f",
+        "mcap_inode": 85995439,
+        "mcap_bytes": 841181954,
+        "outcome": "fail"
+      },
+      "20260920T141122108083Z-1966f5d5": {
+        "metadata_sha256": "88c1a69392b618ee9c32aed90212ba292c2fce667f6a3aae0ac29dd0ce4a6d3c",
+        "mcap_inode": 85995445,
+        "mcap_bytes": 821530542,
+        "outcome": "fail"
+      }
+    }
+  }
+}

@@ -205,3 +205,48 @@ class DaggerApplicationBuilderTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_takeover_and_dry_run_attach_authority_publisher_to_recording_backend(tmp_path):
+    from contextlib import ExitStack
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock, Mock, patch
+    from arx5_collection.dagger.takeover import NoActionGateway
+    from arx5_collection.episode.models import RecordingStarted, RecordingStopping, EpisodeOutcome
+    from tests.infer.test_collection import spec
+
+    for dry_run in (True, False):
+        builder = DaggerApplicationBuilder()
+        app = builder.build_takeover_dry_run(spec(tmp_path)) if dry_run else builder.build_takeover(spec(tmp_path))
+        original = app.session
+        app.session = MagicMock(station=original.station, camera_snapshot=original.camera_snapshot)
+        with ExitStack() as stack:
+            mocks = {name: stack.enter_context(patch(name)) for name in (
+                'arx5_collection.dagger.authority_ros.RosAuthorityEventPublisher',
+                'arx5_collection.dagger.authority_ros.require_no_action_publishers',
+                'arx5_collection.dagger.application.DaggerAutoTriggerFactory',
+                'arx5_collection.dagger.application.OpenPiDaggerTransport',
+                'arx5_collection.dagger.application.LocalVlaSnapshotClient',
+                'arx5_collection.dagger.application.AsyncPi05PolicyClient',
+                'arx5_collection.dagger.application.run_episode_loop',
+                'arx5_collection.dagger.command_ros.RosDualArmControlPort',
+                'arx5_collection.dagger.action_runtime.open_takeover_action_runtime',
+            )}
+            publisher = mocks['arx5_collection.dagger.authority_ros.RosAuthorityEventPublisher'].return_value.__enter__.return_value
+            actions = SimpleNamespace(gateway=NoActionGateway(), executor=Mock())
+            mocks['arx5_collection.dagger.action_runtime.open_takeover_action_runtime'].return_value.__enter__.return_value = actions
+
+            def loop(*args, **kwargs):
+                assert app.session.backend.recording_publisher is publisher
+                hooks = app.session.create_runtime.call_args.kwargs
+                hooks['recording_started_hook'](RecordingStarted('ep', 0))
+                publisher.assert_called_once()  # Actual controller's POLICY_ACTIVE.
+                hooks['recording_stopping_hook'](RecordingStopping(EpisodeOutcome.SUCCESS, 10**18))
+                return 0
+
+            mocks['arx5_collection.dagger.application.run_episode_loop'].side_effect = loop
+            assert app.run() == 0
+            if not dry_run:
+                actions.executor.start.assert_called_once()
+                actions.executor.close.assert_called_once()
+                mocks['arx5_collection.dagger.application.AsyncPi05PolicyClient'].return_value.close.assert_called_once()
