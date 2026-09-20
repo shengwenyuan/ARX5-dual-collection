@@ -8,7 +8,17 @@ from time import monotonic, sleep
 
 import numpy as np
 
-from .motion import MotionLimits, Segment, StaleArmFeedback, stationary, validate_sample, vector
+from arx5_collection.ros2_adapters.reset import DEFAULT_HOME
+
+from .geometry import Kinematics
+from .motion import (
+    MotionLimits,
+    Segment,
+    StaleArmFeedback,
+    stationary,
+    validate_sample,
+    vector,
+)
 
 
 class ReplayControl:
@@ -20,6 +30,7 @@ class ReplayControl:
         self.lock, self.stop_event = Lock(), Event()
         self.error = None
         self.segment = None
+        self.segment_side = active_arm
         self.thread = None
         self.trace = deque(maxlen=100000)
         state = arms.read()
@@ -33,15 +44,19 @@ class ReplayControl:
         self.thread = Thread(target=self._run, name="calibration-motion", daemon=True)
         self.thread.start()
 
-    def move(self, q):
+    def move(self, q, *, side=None):
+        side = self.active_arm if side is None else side
+        if side not in ("left", "right"):
+            raise ValueError("unknown arm")
         self.require_ok()
         with self.lock:
             if self.clock() < self.expected_end:
                 raise RuntimeError("previous segment is still running")
-            self.segment = Segment(self.targets[self.active_arm], q, self.limits)
+            self.segment = Segment(self.targets[side], q, self.limits)
+            self.segment_side = side
             self.segment_started = self.clock()
             self.expected_end = self.segment_started + self.segment.duration
-            self.goal[self.active_arm] = vector(q).copy()
+            self.goal[side] = vector(q).copy()
         return self.expected_end
 
     def require_ok(self):
@@ -65,7 +80,7 @@ class ReplayControl:
                 validate_sample(state, self.clock(), self.limits)
                 with self.lock:
                     if self.segment:
-                        self.targets[self.active_arm] = self.segment.at(
+                        self.targets[self.segment_side] = self.segment.at(
                             now - self.segment_started
                         )
                     command = {s: q.copy() for s, q in self.targets.items()}
@@ -122,11 +137,14 @@ class StableWindow:
         expected = reference if reference is not None else self.reference
         if not stationary(sample, expected, self.limits):
             moving = [
-                side for side in ("left", "right")
+                side
+                for side in ("left", "right")
                 if np.max(np.abs(vector(sample[side]["velocity"])))
                 > self.limits.still_velocity_rad_s
             ]
-            self.wait_reason = "/".join(moving) + " speed" if moving else "position changed"
+            self.wait_reason = (
+                "/".join(moving) + " speed" if moving else "position changed"
+            )
             self.since = None
             self.reference = {s: sample[s]["q"] for s in ("left", "right")}
             return False
@@ -154,15 +172,37 @@ class TeachFeedback:
             if self.unavailable_since is None:
                 self.unavailable_since = now
             if now - self.unavailable_since >= 2.0:
-                raise RuntimeError("示教关节反馈持续超时超过 2 秒，采集已中断") from error
+                raise RuntimeError(
+                    "示教关节反馈持续超时超过 2 秒，采集已中断"
+                ) from error
             return error.sample, False
         self.unavailable_since = None
         return state, stable
 
 
+def startup_steps(route):
+    """Home both arms, then position the parked arm before the camera-carrying arm."""
+    active = route["active_arm"]
+    parked = "right" if active == "left" else "left"
+    first = route["waypoints"][0]["q"]
+    return [
+        ("HOME", "left", DEFAULT_HOME),
+        ("HOME", "right", DEFAULT_HOME),
+        ("START", parked, first[parked]),
+        ("START", active, first[active]),
+    ]
+
+
 def preflight_start(route, actual, limits):
+    """Validate the full approach before enabling motion; no manual first-pose match."""
     validate_sample(actual, monotonic(), limits)
-    if not stationary(actual, route["waypoints"][0]["q"], limits):
-        raise ValueError(
-            "start mismatch: manually return BOTH arms to the first saved pose; no automatic HOME"
-        )
+    kin = Kinematics.from_payload(route["kinematics"])
+    positions = {s: actual[s]["q"] for s in ("left", "right")}
+    for q in positions.values():
+        kin.validate(q)
+    if not stationary(actual, positions, limits):
+        raise ValueError("release both arms and let them stop before automatic HOME")
+    for _, side, target in startup_steps(route):
+        kin.validate(target)
+        Segment(positions[side], target, limits)
+        positions[side] = target

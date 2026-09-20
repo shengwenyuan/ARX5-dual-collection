@@ -5,10 +5,9 @@ from __future__ import annotations
 import math
 from collections import deque
 from contextlib import ExitStack
-from threading import Event, Lock, Thread
+from threading import Lock, Thread
 from time import monotonic, sleep, time
 
-import numpy as np
 
 from arx5_collection.production.config import set_process_ros_domain_id
 from arx5_collection.production.processes import (
@@ -188,7 +187,7 @@ class Arms:
 
 
 class Hardware:
-    """Uses the same CAN bringup boundary as collection; never calls HOME."""
+    """CAN bringup only; replay performs bounded HOME through joint commands."""
 
     def __init__(self, station, role, logs, limits, profile=None):
         self.station, self.role, self.logs, self.limits = station, role, logs, limits

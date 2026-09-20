@@ -150,7 +150,7 @@ def test_escape_during_replay_stops_without_advancing_and_preserves_partial(
         def start(self):
             events.append("start")
 
-        def move(self, q):
+        def move(self, q, **kwargs):
             events.append("move")
             return monotonic() + 2
 

@@ -173,7 +173,7 @@ def _run(args):
             f"回放 {report['captures']} 个候选点；速度上限 {route['motion']['velocity_rad_s']} rad/s。"
         )
         print(
-            "使用本站棋盘设置与相机；无效视角会跳过。请确认路径无碰撞，并手动将双臂放到首个记录姿态。"
+            "使用本站棋盘设置与相机；无效视角会跳过。双臂将先限速到 HOME，再到路线首姿；保持夹爪目标。请清空运动路径并松开双臂。"
         )
     session_id = identifier()
     limits = MotionLimits(**route["motion"])

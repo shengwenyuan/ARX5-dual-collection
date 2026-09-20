@@ -105,9 +105,16 @@ def test_stability_requires_fresh_continuous_readings():
         gate.update(sample(now=11), 12)
 
 
-def test_start_mismatch_never_invokes_a_motion(route):
-    with pytest.raises(ValueError, match="start mismatch"):
-        preflight_start(route, sample(), MotionLimits())
+def test_start_accepts_different_pose_but_rejects_moving_or_invalid_feedback(route):
+    actual = sample()  # Neither arm needs to match the taught first pose.
+    preflight_start(route, actual, MotionLimits())
+    actual["left"]["velocity"][0] = 0.05
+    with pytest.raises(ValueError, match="stop before automatic HOME"):
+        preflight_start(route, actual, MotionLimits())
+    actual = sample()
+    actual["right"]["q"][0] = 20.0
+    with pytest.raises(ValueError, match="limit"):
+        preflight_start(route, actual, MotionLimits())
 
 
 def test_control_fault_holds_and_never_catches_up():
@@ -137,14 +144,19 @@ def test_teach_feedback_gap_resets_stability_and_recovers():
     from types import SimpleNamespace
     from arx5_collection.calibration.motion import StaleArmFeedback, validate_sample
     from arx5_collection.calibration.replay import TeachFeedback
+
     limits = MotionLimits()
-    clock = [10.]
+    clock = [10.0]
     state = [sample(now=10)]
     gate = StableWindow(limits)
+
     def read():
         validate_sample(state[0], clock[0], limits)
         return state[0]
-    feedback = TeachFeedback(SimpleNamespace(read=read), limits, gate, clock=lambda: clock[0])
+
+    feedback = TeachFeedback(
+        SimpleNamespace(read=read), limits, gate, clock=lambda: clock[0]
+    )
     assert not feedback.read()[1]
     clock[0] = 10.7
     state[0] = sample(now=10.7)
@@ -153,12 +165,12 @@ def test_teach_feedback_gap_resets_stability_and_recovers():
     assert not feedback.read()[1]
     assert gate.since is None
     clock[0] = 11.0
-    state[0] = sample(now=11.)
+    state[0] = sample(now=11.0)
     assert not feedback.read()[1]
     clock[0] = 11.7
     state[0] = sample(now=11.7)
     assert feedback.read()[1]
-    clock[0] = 12.
+    clock[0] = 12.0
     assert not feedback.read()[1]
     clock[0] = 14.1
     with pytest.raises(RuntimeError, match="持续超时"):
@@ -171,34 +183,42 @@ def test_teach_feedback_gap_resets_stability_and_recovers():
 def test_teach_never_swallows_controller_or_nonfinite_failure():
     from types import SimpleNamespace
     from arx5_collection.calibration.replay import TeachFeedback
+
     limits = MotionLimits()
-    for error in (RuntimeError("arm feedback failed"), ValueError("nonfinite robot readback")):
+    for error in (
+        RuntimeError("arm feedback failed"),
+        ValueError("nonfinite robot readback"),
+    ):
+
         def read():
             raise error
-        feedback = TeachFeedback(SimpleNamespace(read=read), limits, StableWindow(limits))
+
+        feedback = TeachFeedback(
+            SimpleNamespace(read=read), limits, StableWindow(limits)
+        )
         with pytest.raises(type(error), match=str(error)):
             feedback.read()
 
 
 def test_stationary_velocity_noise_can_settle_but_drift_and_motion_cannot():
     limits = MotionLimits()
-    assert limits.still_velocity_rad_s == .04
+    assert limits.still_velocity_rad_s == 0.04
     gate = StableWindow(limits)
-    for i, speed in enumerate((.01, -.02, .03, -.03, .02, .03, .025, -.03)):
-        state = sample(now=10 + i * .1)
+    for i, speed in enumerate((0.01, -0.02, 0.03, -0.03, 0.02, 0.03, 0.025, -0.03)):
+        state = sample(now=10 + i * 0.1)
         state["left"]["velocity"][2] = speed
         state["right"]["velocity"][4] = -speed
-        settled = gate.update(state, 10 + i * .1)
+        settled = gate.update(state, 10 + i * 0.1)
     assert settled
-    moving = sample(now=11.)
-    moving["right"]["velocity"][1] = .041
-    assert not gate.update(moving, 11.)
+    moving = sample(now=11.0)
+    moving["right"]["velocity"][1] = 0.041
+    assert not gate.update(moving, 11.0)
     assert gate.since is None and gate.wait_reason == "right speed"
     assert not gate.update(sample(now=11.1), 11.1)
     drifted = sample(now=11.2)
-    drifted["left"]["q"][0] = .011
+    drifted["left"]["q"][0] = 0.011
     assert not gate.update(drifted, 11.2)
     assert gate.since is None and gate.wait_reason == "position changed"
     with pytest.raises(ValueError, match="tolerances"):
-        MotionLimits(still_velocity_rad_s=.041)
-    assert limits.velocity_rad_s == .1 and limits.acceleration_rad_s2 == .2
+        MotionLimits(still_velocity_rad_s=0.041)
+    assert limits.velocity_rad_s == 0.1 and limits.acceleration_rad_s2 == 0.2

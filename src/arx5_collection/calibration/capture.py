@@ -6,14 +6,62 @@ from time import monotonic, sleep
 
 import cv2
 
-from .board import Board, detect
+from .board import Board, Detection, detect, overlay
 from .geometry import Kinematics
 from .motion import MotionLimits
 from .preview import ROLE_NAMES, WINDOW_CLOSED, live_checks, render
-from .replay import ReplayControl, StableWindow, preflight_start
+from .replay import ReplayControl, StableWindow, preflight_start, startup_steps
 from .routes import route_hash, split_observations, validate, validate_session
 from .storage import file_digest, identifier, read_json, write_json
 from .timing import capture_ready, timing_error
+
+
+def prepare_start(hardware, control, route, window, show, on_arrival):
+    """Bounded HOME and first-pose approach, using joint-only commands throughout."""
+    limits = MotionLimits(**route["motion"])
+    kin = Kinematics.from_payload(route["kinematics"])
+    for phase, side, target in startup_steps(route):
+        print(f"{phase}：{side} 限速移动，等待双臂停稳", flush=True)
+        expected_end = control.move(target, side=side)
+        deadline = monotonic() + limits.segment_timeout_s
+        gate = StableWindow(limits)
+        while monotonic() < deadline:
+            control.require_ok()
+            hardware.supervisor.require_running()
+            frame = hardware.camera.latest()
+            sample = hardware.arms.read()
+            now = monotonic()
+            for arm in ("left", "right"):
+                kin.validate(sample[arm]["q"])
+            stable = gate.update(sample, now, control.target()) and now >= expected_end
+            # Keep startup responsive: detection is unnecessary before the first pose.
+            preview = overlay(
+                frame["image"],
+                None,
+                Detection(None, 0.0, 0.0, ""),
+                [
+                    f"{phase} | {side} | {'SETTLED' if stable else 'MOVING / SETTLING'}",
+                    "Automatic HOME -> first pose | gripper target preserved",
+                    "Esc or close window to stop",
+                ],
+                stable,
+            )
+            if show(window, preview) in (27, WINDOW_CLOSED):
+                raise KeyboardInterrupt("operator stopped calibration")
+            if stable:
+                on_arrival(
+                    {
+                        "phase": phase,
+                        "arm": side,
+                        "target_q": list(target),
+                        "actual": sample,
+                        "monotonic_s": now,
+                    }
+                )
+                break
+            sleep(0.005)
+        else:
+            raise TimeoutError(f"{phase} {side} failed to settle before timeout")
 
 
 def capture_pose(hardware, control, route, board, point, index, window, show):
@@ -167,6 +215,7 @@ def record_route(
         "board_mount_id": identifier(),
         "camera": hardware.camera.metadata,
         "pose_results": [],
+        "preparation": [],
         "observations": [],
         "error": None,
     }
@@ -184,6 +233,12 @@ def record_route(
             kin.validate(actual[side]["q"])
         control = ReplayControl(hardware.arms, route["active_arm"], limits)
         control.start()
+
+        def arrived(step):
+            run["preparation"].append(step)
+            write_json(output / "run.json", run)
+
+        prepare_start(hardware, control, route, window, show, arrived)
         board = Board(**session["board"])
         for index, point in enumerate(route["waypoints"]):
             captured, status, reason = capture_pose(

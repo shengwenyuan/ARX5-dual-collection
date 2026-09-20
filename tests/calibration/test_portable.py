@@ -105,6 +105,7 @@ def test_replay_visits_all_candidates_but_hardware_fault_aborts(
 
     monkeypatch.setattr(capture, "ReplayControl", Controller)
     monkeypatch.setattr(capture, "capture_pose", pose)
+    monkeypatch.setattr(capture, "prepare_start", lambda *a: events.append("prepared"))
     monkeypatch.setattr(cv2, "destroyWindow", lambda _: None)
     output = tmp_path / "run"
 
@@ -139,7 +140,7 @@ def test_replay_visits_all_candidates_but_hardware_fault_aborts(
         result = read_json(output / "run.json")
         assert result["status"] == "partial"
         assert result["error"] == "arm feedback failed"
-    assert events == ["start", "stop"]
+    assert events == ["start", "prepared", "stop"]
 
 
 def test_absent_board_skips_after_capture_window_without_station_pixel_reference(
