@@ -82,7 +82,7 @@ def test_session_lock_excludes_second_owner_and_releases(tmp_path):
 
 @pytest.mark.parametrize("stage", ["teach", "record"])
 def test_session_window_precedes_hardware_and_route_profile_is_used(
-    tmp_path, route, monkeypatch, stage
+    tmp_path, route, session, monkeypatch, stage
 ):
     from types import SimpleNamespace
 
@@ -96,11 +96,11 @@ def test_session_window_precedes_hardware_and_route_profile_is_used(
     monkeypatch.setattr(
         config, "load_configured_station", lambda _: SimpleNamespace(sdk_type=2)
     )
-    monkeypatch.setattr(routes, "station_identity", lambda _: route["station"])
+    monkeypatch.setattr(routes, "station_identity", lambda _: session["station"])
     monkeypatch.setattr(
         cli,
         "_settings",
-        lambda *a: {"setup_id": route["setup_id"], "board": route["board"]},
+        lambda *a: session,
     )
     monkeypatch.setattr(cv2, "destroyAllWindows", lambda: events.append("close-window"))
     monkeypatch.setattr(
@@ -121,11 +121,13 @@ def test_session_window_precedes_hardware_and_route_profile_is_used(
         def __exit__(self, *a):
             events.append("close-hardware")
 
-    def run(*a, prepared_window):
+    def run(*a, session, prepared_window):
         assert prepared_window == "prepared"
         assert a[1]["profile"] == expected
         events.append(stage)
+        return {"selection": {"accepted": 25, "skipped": 0}}
 
+    monkeypatch.setattr(cli, "compute_results", lambda *a: events.append("solve") or 0)
     monkeypatch.setattr(hardware, "Hardware", Device)
     monkeypatch.setattr(workflow, stage, run)
     monkeypatch.setattr(workflow, "park", lambda *a: events.append("park"))
@@ -139,17 +141,26 @@ def test_session_window_precedes_hardware_and_route_profile_is_used(
         "park",
         "close-hardware",
         "close-window",
-    ]
+    ] + (["solve"] if stage == "record" else [])
 
 
-def test_720p_route_is_rejected_before_hardware_opens(tmp_path, route, monkeypatch):
+def test_720p_route_is_rejected_before_hardware_opens(
+    tmp_path, route, session, monkeypatch
+):
+    from arx5_collection.calibration import cli, routes
+
+    monkeypatch.setattr(cli, "_settings", lambda *a: session)
+    monkeypatch.setattr(routes, "station_identity", lambda _: session["station"])
     from types import SimpleNamespace
     from arx5_collection.calibration.storage import write_json
     from arx5_collection.production import config
+
     route["profile"] = {"width": 1280, "height": 720, "fps": 30, "format": "rgb8"}
     path = tmp_path / "old-route.json"
     write_json(path, route)
-    monkeypatch.setattr(config, "load_configured_station", lambda _: SimpleNamespace(sdk_type=2))
+    monkeypatch.setattr(
+        config, "load_configured_station", lambda _: SimpleNamespace(sdk_type=2)
+    )
     with patch("arx5_collection.calibration.hardware.Hardware") as hardware:
         assert main(["cali", "--left-wrist", "--record", "--poses", str(path)]) == 2
     hardware.assert_not_called()

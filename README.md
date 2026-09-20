@@ -48,6 +48,8 @@ ROS、SDK、相机及真实 MCAP 链路仍需在对应 Linux 容器中验收。�
 
 Four entries: `arx5 cali --left-wrist`, `--right-wrist`, `--overview-left`, or
 `--overview-right`. Choose gravity-compensation teaching (Space saves a pose),
-bounded JSON replay, or offline solving. The shared world is the overview RGB
+bounded portable JSON replay with automatic solving, or offline recomputation.
+Replay visits all candidates and skips unusable views; intrinsics must pass held-out
+validation before hand-eye fitting. The shared world is the overview RGB
 optical frame. See [calibration setup and workflow](docs/camera-calibration/plan.md)
 for the dedicated image build, display setup, data paths and hardware acceptance.

@@ -9,7 +9,12 @@ import pytest
 from arx5_collection.calibration.board import Board, detect
 from arx5_collection.calibration.geometry import inverse, rigid
 from arx5_collection.calibration.profiles import DEFAULT_PROFILE as PROFILE
-from arx5_collection.calibration.routes import new_route, route_hash, validate
+from arx5_collection.calibration.routes import (
+    new_route,
+    route_hash,
+    split_observations,
+    validate,
+)
 from arx5_collection.calibration.solve import (
     check_observation,
     intrinsics,
@@ -20,7 +25,7 @@ from arx5_collection.calibration.storage import file_digest, write_json
 
 
 def render(board, z, k, profile=PROFILE):
-    scale = 3
+    scale = 6
     image = np.full(
         (profile["height"] * scale, profile["width"] * scale, 3), 170, np.uint8
     )
@@ -65,7 +70,7 @@ def build_run(root, kin, profile=PROFILE):
         "arms": {"left": "l", "right": "r"},
         "cameras": {"left": "cl", "right": "cr", "overview": "co"},
     }
-    route = new_route("left-wrist", identity, board, kin, "test-only", profile)
+    route = new_route("left-wrist", kin, profile)
     k = np.array([[650.0, 0, 424], [0, 660.0, 240], [0, 0, 1]])
     k[0] *= profile["width"] / 848
     k[1] *= profile["height"] / 480
@@ -104,11 +109,6 @@ def build_run(root, kin, profile=PROFILE):
                 "pose_id": pose_id,
                 "q": {"left": q.tolist(), "right": home.tolist()},
                 "kind": "capture",
-                "split": split,
-                "teaching": {
-                    "origin_confirmed": True,
-                    "corners": detection.corners.tolist(),
-                },
             }
         )
         path = root / "images" / f"{pose_id}.png"
@@ -148,8 +148,18 @@ def build_run(root, kin, profile=PROFILE):
     assert len(observations) == 25
     route["draft"] = False
     validate(route, replay=True)
+    selection = split_observations(observations)
+    selection.update(attempted=len(observations), skipped=0)
     run = {
-        "schema_version": 1,
+        "schema_version": 2,
+        "station": identity,
+        "setup_id": "test-only",
+        "board": board.payload(),
+        "selection": selection,
+        "pose_results": [
+            {"pose_id": o["pose_id"], "status": "captured", "reason": ""}
+            for o in observations
+        ],
         "run_id": "synthetic",
         "status": "completed",
         "role": "left-wrist",
@@ -200,7 +210,9 @@ def test_clock_or_motion_mismatch_is_rejected_before_fit(tmp_path, kin):
     obs = deepcopy(run["observations"][0])
     obs["raw_states"][30]["velocity"][1] = 0.03
     check_observation(route, obs)  # Stationary readback noise is allowed offline too.
-    obs["raw_states"][30]["velocity"][1] = route["motion"]["still_velocity_rad_s"] + 0.001
+    obs["raw_states"][30]["velocity"][1] = (
+        route["motion"]["still_velocity_rad_s"] + 0.001
+    )
     with pytest.raises(ValueError, match="motion|Motion"):
         check_observation(route, obs)
 
@@ -219,6 +231,7 @@ def test_heldout_pixels_do_not_change_fitted_intrinsics(tmp_path, kin):
 
 def test_profile_mismatch_is_rejected_before_any_intrinsic_or_pose_fit(route):
     from arx5_collection.calibration.solve import solve_route
+
     low = deepcopy(route)
     low["profile"] = {"width": 1280, "height": 720, "fps": 30, "format": "rgb8"}
     with pytest.raises(ValueError, match="native|profile"):
@@ -226,3 +239,71 @@ def test_profile_mismatch_is_rejected_before_any_intrinsic_or_pose_fit(route):
     # Reject before inspecting observations/K: pixel coordinates need matching K.
     with pytest.raises(ValueError, match="native|profile"):
         solve_route(route, {"observations": []}, {"profile": low["profile"]})
+
+
+def test_visual_skips_are_allowed_but_incomplete_traversal_and_resplit_are_not(
+    tmp_path, kin
+):
+    from arx5_collection.calibration.solve import load_run
+    from arx5_collection.calibration.storage import read_json
+
+    _, run, _ = build_run(tmp_path / "run", kin)
+    run["observations"] = run["observations"][5:]
+    for outcome in run["pose_results"][:5]:
+        outcome.update(status="skipped", reason="board not fully detected")
+    run["selection"] = split_observations(run["observations"])
+    run["selection"].update(attempted=25, skipped=5)
+    write_json(tmp_path / "run/run.json", run)
+    _, loaded = load_run(tmp_path / "run")
+    assert loaded["selection"]["training"] == 15
+    # Losing a skipped outcome must not make an interrupted traversal look complete.
+    altered = deepcopy(run)
+    altered["pose_results"].pop(0)
+    write_json(tmp_path / "run/run.json", altered)
+    with pytest.raises(ValueError, match="traversal"):
+        load_run(tmp_path / "run")
+    altered = deepcopy(run)
+    altered["observations"][0]["split"] = "training"
+    write_json(tmp_path / "run/run.json", altered)
+    with pytest.raises(ValueError, match="split changed"):
+        load_run(tmp_path / "run")
+    # Fewer than 20 views is a completed replay, but never a valid calibration.
+    run["observations"] = run["observations"][1:]
+    run["pose_results"][5].update(status="skipped", reason="blurred board")
+    run["selection"] = split_observations(run["observations"])
+    run["selection"].update(attempted=25, skipped=6)
+    write_json(tmp_path / "run/run.json", run)
+    with pytest.raises(ValueError, match="validation failed"):
+        solve_runs([tmp_path / "run"], tmp_path / "result")
+    report = read_json(tmp_path / "result/calibration.json")
+    assert report["valid"] is False
+    assert (
+        "15 training + 5 validation" in report["intrinsic_validation"]["left"]["error"]
+    )
+    assert "not attempted" in report["solutions"]["left-wrist"]["error"]
+
+
+def test_bad_heldout_intrinsics_stop_before_handeye(tmp_path, kin, monkeypatch):
+    from arx5_collection.calibration import solve
+    from arx5_collection.calibration.storage import read_json
+
+    route, run, _ = build_run(tmp_path / "run", kin)
+    # Isolate the numerical gate: distorted held-out detections, training unchanged.
+    expected = intrinsics([(route, run)])
+    for obs in run["observations"]:
+        if obs["split"] == "validation":
+            corners = np.array(obs["detection"]["corners"])
+            corners[::3, 0] += 15
+            obs["detection"]["corners"] = corners.tolist()
+    assert intrinsics([(route, run)]) == expected
+    monkeypatch.setattr(solve, "load_run", lambda _: (route, run))
+
+    def forbidden(*a):
+        pytest.fail("handeye must wait for valid intrinsics")
+
+    monkeypatch.setattr(solve, "solve_route", forbidden)
+    with pytest.raises(ValueError, match="validation failed"):
+        solve_runs([tmp_path / "run"], tmp_path / "result")
+    report = read_json(tmp_path / "result/calibration.json")
+    assert not report["valid"]
+    assert not report["intrinsic_validation"]["left"]["valid"]

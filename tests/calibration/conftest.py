@@ -16,14 +16,23 @@ def kin():
 
 
 @pytest.fixture
-def route(kin):
+def session():
     identity = {
         "station_id": "test-only",
         "arms": {"left": "l", "right": "r"},
         "cameras": {"left": "cl", "right": "cr", "overview": "co"},
         "sdk_type": 2,
     }
-    r = new_route("left-wrist", identity, Board(7, 5, 10), kin, "test-setup", PROFILE)
+    return {
+        "station": identity,
+        "board": Board(7, 5, 10).payload(),
+        "setup_id": "test-setup",
+    }
+
+
+@pytest.fixture
+def route(kin):
+    r = new_route("left-wrist", kin, PROFILE)
     rng = np.random.default_rng(45)
     home = np.array([0, 0.948, 0.858, -0.573, 0, 0])
     for i in range(25):
@@ -33,11 +42,6 @@ def route(kin):
                 "pose_id": f"test-{i}",
                 "q": {"left": q.tolist(), "right": home.tolist()},
                 "kind": "capture",
-                "split": "validation" if i % 5 == 4 else "training",
-                "teaching": {
-                    "origin_confirmed": True,
-                    "corners": np.zeros((35, 2)).tolist(),
-                },
             }
         )
     r["draft"] = False

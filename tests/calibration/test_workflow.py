@@ -6,7 +6,7 @@ import cv2
 import numpy as np
 import pytest
 
-from arx5_collection.calibration import workflow
+from arx5_collection.calibration import capture, workflow
 from arx5_collection.calibration.board import Board
 from arx5_collection.calibration.storage import read_json
 
@@ -14,13 +14,13 @@ from arx5_collection.calibration.storage import read_json
 @pytest.mark.parametrize("undo", [False, True])
 @pytest.mark.parametrize("clock_error", ["", "camera clock settling"])
 def test_space_saves_live_joints_and_duplicate_is_rejected(
-    tmp_path, route, monkeypatch, clock_error, undo
+    tmp_path, route, session, monkeypatch, clock_error, undo
 ):
     route = deepcopy(route)
     q = route["waypoints"][0]["q"]
     route["waypoints"] = []
     route["draft"] = True
-    board = Board(**route["board"])
+    board = Board(**session["board"])
     image = np.full((480, 848, 3), 180, np.uint8)
     for y in range(board.rows + 1):
         for x in range(board.columns + 1):
@@ -68,13 +68,17 @@ def test_space_saves_live_joints_and_duplicate_is_rejected(
         def update(self, *a):
             return True
 
-    keys = iter([32, 8, 32, workflow.WINDOW_CLOSED] if undo else [ord("v"), ord("r"), 13, 27, 32, 32, workflow.WINDOW_CLOSED])
+    keys = iter(
+        [32, 8, 32, workflow.WINDOW_CLOSED]
+        if undo
+        else [ord("v"), ord("r"), 13, 27, 32, 32, workflow.WINDOW_CLOSED]
+    )
     monkeypatch.setattr(workflow, "StableWindow", Stable)
     monkeypatch.setattr(workflow, "_window", lambda *a: None)
     monkeypatch.setattr(workflow, "_key", lambda *a: next(keys))
     monkeypatch.setattr(cv2, "destroyWindow", lambda *a: None)
     path = tmp_path / "routes/left-wrist.json"
-    workflow.teach(hardware, route, path)
+    workflow.teach(hardware, route, path, session=session)
     saved = read_json(path)
     assert calls == ["gravity_compensation"]
     if clock_error:
@@ -83,7 +87,12 @@ def test_space_saves_live_joints_and_duplicate_is_rejected(
         return
     assert len(saved["waypoints"]) == 1 and saved["draft"]
     assert saved["waypoints"][0]["q"] == q
-    assert saved["waypoints"][0]["teaching"]["actual"]["left"]["q"] == q["left"]
+    point = saved["waypoints"][0]
+    assert set(point) == {"pose_id", "q", "kind"}
+    evidence = read_json(
+        path.parent / "teaching" / route["route_id"] / (point["pose_id"] + ".json")
+    )
+    assert evidence["actual"]["left"]["q"] == q["left"]
     assert list((path.parent / "teaching").rglob("*.png"))
 
 
@@ -99,7 +108,7 @@ def test_board_is_removed_before_gravity_and_hardware_exit():
 
 
 def test_escape_during_replay_stops_without_advancing_and_preserves_partial(
-    tmp_path, route, monkeypatch
+    tmp_path, route, session, monkeypatch
 ):
     import pytest
 
@@ -154,19 +163,21 @@ def test_escape_during_replay_stops_without_advancing_and_preserves_partial(
         def stop(self):
             events.append("stop")
 
-    monkeypatch.setattr(workflow, "ReplayControl", Controller)
+    monkeypatch.setattr(capture, "ReplayControl", Controller)
     monkeypatch.setattr(workflow, "_window", lambda *a: None)
     monkeypatch.setattr(workflow, "_key", lambda *a: 27)
     monkeypatch.setattr(cv2, "destroyWindow", lambda *a: None)
     with pytest.raises(KeyboardInterrupt):
-        workflow.record(hardware, route, tmp_path / "run")
+        workflow.record(hardware, route, tmp_path / "run", session=session)
     assert events == ["start", "move", "stop"]
     saved = read_json(tmp_path / "run/run.json")
     assert saved["status"] == "partial" and saved["observations"] == []
     assert "operator stopped" in saved["error"]
 
 
-def test_slow_detection_reads_feedback_after_detection(tmp_path, route, monkeypatch):
+def test_slow_detection_reads_feedback_after_detection(
+    tmp_path, route, session, monkeypatch
+):
     """120 ms detector must not make continuously updated feedback look stale."""
     from arx5_collection.calibration.board import Detection
 
@@ -176,26 +187,54 @@ def test_slow_detection_reads_feedback_after_detection(tmp_path, route, monkeypa
     clock = [10.0]
     reads, panels = [], []
     image = np.full((720, 1280, 3), 120, np.uint8)
-    corners = np.array([[100 + x * 30, 100 + y * 30] for y in range(5) for x in range(7)], np.float32)
+    corners = np.array(
+        [[100 + x * 30, 100 + y * 30] for y in range(5) for x in range(7)], np.float32
+    )
+
     def state():
         reads.append(clock[0])
-        return {s: {"q": q[s], "velocity": [0.] * 6, "gripper": 0., "received_monotonic_s": clock[0]} for s in q}
+        return {
+            s: {
+                "q": q[s],
+                "velocity": [0.0] * 6,
+                "gripper": 0.0,
+                "received_monotonic_s": clock[0],
+            }
+            for s in q
+        }
+
     def frame():
         now = clock[0]
-        return {"image": image, "number": now, "source_monotonic_s": now - .01, "source_time_s": now - .01, "received_wall_s": now, "received_monotonic_s": now, "clock": "global_time"}
+        return {
+            "image": image,
+            "number": now,
+            "source_monotonic_s": now - 0.01,
+            "source_time_s": now - 0.01,
+            "received_wall_s": now,
+            "received_monotonic_s": now,
+            "clock": "global_time",
+        }
+
     def slow_detect(*a, **kw):
-        clock[0] += .12
-        return Detection(corners, .1, 800., "")
+        clock[0] += 0.12
+        return Detection(corners, 0.1, 800.0, "")
+
     def panel(image, board, detection, title, checks, footer):
         assert footer == ["SPACE save | BACKSPACE delete last"]
         panels.append(checks)
         return image
+
     def key(*a):
         assert len(panels) < 15
         if route["waypoints"]:
             return workflow.WINDOW_CLOSED
         return 32 if all(c.passed for c in panels[-1]) else -1
-    hardware = SimpleNamespace(arms=SimpleNamespace(read=state, call=lambda _: None), camera=SimpleNamespace(latest=frame), supervisor=SimpleNamespace(require_running=lambda: None))
+
+    hardware = SimpleNamespace(
+        arms=SimpleNamespace(read=state, call=lambda _: None),
+        camera=SimpleNamespace(latest=frame),
+        supervisor=SimpleNamespace(require_running=lambda: None),
+    )
     monkeypatch.setattr(workflow, "monotonic", lambda: clock[0])
     monkeypatch.setattr(workflow, "sleep", lambda _: None)
     monkeypatch.setattr(workflow, "detect", slow_detect)
@@ -203,25 +242,47 @@ def test_slow_detection_reads_feedback_after_detection(tmp_path, route, monkeypa
     monkeypatch.setattr(workflow, "_key", key)
     monkeypatch.setattr(workflow, "_window", lambda _: None)
     monkeypatch.setattr(cv2, "destroyWindow", lambda _: None)
-    result = workflow.teach(hardware, route, tmp_path / "route.json")
+    result = workflow.teach(hardware, route, tmp_path / "route.json", session=session)
     assert len(result["waypoints"]) == 1
     assert reads[0] == pytest.approx(10.12)
-    assert all(next(c for c in checks if c.label == "Left feedback").passed for checks in panels)
+    assert all(
+        next(c for c in checks if c.label == "Left feedback").passed
+        for checks in panels
+    )
 
 
 @pytest.mark.parametrize("count,expected_draft", [(5, True), (25, False)])
-def test_close_window_finalizes_or_preserves_draft(tmp_path, route, monkeypatch, count, expected_draft):
+def test_close_window_finalizes_or_preserves_draft(
+    tmp_path, route, session, monkeypatch, count, expected_draft
+):
     route = deepcopy(route)
     route.update(waypoints=route["waypoints"][:count], draft=True)
     q = route["waypoints"][-1]["q"]
     hardware = SimpleNamespace(
-        arms=SimpleNamespace(read=lambda: {s: {"q": q[s], "velocity": [0]*6, "gripper": 0., "received_monotonic_s": monotonic()} for s in q}, call=lambda _: None),
-        camera=SimpleNamespace(latest=lambda: {"number": 1, "image": np.zeros((480,848,3), np.uint8), "received_monotonic_s": monotonic()}),
+        arms=SimpleNamespace(
+            read=lambda: {
+                s: {
+                    "q": q[s],
+                    "velocity": [0] * 6,
+                    "gripper": 0.0,
+                    "received_monotonic_s": monotonic(),
+                }
+                for s in q
+            },
+            call=lambda _: None,
+        ),
+        camera=SimpleNamespace(
+            latest=lambda: {
+                "number": 1,
+                "image": np.zeros((480, 848, 3), np.uint8),
+                "received_monotonic_s": monotonic(),
+            }
+        ),
         supervisor=SimpleNamespace(require_running=lambda: None),
     )
     monkeypatch.setattr(workflow, "_key", lambda *a: workflow.WINDOW_CLOSED)
     monkeypatch.setattr(workflow, "_window", lambda _: None)
     monkeypatch.setattr(cv2, "destroyWindow", lambda _: None)
     path = tmp_path / "route.json"
-    workflow.teach(hardware, route, path)
+    workflow.teach(hardware, route, path, session=session)
     assert read_json(path)["draft"] is expected_draft
