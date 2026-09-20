@@ -4,6 +4,10 @@
 
 ## 接入边界
 
+**本能力由 DAgger（takeover/shadow）和 infer 共用。** `scripts/arx5` 将三个模式送入同一个启动函数，统一调用 `dagger.unified_config.prepare_policy`，复用同一个 policy-server 和 RTC runtime。保留既有 `dagger` 包位置，避免为 infer 复制配置或调度实现。
+
+infer 自身仅负责自主采集、踏板 success/fail、动作事实记录与 episode 落盘接线；不拥有独立的模型配置、加载工厂或 scheduler。回归测试覆盖三个真实 CLI 参数入口，确认共用相同的配置生成和模型挂载路径，仅 infer 增加自己的采集命令 override。
+
 `arx5 infer --inference-config …` 和 `arx5 dagger --inference-config …` 复用同一个转换入口：
 
 1. 读取 checkpoint 对应的 SafeInfer TOML，检查 checkpoint 类型、完整目录 SHA、归一化资产和相机序列号。

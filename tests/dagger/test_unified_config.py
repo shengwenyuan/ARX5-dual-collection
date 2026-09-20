@@ -177,7 +177,8 @@ def test_source_must_be_selected_before_any_openpi_import(tmp_path):
             create_pi05_joint_policy(settings)
 
 
-def test_host_entry_passes_resolved_bundle_to_existing_compose(tmp_path):
+@pytest.mark.parametrize("mode", ["infer", "takeover", "shadow"])
+def test_host_entry_passes_resolved_bundle_to_existing_compose(tmp_path, mode):
     args = fixture_bundle(tmp_path)
     station = tmp_path / "station"
     station.mkdir()
@@ -186,8 +187,10 @@ def test_host_entry_passes_resolved_bundle_to_existing_compose(tmp_path):
     )
     (station / "station.json").write_bytes(args["station_config"].read_bytes())
     module = runpy.run_path(str(ROOT / "scripts/arx5"))
-    function = module["dagger"]
-    function.__globals__["STATION_DIR"] = station
+    main = module["main"]
+    main.__globals__["STATION_DIR"] = station
+    command = ["infer"] if mode == "infer" else ["dagger", "--mode", mode]
+    command += ["--rgb-only", "--inference-config", str(args["inference_config"])]
     with patch.dict(
         "os.environ",
         {
@@ -196,11 +199,13 @@ def test_host_entry_passes_resolved_bundle_to_existing_compose(tmp_path):
         },
         clear=True,
     ):
-        with patch("subprocess.call", return_value=0) as call:
-            assert function("infer", True, str(args["inference_config"])) == 0
+        with patch("sys.argv", ["arx5", *command]):
+            with patch("subprocess.call", return_value=0) as call:
+                assert main() == 0
     argv = call.call_args.args[0]
     env = call.call_args.kwargs["env"]
-    assert str(ROOT / "docker/compose.infer.yaml") in argv
+    assert (str(ROOT / "docker/compose.infer.yaml") in argv) == (mode == "infer")
+    assert env["ARX5_DAGGER_MODE"] == mode
     assert str(tmp_path / "episodes/.policy/compose.policy.json") in argv
     assert env["ARX5_DAGGER_POLICY_CONFIG"] == str(
         tmp_path / "episodes/.policy/policy.toml"

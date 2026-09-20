@@ -18,6 +18,12 @@
 
 本文“整轮隔离”以一次采集 episode 为单位，不与包含多个 episode 的训练 round/batch 混用。隔离保留原始文件与原因，表示不接纳进训练；不是删除原始数据，也不自动作废同批其他合格 episode。
 
+### collection 内部的共用边界
+
+模型配置接入属于 **DAgger 与 infer 共用的策略运行能力**：统一配置解析、checkpoint/归一化身份校验、匹配模型和预处理加载、RTC 参数转换及现有推理调度均只有一套。当前实现位于既有 `dagger` 包内，两种采集模式共同调用，不因包名另建 infer 版本。
+
+infer 只定义自主采集的 episode 行为、踏板 success/fail，以及动作事实与结果的落盘接线；通过共享的 Session、控制 runtime、Recorder 和 EpisodeStore 执行。不得在 infer 内维护独立模型配置、模型工厂、预处理或 RTC scheduler。DAgger 的 takeover/shadow 与 infer 使用相同的 `--inference-config`、`--runtime-config` 入口；不同模式只决定采集行为。
+
 ## 2. 保持已确认的采集流程
 
 1. `metadata.json.collection_type` 新增 **`infer`**，与 `demonstration`、`dagger` 并列。
