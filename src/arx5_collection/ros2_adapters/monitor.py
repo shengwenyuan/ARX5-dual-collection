@@ -187,15 +187,17 @@ class RosStreamMonitor:
                 self._next_display_s = now_s + self.display_period_s
             return failure
 
-    def stop(self) -> tuple[StreamMetrics, ...]:
+    def stop(self, *, audit_recording: bool = True) -> tuple[StreamMetrics, ...]:
         if self._health is None:
             raise RuntimeError("stream monitor is not active")
-        self._require_spin()
         with self._lock:
             health = self._health
             streams = self._streams
             self._health = None
             self._streams = ()
+        self._require_spin()
+        if not audit_recording:
+            return ()
         metrics = self.backend.metrics(streams)
         return tuple(
             replace(

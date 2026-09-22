@@ -75,13 +75,16 @@ class Pi05InputProfile:
     camera_right_wrist_source: str
 
     def __post_init__(self) -> None:
-        if min(
-            self.width,
-            self.height,
-            self.channels,
-            self.model_width,
-            self.model_height,
-        ) <= 0:
+        if (
+            min(
+                self.width,
+                self.height,
+                self.channels,
+                self.model_width,
+                self.model_height,
+            )
+            <= 0
+        ):
             raise ValueError("PI input dimensions must be positive")
         if self.layout != "chw" or self.color != "rgb" or self.dtype != "uint8":
             raise ValueError("only the accepted RGB uint8 CHW PI input is supported")
@@ -96,7 +99,10 @@ class Pi05InputProfile:
             self.camera_left_wrist_source,
             self.camera_right_wrist_source,
         )
-        if any(not source for source in camera_sources) or len(set(camera_sources)) != 3:
+        if (
+            any(not source for source in camera_sources)
+            or len(set(camera_sources)) != 3
+        ):
             raise ValueError("PI camera sources must be three distinct roles")
 
 
@@ -120,7 +126,9 @@ class Pi05CheckpointProfile:
         if self.max_delay_steps < 0 or self.flow_steps <= 0:
             raise ValueError("PI delay and flow-step contract is invalid")
         if self.model_action_dimension < self.execution.action_dimension:
-            raise ValueError("model action dimension cannot be smaller than robot action")
+            raise ValueError(
+                "model action dimension cannot be smaller than robot action"
+            )
         if self.action_semantics != "absolute_joint":
             raise ValueError("only absolute joint actions are supported")
         if self.gripper_normalization != "linear_open_closed_0_1":
@@ -145,15 +153,20 @@ class RtcRolloutProfile:
     delay_estimator: str
 
     def __post_init__(self) -> None:
-        if min(
-            self.prefetch_after_steps,
-            self.delay_history_size,
-        ) <= 0:
+        if (
+            min(
+                self.prefetch_after_steps,
+                self.delay_history_size,
+            )
+            <= 0
+        ):
             raise ValueError("RTC rollout step counts must be positive")
         if self.initial_delay_steps < 0:
             raise ValueError("RTC initial delay must not be negative")
         if self.delay_estimator != "rolling_max":
-            raise ValueError("only the accepted rolling-max delay estimator is supported")
+            raise ValueError(
+                "only the accepted rolling-max delay estimator is supported"
+            )
 
     def validate_for(self, checkpoint: Pi05CheckpointProfile) -> None:
         if checkpoint.policy_type != "training_time_rtc":
@@ -206,6 +219,7 @@ class InferenceTicket:
     action_chunk: tuple[tuple[float, ...], ...]
     execution: PolicyExecutionProfile = DEFAULT_PI05_EXECUTION_PROFILE
     timing: InferenceTiming | None = None
+    candidate_identity: tuple[tuple[str, str | int], ...] = ()
 
     def __post_init__(self) -> None:
         if not self.inference_id:
@@ -218,14 +232,12 @@ class InferenceTicket:
         object.__setattr__(self, "checkpoint_sha256", normalized)
         if len(self.action_chunk) != self.execution.action_chunk_size:
             raise ValueError(
-                "action chunk must contain "
-                f"{self.execution.action_chunk_size} steps"
+                f"action chunk must contain {self.execution.action_chunk_size} steps"
             )
         for action in self.action_chunk:
             if len(action) != self.execution.action_dimension:
                 raise ValueError(
-                    "action must contain "
-                    f"{self.execution.action_dimension} values"
+                    f"action must contain {self.execution.action_dimension} values"
                 )
             if not all(math.isfinite(value) for value in action):
                 raise ValueError("action values must be finite")

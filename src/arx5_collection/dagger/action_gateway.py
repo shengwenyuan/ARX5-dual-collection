@@ -115,6 +115,29 @@ class ExecutorStep(str, Enum):
     FAULT = "fault"
 
 
+class JointActionViolation(RuntimeError):
+    def __init__(
+        self,
+        message: str,
+        *,
+        guard: str,
+        side: str,
+        action_index: int,
+        joint_index: int,
+        delta_rad: float,
+        limit_rad: float,
+    ) -> None:
+        super().__init__(message)
+        self.details = dict(
+            guard=guard,
+            side=side,
+            action_index=action_index,
+            joint_index=joint_index,
+            delta_rad=delta_rad,
+            limit_rad=limit_rad,
+        )
+
+
 class Pi05JointActionContract:
     """Validate absolute joint actions and map the configured gripper contract."""
 
@@ -161,13 +184,17 @@ class Pi05JointActionContract:
         actions: tuple[tuple[float, ...], ...],
         state: DualArmJointState,
         saturation_sink: Callable[[GripperSaturation], None] | None = None,
+        *,
+        last_published_command: DualArmJointCommand | None = None,
     ) -> tuple[DualArmJointCommand, ...]:
         commands: list[DualArmJointCommand] = []
         previous_left = state.left
         previous_right = state.right
         for index, action in enumerate(actions):
             if len(action) != 14 or not all(math.isfinite(value) for value in action):
-                raise RuntimeError(f"action[{index}] is not a finite robot-space 14D action")
+                raise RuntimeError(
+                    f"action[{index}] is not a finite robot-space 14D action"
+                )
             left = tuple(action[:6])
             left_gripper = action[6]
             right = tuple(action[7:13])
@@ -180,6 +207,19 @@ class Pi05JointActionContract:
             )
             self._validate_arm(left, previous_left, state.left, "left", index)
             self._validate_arm(right, previous_right, state.right, "right", index)
+            if index == 0 and last_published_command is not None:
+                for side, target, previous in (
+                    ("left", left, last_published_command.left[:6]),
+                    ("right", right, last_published_command.right[:6]),
+                ):
+                    self._check_joint_delta(
+                        target,
+                        previous,
+                        side,
+                        index,
+                        "published_target_step",
+                        self.safety.max_joint_step_rad,
+                    )
             commands.append(
                 DualArmJointCommand(
                     left=(*left, self._denormalize_left(left_gripper)),
@@ -198,23 +238,46 @@ class Pi05JointActionContract:
         side: str,
         index: int,
     ) -> None:
-        step = max(
-            abs(target_value - previous_value)
-            for target_value, previous_value in zip(target, previous)
+        self._check_joint_delta(
+            target,
+            previous,
+            side,
+            index,
+            "measured_state_step" if index == 0 else "within_window_step",
+            self.safety.max_joint_step_rad,
         )
-        departure = max(
-            abs(target_value - initial_value)
-            for target_value, initial_value in zip(target, initial)
+        self._check_joint_delta(
+            target,
+            initial,
+            side,
+            index,
+            "measured_state_departure",
+            self.safety.max_joint_departure_rad,
         )
-        if step > self.safety.max_joint_step_rad:
-            raise RuntimeError(
-                f"{side} action[{index}] joint step {step:.6f} rad exceeds "
-                f"{self.safety.max_joint_step_rad:.6f} rad"
-            )
-        if departure > self.safety.max_joint_departure_rad:
-            raise RuntimeError(
-                f"{side} action[{index}] joint departure {departure:.6f} rad exceeds "
-                f"{self.safety.max_joint_departure_rad:.6f} rad"
+
+    def _check_joint_delta(
+        self,
+        target: tuple[float, ...],
+        reference: tuple[float, ...],
+        side: str,
+        index: int,
+        guard: str,
+        limit: float,
+    ) -> None:
+        deltas = tuple(abs(a - b) for a, b in zip(target, reference))
+        joint = max(range(len(deltas)), key=deltas.__getitem__)
+        delta = deltas[joint]
+        if delta > limit:
+            kind = "departure" if guard == "measured_state_departure" else "step"
+            raise JointActionViolation(
+                f"{side} action[{index}] joint {kind} {delta:.6f} rad exceeds "
+                f"{limit:.6f} rad (joint[{joint}], {guard})",
+                guard=guard,
+                side=side,
+                action_index=index,
+                joint_index=joint,
+                delta_rad=delta,
+                limit_rad=limit,
             )
 
     def _bound_gripper(
@@ -225,9 +288,7 @@ class Pi05JointActionContract:
         saturation_sink: Callable[[GripperSaturation], None] | None,
     ) -> float:
         if not (
-            self.safety.min_policy_gripper
-            <= value
-            <= self.safety.max_policy_gripper
+            self.safety.min_policy_gripper <= value <= self.safety.max_policy_gripper
         ):
             raise RuntimeError(
                 f"{side} action[{index}] normalized gripper {value:.6f} is outside "
@@ -344,10 +405,7 @@ class PolicyActionGateway:
             control_epoch,
         )
         with self._lock:
-            if (
-                control_epoch != self._control_epoch
-                or episode_id != self._episode_id
-            ):
+            if control_epoch != self._control_epoch or episode_id != self._episode_id:
                 raise RuntimeError("policy became stale before lease activation")
             # Keep the authority lease locked across the physical mode switch.
             # A concurrent Take-over can therefore only close the gate after
@@ -508,10 +566,7 @@ class FixedRateCommandExecutor:
         error: BaseException,
         expected_epoch: int,
     ) -> ExecutorStep:
-        if (
-            self.gateway.control_epoch != expected_epoch
-            or not self.gateway.gate_open
-        ):
+        if self.gateway.control_epoch != expected_epoch or not self.gateway.gate_open:
             self._reset_schedule()
             return ExecutorStep.IDLE
         try:

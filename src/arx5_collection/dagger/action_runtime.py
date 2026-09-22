@@ -52,7 +52,9 @@ def open_takeover_action_runtime(
         and hasattr(control, "publish")
         and hasattr(control, "enable_policy_control")
     ):
-        raise TypeError("Take-over control port does not implement the required boundary")
+        raise TypeError(
+            "Take-over control port does not implement the required boundary"
+        )
     contract = Pi05JointActionContract(
         settings.checkpoint_sha256,
         settings.grippers,
@@ -64,9 +66,14 @@ def open_takeover_action_runtime(
             raise RuntimeError("RTC checkpoint has no rollout profile")
         with JsonlRtcLog(log_dir / "dagger-rtc.jsonl") as rtc_log:
             scheduler_type = RtcActionScheduler
+            scheduler_options = {}
             if getattr(policy, "expo_two_phase", False):
                 from .expo import ExpoActionScheduler
+
                 scheduler_type = ExpoActionScheduler
+                scheduler_options["bootstrap_timeout_s"] = (
+                    settings.control.expo_bootstrap_timeout_s
+                )
             scheduler = scheduler_type(
                 policy,
                 control,
@@ -78,6 +85,7 @@ def open_takeover_action_runtime(
                 settings.control.policy_wait_timeout_s,
                 settings.control.command_watchdog_s,
                 diagnostic_sink=rtc_log,
+                **scheduler_options,
             )
             yield TakeoverActionRuntime(
                 scheduler,

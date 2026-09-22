@@ -5,16 +5,18 @@ from collections.abc import Callable, Mapping
 from concurrent.futures import Future
 from dataclasses import dataclass
 import json
+import math
 from pathlib import Path
 from threading import Event, Lock, Thread
 from time import monotonic, time_ns
-from typing import Any, Protocol
+from typing import Any, NoReturn, Protocol
 from uuid import uuid4
 
 from .action_gateway import (
     AsyncPolicy,
     DualArmCommandSink,
     DualArmJointCommand,
+    DualArmJointState,
     GripperSaturation,
     JointStateSource,
     Pi05JointActionContract,
@@ -119,6 +121,8 @@ class RtcActionScheduler:
         command_watchdog_s: float,
         diagnostic_sink: RtcDiagnosticSink | None = None,
         clock: Callable[[], float] = monotonic,
+        *,
+        bootstrap_timeout_s: float | None = None,
     ) -> None:
         rollout.validate_for(checkpoint)
         if min(policy_wait_timeout_s, command_watchdog_s) <= 0:
@@ -131,6 +135,13 @@ class RtcActionScheduler:
         self.checkpoint = checkpoint
         self.rollout = rollout
         self.policy_wait_timeout_s = policy_wait_timeout_s
+        self.bootstrap_timeout_s = (
+            policy_wait_timeout_s
+            if bootstrap_timeout_s is None
+            else bootstrap_timeout_s
+        )
+        if not math.isfinite(self.bootstrap_timeout_s) or self.bootstrap_timeout_s <= 0:
+            raise ValueError("RTC bootstrap timeout must be positive and finite")
         self.command_watchdog_s = command_watchdog_s
         self.diagnostic_sink = diagnostic_sink or (lambda event: None)
         self.clock = clock
@@ -149,6 +160,7 @@ class RtcActionScheduler:
         self._gate_open = False
         self._pending: PendingRtcInference | None = None
         self._queue: deque[QueuedRtcAction] = deque()
+        self._last_published_command: DualArmJointCommand | None = None
         self._issued_total = 0
         self._issued_since_splice = 0
         self._next_command_s: float | None = None
@@ -178,7 +190,9 @@ class RtcActionScheduler:
         if self._thread is not None:
             raise RuntimeError("RTC scheduler is already started")
         self._stop.clear()
-        self._thread = Thread(target=self._run, name="dagger-rtc-scheduler", daemon=False)
+        self._thread = Thread(
+            target=self._run, name="dagger-rtc-scheduler", daemon=False
+        )
         self._thread.start()
 
     def close(self) -> None:
@@ -204,6 +218,7 @@ class RtcActionScheduler:
             self._pending = None
             self._queue.clear()
             self._episode_id = None
+            self._last_published_command = None
             self._issued_total = 0
             self._issued_since_splice = 0
             self._next_command_s = None
@@ -227,7 +242,13 @@ class RtcActionScheduler:
             if pending is None:
                 raise RuntimeError("RTC bootstrap has not started")
             if not pending.future.done():
-                if self.clock() - pending.submitted_at_s > self.policy_wait_timeout_s:
+                elapsed = self.clock() - pending.submitted_at_s
+                if elapsed > self.bootstrap_timeout_s:
+                    self._emit_locked(
+                        "bootstrap_timeout",
+                        elapsed_s=elapsed,
+                        timeout_s=self.bootstrap_timeout_s,
+                    )
                     raise RuntimeError("RTC bootstrap inference timeout")
                 return False
         self._accept_pending(bootstrap_required=True)
@@ -267,6 +288,7 @@ class RtcActionScheduler:
                 raise RuntimeError("RTC validated action queue underrun")
             queued = self._queue.popleft()
             self.sink.publish(queued.command)
+            self._last_published_command = queued.command
             self._issued_total += 1
             self._issued_since_splice += 1
             self._next_command_s += self.period_s
@@ -281,7 +303,9 @@ class RtcActionScheduler:
             ):
                 estimate = self.delay.estimate
                 if len(self._queue) < estimate:
-                    raise RuntimeError("RTC queue cannot supply the configured action prefix")
+                    raise RuntimeError(
+                        "RTC queue cannot supply the configured action prefix"
+                    )
                 prefix = tuple(
                     item.model_action for item in tuple(self._queue)[:estimate]
                 )
@@ -335,6 +359,7 @@ class RtcActionScheduler:
             epoch = self._control_epoch
             episode_id = self._episode_id
             issued_total = self._issued_total
+            last_published = self._last_published_command
         ticket = pending.future.result()
         self.contract.validate_ticket_identity(ticket, epoch)
         if pending.action_prefix:
@@ -355,7 +380,9 @@ class RtcActionScheduler:
         start = 0 if pending.bootstrap else actual_delay
         if pending.bootstrap:
             if actual_delay != 0:
-                raise RuntimeError("RTC bootstrap issued actions before policy readiness")
+                raise RuntimeError(
+                    "RTC bootstrap issued actions before policy readiness"
+                )
         elif not 0 <= actual_delay < self.checkpoint.max_delay_steps:
             raise RuntimeError(
                 f"RTC actual delay {actual_delay} is outside trained range "
@@ -366,11 +393,19 @@ class RtcActionScheduler:
         if len(actions) != self.safe_window_steps:
             raise RuntimeError("RTC response cannot provide the required safe window")
         saturations: list[GripperSaturation] = []
-        commands = self.contract.validate_actions(
-            actions,
-            self.state_source.read(),
-            saturation_sink=saturations.append,
-        )
+        state = self.state_source.read()
+        try:
+            commands = self.contract.validate_actions(
+                actions,
+                state,
+                saturation_sink=saturations.append,
+                last_published_command=last_published,
+            )
+        except RuntimeError as error:
+            with self._lock:
+                self._reject_window_locked(
+                    error, pending, ticket, state, last_published, actions[0], start
+                )
         replacement = deque(
             QueuedRtcAction(model_action, command)
             for model_action, command in zip(actions, commands)
@@ -380,6 +415,8 @@ class RtcActionScheduler:
                 epoch != self._control_epoch
                 or episode_id != self._episode_id
                 or pending is not self._pending
+                or issued_total != self._issued_total
+                or last_published is not self._last_published_command
             ):
                 raise RuntimeError("RTC response became stale before splice")
             if pending.bootstrap:
@@ -409,6 +446,47 @@ class RtcActionScheduler:
                     min_input_value=min(item.input_value for item in saturations),
                     max_input_value=max(item.input_value for item in saturations),
                 )
+
+    def _reject_window_locked(
+        self,
+        error: RuntimeError,
+        pending: PendingRtcInference,
+        ticket: InferenceTicket,
+        state: DualArmJointState,
+        last_published: DualArmJointCommand | None,
+        first_action: tuple[float, ...],
+        splice_start: int,
+    ) -> NoReturn:
+        """Stop publication before failure-only diagnostics; preserve the safety error."""
+        self._gate_open = False
+        self._queue.clear()
+        self._pending = None
+        if self._fault is None:
+            self._fault = error
+        previous_target = None
+        if last_published is not None:
+            previous_target = {
+                "left": last_published.left[:6],
+                "right": last_published.right[:6],
+            }
+        try:
+            self._emit_locked(
+                "window_rejected",
+                reason=str(error),
+                inference_id=pending.inference_id,
+                ticket_inference_id=ticket.inference_id,
+                bootstrap=pending.bootstrap,
+                splice_start=splice_start,
+                candidate_identity=dict(ticket.candidate_identity),
+                measured_state={"left": state.left, "right": state.right},
+                previous_published_target=previous_target,
+                first_target={"left": first_action[:6], "right": first_action[7:13]},
+                violation=getattr(error, "details", {}),
+            )
+            self._emit_locked("fault", reason=str(error))
+        finally:
+            # A broken log sink must never replace the original safety failure.
+            raise error
 
     def _fail(self, error: BaseException) -> None:
         with self._lock:

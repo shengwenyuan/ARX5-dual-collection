@@ -4,11 +4,14 @@ from collections.abc import Callable
 from typing import Protocol, runtime_checkable
 
 from arx5_collection.episode.ports import StreamMonitor
+from arx5_collection.episode.models import StreamMetrics
 from arx5_collection.reset.ports import DualArmResetController
 
 
 @runtime_checkable
 class SessionStreamMonitor(StreamMonitor, Protocol):
+    def stop(self, *, audit_recording: bool = True) -> tuple[StreamMetrics, ...]: ...
+
     def open(self) -> None: ...
 
     def wait_until_ready(

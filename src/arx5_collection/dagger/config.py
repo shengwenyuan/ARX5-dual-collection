@@ -34,14 +34,23 @@ class DaggerControlSettings:
     policy_wait_timeout_s: float
     command_watchdog_s: float
     rtc_deadline_margin_s: float
+    expo_bootstrap_timeout_s: float = 2.0
 
     def __post_init__(self) -> None:
-        if min(
-            self.state_timeout_s,
-            self.policy_wait_timeout_s,
-            self.command_watchdog_s,
-            self.rtc_deadline_margin_s,
-        ) <= 0:
+        if (
+            not math.isfinite(self.expo_bootstrap_timeout_s)
+            or self.expo_bootstrap_timeout_s <= 0
+        ):
+            raise ValueError("EXPO bootstrap timeout must be positive and finite")
+        if (
+            min(
+                self.state_timeout_s,
+                self.policy_wait_timeout_s,
+                self.command_watchdog_s,
+                self.rtc_deadline_margin_s,
+            )
+            <= 0
+        ):
             raise ValueError("DAgger control timeouts must be positive")
 
 
@@ -101,9 +110,7 @@ class DaggerCollectorSettings:
                 max_camera_span_ns=_milliseconds_ns(
                     observation.get("max_camera_span_ms", 40.0)
                 ),
-                max_arm_age_ns=_milliseconds_ns(
-                    observation.get("max_arm_age_ms", 2.0)
-                ),
+                max_arm_age_ns=_milliseconds_ns(observation.get("max_arm_age_ms", 2.0)),
                 max_snapshot_age_ns=_milliseconds_ns(
                     observation.get("max_snapshot_age_ms", 100.0)
                 ),
@@ -119,9 +126,7 @@ class DaggerCollectorSettings:
             ),
             control=DaggerControlSettings(
                 safety=JointActionSafety(
-                    max_joint_step_rad=float(
-                        safety.get("max_joint_step_rad", 0.25)
-                    ),
+                    max_joint_step_rad=float(safety.get("max_joint_step_rad", 0.25)),
                     max_joint_departure_rad=float(
                         safety.get("max_joint_departure_rad", 1.5)
                     ),
@@ -131,24 +136,17 @@ class DaggerCollectorSettings:
                     max_normalized_gripper=float(
                         safety.get("max_normalized_gripper", 1.0)
                     ),
-                    min_policy_gripper=float(
-                        safety.get("min_policy_gripper", -1.0)
-                    ),
-                    max_policy_gripper=float(
-                        safety.get("max_policy_gripper", 2.0)
-                    ),
+                    min_policy_gripper=float(safety.get("min_policy_gripper", -1.0)),
+                    max_policy_gripper=float(safety.get("max_policy_gripper", 2.0)),
                 ),
                 state_timeout_s=float(gateway.get("state_timeout_s", 0.1)),
-                policy_wait_timeout_s=float(
-                    gateway.get("policy_wait_timeout_s", 0.5)
-                ),
-                command_watchdog_s=float(
-                    gateway.get("command_watchdog_s", 0.12)
-                ),
-                rtc_deadline_margin_s=float(
-                    gateway.get("rtc_deadline_margin_ms", 50.0)
-                )
+                policy_wait_timeout_s=float(gateway.get("policy_wait_timeout_s", 0.5)),
+                command_watchdog_s=float(gateway.get("command_watchdog_s", 0.12)),
+                rtc_deadline_margin_s=float(gateway.get("rtc_deadline_margin_ms", 50.0))
                 / 1000.0,
+                expo_bootstrap_timeout_s=float(
+                    gateway.get("expo_bootstrap_timeout_s", 2.0)
+                ),
             ),
         )
         if not settings.server_host or not settings.prompt:
@@ -157,6 +155,11 @@ class DaggerCollectorSettings:
             raise ValueError("policy server port is invalid")
         if settings.inference_timeout_s <= 0:
             raise ValueError("inference_timeout_s must be positive")
+        if (
+            "expo" in payload
+            and settings.control.expo_bootstrap_timeout_s > settings.inference_timeout_s
+        ):
+            raise ValueError("EXPO bootstrap timeout exceeds the transport timeout")
         if settings.snapshot_timeout_s <= 0:
             raise ValueError("snapshot request timeout must be positive")
         if not _SHA256.fullmatch(settings.checkpoint_sha256):
@@ -171,9 +174,7 @@ def _validate_rtc_deadline(settings: DaggerCollectorSettings) -> None:
     checkpoint = settings.checkpoint_profile
     if checkpoint.policy_type != "training_time_rtc":
         return
-    hard_deadline_s = (
-        checkpoint.max_delay_steps / checkpoint.execution.control_rate_hz
-    )
+    hard_deadline_s = checkpoint.max_delay_steps / checkpoint.execution.control_rate_hz
     request_deadline_s = settings.control.policy_wait_timeout_s
     snapshot_deadline_s = settings.snapshot_timeout_s
     if snapshot_deadline_s >= request_deadline_s:
