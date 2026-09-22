@@ -35,6 +35,7 @@ class OpenPiDaggerTransport:
             close_timeout=min(timeout_s, 5.0),
         )
         metadata = self._recv_mapping()
+        self.metadata = metadata
         if metadata.get("service") != "arx5-dagger-policy":
             self.close()
             raise RuntimeError("connected server is not an ARX5 DAgger policy service")

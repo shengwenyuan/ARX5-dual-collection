@@ -32,7 +32,7 @@ def resolve_config(
     if policy["mode"] != "training_time_rtc":
         raise ValueError("unified config requires training_time_rtc")
     variant = policy.get("model_variant", "standard")
-    if variant not in {"standard", "arx5_base"}:
+    if variant not in {"standard", "arx5_base", "arx5_joint_rtc"}:
         raise ValueError(f"unsupported model_variant: {variant}")
     if checkpoint_metadata.get("policy_type") != policy["mode"]:
         raise ValueError("checkpoint policy type disagrees with inference config")
@@ -50,6 +50,10 @@ def resolve_config(
     if not math.isfinite(offset):
         raise ValueError("gripper offset must be finite")
     out = deepcopy(template)
+    if "expo" in source:
+        out["expo"] = deepcopy(source["expo"])
+    if "recording" in source:
+        out["recording"] = deepcopy(source["recording"])
     out["policy"].update(
         checkpoint=checkpoint_path,
         checkpoint_sha256=checkpoint_sha256,
@@ -134,11 +138,11 @@ def prepare_policy(
     relative = checkpoint.relative_to(checkpoint_root)
     openpi = Path(source["policy"]["openpi_root"]).resolve(strict=True)
     variant = source["policy"].get("model_variant", "standard")
-    if variant not in {"standard", "arx5_base"}:
+    if variant not in {"standard", "arx5_base", "arx5_joint_rtc"}:
         raise ValueError(f"unsupported model_variant: {variant}")
     model_file = (
-        "experiments/arx5_base/model_config.py"
-        if variant == "arx5_base"
+        f"experiments/{variant}/model_config.py"
+        if variant in {"arx5_base", "arx5_joint_rtc"}
         else "models/pi0_rtc_config.py"
     )
     if not (openpi / "src/openpi" / model_file).is_file():
@@ -166,6 +170,18 @@ def prepare_policy(
         checkpoint_sha256=checkpoint_tree_sha256(checkpoint),
         checkpoint_path="/checkpoints/" + relative.as_posix(),
     )
+    expo_mounts = []
+    if "expo" in payload:
+        expo=payload["expo"]
+        for key,target in (("bundle","/opt/expo-release"),("source_root","/opt/expo-online-RL"),("upstream_root","/opt/expo-ft")):
+            host=Path(expo[key]).resolve(strict=True)
+            if not host.is_dir():raise ValueError("EXPO mount is not a directory")
+            expo_mounts.append({"type":"bind","source":str(host),"target":target,"read_only":True,"bind":{"create_host_path":False}})
+            expo[key]=target
+        if not 0 < payload["rollout"]["initial_delay_steps"] < payload["checkpoint_profile"]["sequential_execution_steps"]:
+            raise ValueError("EXPO requires 0<d<C")
+        if payload["rollout"]["prefetch_after_steps"] != payload["checkpoint_profile"]["sequential_execution_steps"] - payload["rollout"]["initial_delay_steps"]:
+            raise ValueError("EXPO prefetch must equal C-d")
     payload["config_source"] = {
         "inference_config": str(inference_config.resolve()),
         "inference_config_sha256": hashlib.sha256(
@@ -192,6 +208,7 @@ def prepare_policy(
                 "services": {
                     "policy-server": {
                         "volumes": [
+                            *expo_mounts,
                             {
                                 "type": "bind",
                                 "source": str(openpi),

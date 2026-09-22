@@ -38,6 +38,8 @@ class PolicyServerSettings:
     rtc_rollout: RtcRolloutProfile | None
     model_variant: str = "standard"
     openpi_root: Path | None = None
+    expo: dict | None = None
+    effective: dict | None = None
 
     @classmethod
     def load(cls, path: str | Path) -> PolicyServerSettings:
@@ -49,6 +51,8 @@ class PolicyServerSettings:
             raise ValueError("policy config must contain a [policy] table")
         checkpoint_profile = load_checkpoint_profile(payload)
         settings = cls(
+            expo=payload.get("expo"),
+            effective=payload,
             checkpoint=Path(str(policy["checkpoint"])),
             checkpoint_sha256=str(policy["checkpoint_sha256"]).lower(),
             repo_id=str(policy["repo_id"]),
@@ -75,9 +79,9 @@ class PolicyServerSettings:
             raise ValueError("policy port is invalid")
         if not _SHA256.fullmatch(settings.checkpoint_sha256):
             raise ValueError("checkpoint_sha256 must contain 64 hexadecimal characters")
-        if settings.model_variant not in {"standard", "arx5_base"}:
+        if settings.model_variant not in {"standard", "arx5_base", "arx5_joint_rtc"}:
             raise ValueError(f"unsupported model_variant: {settings.model_variant}")
-        if settings.model_variant == "arx5_base" and (
+        if settings.model_variant in {"arx5_base", "arx5_joint_rtc"} and (
             settings.openpi_root is None
             or checkpoint_profile.policy_type != "training_time_rtc"
         ):
@@ -137,9 +141,10 @@ def create_pi05_joint_policy(settings: PolicyServerSettings):
     )
     policy_metadata: dict[str, Any] = {}
     if settings.checkpoint_profile.policy_type == "training_time_rtc":
-        if settings.model_variant == "arx5_base":
-            from openpi.experiments.arx5_base.model_config import Pi05RtcConfig
-            from openpi.experiments.arx5_base.data_config import create_data_config
+        if settings.model_variant in {"arx5_base", "arx5_joint_rtc"}:
+            import importlib
+            Pi05RtcConfig = importlib.import_module(f"openpi.experiments.{settings.model_variant}.model_config").Pi05RtcConfig
+            create_data_config = importlib.import_module(f"openpi.experiments.{settings.model_variant}.data_config").create_data_config
 
             data = create_data_config(settings.repo_id)
         else:
@@ -151,7 +156,7 @@ def create_pi05_joint_policy(settings: PolicyServerSettings):
             max_delay=settings.checkpoint_profile.max_delay_steps,
             **(
                 {"max_token_len": 200, "discrete_state_input": True}
-                if settings.model_variant == "arx5_base"
+                if settings.model_variant in {"arx5_base", "arx5_joint_rtc"}
                 else {}
             ),
         )
@@ -288,21 +293,26 @@ def serve(settings: PolicyServerSettings) -> None:
             f"expected={settings.checkpoint_sha256}, actual={actual_sha256}"
         )
     logging.info("Checkpoint identity verified: %s", actual_sha256)
-    policy = create_pi05_joint_policy(settings)
-    warm_up_pi05_policy(
-        policy,
-        settings.prompt,
-        settings.checkpoint_profile,
-        settings.rtc_rollout,
-    )
+    if settings.expo is not None:
+        if settings.openpi_root is None: raise ValueError("EXPO requires OpenPI source")
+        root=settings.openpi_root
+        expo_root=Path(settings.expo["source_root"])
+        upstream=Path(settings.expo["upstream_root"])
+        sys.path[:0]=[str(root/"src"),str(root/"packages/openpi-client/src"),str(expo_root/"src"),str(upstream)]
+        from expo_online_rl.expo_service import create_endpoint
+        envelope=create_endpoint(settings.expo["bundle"],settings.effective,settings.checkpoint)
+    else:
+        policy = create_pi05_joint_policy(settings)
+        warm_up_pi05_policy(policy, settings.prompt, settings.checkpoint_profile, settings.rtc_rollout)
+        envelope = CorrelatedPolicyEnvelope(policy, actual_sha256, time.time_ns)
     from openpi.serving.websocket_policy_server import WebsocketPolicyServer
 
-    envelope = CorrelatedPolicyEnvelope(policy, actual_sha256, time.time_ns)
     WebsocketPolicyServer(
         envelope,
         host=settings.host,
         port=settings.port,
         metadata={
+            **({"expo_bundle_id":settings.expo["bundle_id"],"expo_protocol":"arx5-expo-two-phase-v1","expo_inference_seed":envelope.inference_seed} if settings.expo else {}),
             "service": "arx5-dagger-policy",
             "checkpoint_sha256": actual_sha256,
             "action_horizon": settings.execution.action_chunk_size,

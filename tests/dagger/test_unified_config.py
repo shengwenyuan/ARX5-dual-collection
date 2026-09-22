@@ -212,3 +212,30 @@ def test_host_entry_passes_resolved_bundle_to_existing_compose(tmp_path, mode):
     )
     assert env["ARX5_TASK_CONFIG"] == str(ROOT / "config/task.rgb-only.json")
     assert "--no-build" in argv
+
+
+def test_expo_mounts_and_record_switch_share_native_effective_config(tmp_path):
+    args=fixture_bundle(tmp_path)
+    source=tomllib.loads(args['inference_config'].read_text())
+    source['policy'].update(model_variant='arx5_joint_rtc',action_chunk_size=30,execution_steps=8)
+    model=tmp_path/'openpi/src/openpi/experiments/arx5_joint_rtc/model_config.py'
+    model.parent.mkdir();model.write_text('# fixture')
+    source['robot']['rate_hz']=30
+    source['rtc'].update(minimum_execution_horizon=4,initial_delay_steps=4)
+    source['expo']={'bundle_id':'policy-id'}
+    for key in ('bundle','source_root','upstream_root'):
+        root=tmp_path/key;root.mkdir();source['expo'][key]=str(root)
+    source['recording']={'enabled':False}
+    write_toml(args['inference_config'],source)
+    config,compose=prepare_policy(**args)
+    effective=tomllib.loads(config.read_text())
+    assert effective['expo']['bundle']=='/opt/expo-release'
+    assert effective['recording']['enabled'] is False
+    assert effective['checkpoint_profile']['sequential_execution_steps']==8
+    assert effective['rollout']['prefetch_after_steps']==4
+    mounts=json.loads(compose.read_text())['services']['policy-server']['volumes'][:3]
+    assert all(m['read_only'] and not m['bind']['create_host_path'] for m in mounts)
+    assert PolicyServerSettings.load(config).model_variant=='arx5_joint_rtc'
+    source['rtc']['minimum_execution_horizon']=5
+    write_toml(args['inference_config'],source)
+    with pytest.raises(ValueError,match='prefetch'):prepare_policy(**{**args,'output_dir':tmp_path/'bad'})

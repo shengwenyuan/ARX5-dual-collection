@@ -56,3 +56,30 @@ def test_missing_pedals_stop_before_session_hardware_starts(tmp_path):
         with pytest.raises(PedalUnavailable, match="missing pedals"):
             app.run()
     app.session.__enter__.assert_not_called()
+
+
+def test_recording_disabled_does_not_construct_recorder_or_change_action_runtime(tmp_path):
+    request=spec(tmp_path)
+    from dataclasses import replace
+    policy=tmp_path/'policy.toml'
+    policy.write_text(request.policy_config.read_text()+'\n[recording]\nenabled = false\n')
+    request=replace(request,policy_config=policy)
+    app=InferApplication.build(request)
+    original=app.session
+    app.session=MagicMock(station=original.station,camera_snapshot=original.camera_snapshot)
+    actions=SimpleNamespace(gateway=Gateway([]),executor=Mock())
+    module='arx5_collection.infer.application.'
+    with ExitStack() as stack:
+        mocks={name:stack.enter_context(patch(module+name)) for name in (
+            'open_configured_pedals','RosDualArmControlPort','OpenPiDaggerTransport',
+            'LocalVlaSnapshotClient','RosCommandPublisher','AsyncPi05PolicyClient',
+            'open_takeover_action_runtime','run_episode_loop')}
+        mocks['open_takeover_action_runtime'].return_value.__enter__.return_value=actions
+        loop=stack.enter_context(patch('arx5_collection.infer.unrecorded.run_unrecorded',return_value=0))
+        assert app.run()==0
+        loop.assert_called_once()
+        app.session.create_runtime.assert_not_called()
+        mocks['RosCommandPublisher'].assert_not_called()
+        mocks['run_episode_loop'].assert_not_called()
+        actions.executor.start.assert_called_once()
+        actions.executor.close.assert_called_once()

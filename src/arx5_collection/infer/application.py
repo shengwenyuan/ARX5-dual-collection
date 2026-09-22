@@ -4,6 +4,7 @@ from dataclasses import asdict, dataclass
 from hashlib import sha256
 import math
 import sys
+import tomllib
 from typing import TextIO
 
 from arx5_collection.capture import CaptureProfile, metadata_extensions
@@ -102,6 +103,21 @@ class InferApplication:
         if snapshot is None:
             raise RuntimeError("infer requires the existing Snapshot data plane")
         status = lambda message: print(message, file=self.stderr, flush=True)
+        payload = tomllib.loads(self.spec.policy_config.read_text())
+        expo = payload.get("expo")
+        recording_enabled = payload.get("recording", {}).get("enabled", True)
+        if type(recording_enabled) is not bool:raise ValueError("recording.enabled must be boolean")
+        publisher_type = RosCommandPublisher
+        if not recording_enabled:
+            from .unrecorded import NoCommandPublisher
+            publisher_type = NoCommandPublisher
+        transport_type, client_type = OpenPiDaggerTransport, AsyncPi05PolicyClient
+        transport_options = {}
+        if expo is not None:
+            from arx5_collection.dagger.expo import ExpoTransport, ExpoPolicyClient
+            transport_type, client_type = ExpoTransport, ExpoPolicyClient
+            transport_options = {"bundle_id": expo["bundle_id"]}
+            self.configuration["expo"] = {"bundle_id": expo["bundle_id"], "protocol": "arx5-expo-two-phase-v1"}
         services = tuple(
             f"/{name}/enable_policy_control"
             for name in (
@@ -115,16 +131,18 @@ class InferApplication:
         ) as pedals, self.session, RosDualArmControlPort(
             ACTION_OUTPUT_TOPICS, policy_enable_services=services,
             allow_vendor_commands=True, state_timeout_s=settings.control.state_timeout_s,
-        ) as control, OpenPiDaggerTransport(
+        ) as control, transport_type(
             settings.server_host, settings.server_port, settings.checkpoint_sha256,
-            settings.inference_timeout_s, settings.checkpoint_profile,
+            settings.inference_timeout_s, settings.checkpoint_profile, **transport_options,
         ) as transport, LocalVlaSnapshotClient(
             timeout_s=settings.snapshot_timeout_s, socket_path=snapshot.socket_path,
             arena_path=snapshot.arena_path, width=settings.checkpoint_profile.input.width,
             height=settings.checkpoint_profile.input.height,
-        ) as observations, RosCommandPublisher() as publisher:
+        ) as observations, publisher_type() as publisher:
+            if expo is not None:
+                self.configuration["expo"]["inference_seed"] = transport.metadata["expo_inference_seed"]
             self.session.backend.recording_publisher = publisher
-            policy = AsyncPi05PolicyClient(
+            policy = client_type(
                 session_id=self.spec.session_id, prompt=settings.prompt,
                 checkpoint_sha256=settings.checkpoint_sha256, observations=observations,
                 encoder=Pi05ObservationEncoder(settings.grippers), transport=transport,
@@ -141,6 +159,9 @@ class InferApplication:
                     )
                     try:
                         actions.executor.start()
+                        if not recording_enabled:
+                            from .unrecorded import run_unrecorded
+                            return run_unrecorded(self.session, controller, pedals, self.spec.episodes, status, streams=self.request.streams)
                         runtime = self.session.create_runtime(
                             self.request, InferRecordTrigger(pedals, controller),
                             metadata_context_provider=controller.metadata_context,

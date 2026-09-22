@@ -63,7 +63,11 @@ def open_takeover_action_runtime(
         if settings.rtc_rollout is None:
             raise RuntimeError("RTC checkpoint has no rollout profile")
         with JsonlRtcLog(log_dir / "dagger-rtc.jsonl") as rtc_log:
-            scheduler = RtcActionScheduler(
+            scheduler_type = RtcActionScheduler
+            if getattr(policy, "expo_two_phase", False):
+                from .expo import ExpoActionScheduler
+                scheduler_type = ExpoActionScheduler
+            scheduler = scheduler_type(
                 policy,
                 control,
                 control,
