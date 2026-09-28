@@ -91,6 +91,9 @@ def resolve_config(
             for k in ("max_joint_step_rad", "max_joint_departure_rad")
         }
     )
+    out["safety"]["max_initial_joint_step_rad"] = source["safety"].get(
+        "max_initial_joint_step_rad", source["safety"]["max_joint_step_rad"]
+    )
     out["gripper"] = {"contract": "arx5-gripper-v1", "normalized_action_offset": offset}
     # Preserve the station's margin and cap timeouts to the selected frequency.
     rate = p["control_rate_hz"]

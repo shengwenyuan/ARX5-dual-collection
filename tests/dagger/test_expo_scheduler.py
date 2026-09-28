@@ -169,3 +169,25 @@ def test_late_fast_phase_and_epoch_cancel_cannot_send_old_actions():
     s.clear_pending(2)
     s.step()
     assert len(sink.commands) == 8
+
+
+def test_acceptance_cannot_publish_after_consuming_fast_deadline():
+    s, p, sink, clock, ticket = fixture()
+    for i in range(4):
+        advance(s, clock, i)
+    p.slow[1][0].set_result({"ticket": "prepared"})
+    for i in range(4, 8):
+        advance(s, clock, i)
+    p.fast[0][0].set_result(ticket())
+    accept = s._accept_pending
+
+    def slow_accept(**kwargs):
+        accept(**kwargs)
+        clock.value = 8 / 30 + 0.001
+
+    s._accept_pending = slow_accept
+    clock.value = 7 / 30 + 0.001
+    s.step()
+    assert not s.gate_open
+    assert len(sink.commands) == 8
+    assert "during window acceptance" in str(s.take_fault())

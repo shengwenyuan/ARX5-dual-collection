@@ -137,11 +137,16 @@ class WindowContinuityTests(unittest.TestCase):
         self.assertIsNone(s.take_fault())
         self.assertFalse(any(e["event"] == "window_rejected" for e in events))
 
-    def test_measured_state_guard_remains(self):
+    def test_tracking_error_is_not_a_target_step(self):
         s, p, clock, sink, events, cp = setup()
         continuation(s, p, clock, cp, 0.270307)
-        self.assertEqual(len(sink.commands), 9)
-        self.assertIn("measured_state_step", str(s.take_fault()))
+        self.assertEqual(len(sink.commands), 10)
+        self.assertIsNone(s.take_fault())
+
+    def test_initial_jump_remains_rejected(self):
+        s, *_ = setup()
+        with self.assertRaisesRegex(RuntimeError, "initial_state_step"):
+            s.contract.validate_actions((action(0.27),), State().read())
 
     def test_reset_forgets_old_target_and_allows_new_bootstrap(self):
         s, p, clock, sink, events, cp = setup()

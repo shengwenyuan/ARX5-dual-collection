@@ -8,6 +8,7 @@ import tomllib
 from typing import TextIO
 
 from arx5_collection.capture import CaptureProfile, metadata_extensions
+from arx5_collection.dagger.action_gateway import ACTION_VALIDATION_CONTRACT
 from arx5_collection.dagger.action_runtime import open_takeover_action_runtime
 from arx5_collection.dagger.application import DaggerRunSpec, DaggerSessionBuilder
 from arx5_collection.dagger.authority_ros import ACTION_OUTPUT_TOPICS
@@ -48,6 +49,8 @@ def recording_configuration(
         "gripper_calibration": asdict(settings.grippers),
         "gripper_action_offset": settings.gripper_action_offset,
         "normalization_identity": "checkpoint_sha256 (server checkpoint assets)",
+        "action_validation_contract": ACTION_VALIDATION_CONTRACT,
+        "action_safety": asdict(settings.control.safety),
         "action_semantics": "absolute_vendor_target",
         "action_order": [
             f"{side}_{joint}"

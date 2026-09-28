@@ -127,6 +127,9 @@ class DaggerCollectorSettings:
             control=DaggerControlSettings(
                 safety=JointActionSafety(
                     max_joint_step_rad=float(safety.get("max_joint_step_rad", 0.25)),
+                    max_initial_joint_step_rad=float(
+                        safety.get("max_initial_joint_step_rad", safety.get("max_joint_step_rad", 0.25))
+                    ),
                     max_joint_departure_rad=float(
                         safety.get("max_joint_departure_rad", 1.5)
                     ),

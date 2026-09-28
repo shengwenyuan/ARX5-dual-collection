@@ -47,6 +47,7 @@ def dagger(
     rgb_only: bool = False,
     inference_config: str | None = None,
     runtime_config: str | None = None,
+    external_policy: bool = False,
 ) -> int:
     required("ARX5_OUTPUT_ROOT")
     required("ARX5_TASK_DESCRIPTION")
@@ -97,6 +98,7 @@ def dagger(
             *overrides,
             "up",
             "--no-build",
+            *(["--no-deps"] if external_policy else []),
             "--abort-on-container-exit",
             "--exit-code-from",
             "collector",
@@ -158,6 +160,10 @@ def main() -> int:
         "infer", help="RTC episodes with pedal success/fail"
     )
     infer_parser.add_argument("--rgb-only", action="store_true")
+    infer_parser.add_argument(
+        "--external-policy", action="store_true",
+        help="use an already running policy service; start only the collector",
+    )
     dagger_parser = commands.add_parser("dagger", help="start a DAgger Session")
     dagger_parser.add_argument(
         "--mode", choices=("takeover", "shadow"), default="takeover"
@@ -184,6 +190,7 @@ def main() -> int:
             args.rgb_only,
             args.inference_config,
             args.runtime_config,
+            getattr(args, "external_policy", False),
         )
     except ValueError as error:
         parser.error(str(error))

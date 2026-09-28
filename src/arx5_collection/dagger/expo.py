@@ -165,7 +165,13 @@ class ExpoActionScheduler(RtcActionScheduler):
             self._accept_pending(bootstrap_required=False)
             self._finishing = False
         with self._lock:
-            if not self._gate_open or now < self._next_command_s:
+            if not self._gate_open:
+                return
+            # Acceptance and waiting for the lock consume the fast-stage budget.
+            now = self.clock()
+            if finishing and deadline is not None and now > deadline:
+                raise RuntimeError("EXPO fast-stage deadline missed during window acceptance")
+            if now < self._next_command_s:
                 return
             if now - self._next_command_s > self.command_watchdog_s:
                 raise RuntimeError("EXPO command watchdog expired")

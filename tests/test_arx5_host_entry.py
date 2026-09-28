@@ -72,3 +72,12 @@ def test_dagger_uses_station_task_config_by_default() -> None:
         assert ENTRY["dagger"]("takeover") == 0
 
     assert "ARX5_TASK_CONFIG" not in call.call_args.kwargs["env"]
+
+
+def test_external_policy_keeps_infer_entry_without_starting_policy_container():
+    with patch.dict(os.environ, {"ARX5_OUTPUT_ROOT": "/reports/test", "ARX5_TASK_DESCRIPTION": "test"}), patch("subprocess.call", return_value=0) as call:
+        assert ENTRY["dagger"]("infer", external_policy=True) == 0
+    argv = call.call_args.args[0]
+    assert "--no-deps" in argv
+    assert argv[-1] == "collector"
+    assert any("compose.infer.yaml" in item for item in argv)

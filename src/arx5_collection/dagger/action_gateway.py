@@ -39,6 +39,9 @@ class DualArmJointCommand:
             raise ValueError("dual-arm command must be finite")
 
 
+ACTION_VALIDATION_CONTRACT = "absolute-target-continuity-v2"
+
+
 @dataclass(frozen=True, slots=True)
 class JointActionSafety:
     max_joint_step_rad: float
@@ -47,9 +50,11 @@ class JointActionSafety:
     max_normalized_gripper: float
     min_policy_gripper: float = -1.0
     max_policy_gripper: float = 2.0
+    max_initial_joint_step_rad: float = 0.25
 
     def __post_init__(self) -> None:
         values = (
+            self.max_initial_joint_step_rad,
             self.max_joint_step_rad,
             self.max_joint_departure_rad,
             self.min_normalized_gripper,
@@ -59,7 +64,11 @@ class JointActionSafety:
         )
         if not all(math.isfinite(value) for value in values):
             raise ValueError("action safety limits must be finite")
-        if self.max_joint_step_rad <= 0 or self.max_joint_departure_rad <= 0:
+        if min(
+            self.max_initial_joint_step_rad,
+            self.max_joint_step_rad,
+            self.max_joint_departure_rad,
+        ) <= 0:
             raise ValueError("joint safety limits must be positive")
         if self.min_normalized_gripper >= self.max_normalized_gripper:
             raise ValueError("normalized gripper limits are invalid")
@@ -188,8 +197,15 @@ class Pi05JointActionContract:
         last_published_command: DualArmJointCommand | None = None,
     ) -> tuple[DualArmJointCommand, ...]:
         commands: list[DualArmJointCommand] = []
-        previous_left = state.left
-        previous_right = state.right
+        # Continuation validates target continuity, not the robot's tracking error.
+        # The first window has no published target, so its reference is feedback.
+        if last_published_command is None:
+            previous_left, previous_right = state.left, state.right
+            first_guard = "initial_state_step"
+        else:
+            previous_left = last_published_command.left[:6]
+            previous_right = last_published_command.right[:6]
+            first_guard = "published_target_step"
         for index, action in enumerate(actions):
             if len(action) != 14 or not all(math.isfinite(value) for value in action):
                 raise RuntimeError(
@@ -205,21 +221,8 @@ class Pi05JointActionContract:
             right_gripper = self._bound_gripper(
                 right_gripper, "right", index, saturation_sink
             )
-            self._validate_arm(left, previous_left, state.left, "left", index)
-            self._validate_arm(right, previous_right, state.right, "right", index)
-            if index == 0 and last_published_command is not None:
-                for side, target, previous in (
-                    ("left", left, last_published_command.left[:6]),
-                    ("right", right, last_published_command.right[:6]),
-                ):
-                    self._check_joint_delta(
-                        target,
-                        previous,
-                        side,
-                        index,
-                        "published_target_step",
-                        self.safety.max_joint_step_rad,
-                    )
+            self._validate_arm(left, previous_left, state.left, "left", index, first_guard)
+            self._validate_arm(right, previous_right, state.right, "right", index, first_guard)
             commands.append(
                 DualArmJointCommand(
                     left=(*left, self._denormalize_left(left_gripper)),
@@ -237,14 +240,17 @@ class Pi05JointActionContract:
         initial: tuple[float, ...],
         side: str,
         index: int,
+        first_guard: str,
     ) -> None:
         self._check_joint_delta(
             target,
             previous,
             side,
             index,
-            "measured_state_step" if index == 0 else "within_window_step",
-            self.safety.max_joint_step_rad,
+            first_guard if index == 0 else "within_window_step",
+            self.safety.max_initial_joint_step_rad
+            if index == 0 and first_guard == "initial_state_step"
+            else self.safety.max_joint_step_rad,
         )
         self._check_joint_delta(
             target,
